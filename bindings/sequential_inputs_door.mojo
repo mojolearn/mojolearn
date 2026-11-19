@@ -19,25 +19,28 @@ from std.python._cpython import GILReleased, PyObjectPtr
 from providers.python.borrowed_buffer_pyapi_unpack import AdmittedBorrowedBuffer
 from providers.python.array_layout_boundary_pack import native_shape_pack
 from core.native_array_layout import NativeArrayLayout
+from bindings.sequential_keys_unpack import sequential_keys
+from bindings.py_balanced import py_item
 
 
 def _buffer(mut mods: NativeModules, value: PythonObject, context: PythonObject, samples: Bool) raises -> PythonObject:
+    var nk = sequential_keys()
     var view = native_buffer_view(value)
     sequence_buffer_shape(Int(py=view.ndim), Bool(py=view.c_contiguous), samples)
     var format = SequenceBufferFormat(String(view.format), Int(py=view.itemsize))
-    var dtype = context["numeric_dtypes"][Python.tuple(format.kind, format.itemsize)]
+    var dtype = py_item(context, nk[].k_numeric_dtypes)[Python.tuple(format.kind, format.itemsize)]
     if format.prefix.byte_length() > 0 and format.kind != "b":
         dtype = PythonObject(format.prefix + format.kind + String(format.itemsize))
     if Bool(py=view.contiguous):
         # Both C and Fortran contiguous buffers are borrowed without a copy.
         # ndarray's C type owns the memoryview and preserves read-only status.
-        var windowed_result17 = py_call(context["ndarray"], view.shape, dtype=dtype, buffer=view, strides=view.strides)
+        var windowed_result17 = py_call(py_item(context, nk[].k_ndarray), view.shape, dtype=dtype, buffer=view, strides=view.strides)
         mods.released()
         return windowed_result17^
     # CPython's native buffer implementation packs signed/zero strides in
     # logical C order, including read-only views. No NumPy conversion runs.
     var packed = py_call(view.tobytes, "C")
-    var windowed_result16 = py_call(context["ndarray"], view.shape, dtype=dtype, buffer=packed)
+    var windowed_result16 = py_call(py_item(context, nk[].k_ndarray), view.shape, dtype=dtype, buffer=packed)
     mods.released()
     return windowed_result16^
 
@@ -121,13 +124,14 @@ def _sequence_scalar_capture(mut plan: SequenceInputPlan, raw: PyObjectPtr, dept
 
 def _sequence_capture_impl[row_items: Bool](mut mods: NativeModules, source: PythonObject, context: PythonObject,
     float_target: Bool, items: List[PythonObject]) raises -> SequenceBoundaryCapture:
+    var nk = sequential_keys()
     # Scalar/container unpack must hold GIL. Exact type checks precede reads;
     # no subclass indexing, scalar conversion hook or recursive dispatch runs.
     # Stack depth is at most eight, and scalar storage uses compact native
     # word/tag vectors rather than one descriptor or Python object per value.
     var b = mods.module("builtins")
-    var numpy = py_get(context, "ndarray") is not None
-    var scalar_types = py_get(context, "scalar_types", Python.tuple())
+    var numpy = py_get(context, nk[].k_ndarray) is not None
+    var scalar_types = py_get(context, nk[].k_scalar_types, Python.tuple())
     var list_type = b.list
     var tuple_type = b.tuple
     var range_type = b.range
@@ -164,12 +168,12 @@ def _sequence_capture_impl[row_items: Bool](mut mods: NativeModules, source: Pyt
                 3 if word == bool_word else (2 if word == float_word else 1), float_target)
         elif cls is string_type or cls is bytes_type or cls is complex_type or cls is none_type:
             raise Error("TypeError: inputs must contain numeric scalars")
-        elif numpy and (cls is context["ndarray"] or _one_of(cls, scalar_types)):
+        elif numpy and (cls is py_item(context, nk[].k_ndarray) or _one_of(cls, scalar_types)):
             _sequence_array_capture(capture, current, depth)
-        elif numpy and cls is context["array_class"]:
+        elif numpy and cls is py_item(context, nk[].k_array_class):
             var array = native_array_ndarray_view(current, context)
             _sequence_array_capture(capture, array, depth)
-        elif numpy and (cls is b.memoryview or cls is context["array_type"] or cls is b.bytearray):
+        elif numpy and (cls is b.memoryview or cls is py_item(context, nk[].k_array_type) or cls is b.bytearray):
             _sequence_buffer_capture(capture, current, depth)
         else:
             raise Error("TypeError: inputs must contain numeric scalars")
@@ -229,11 +233,12 @@ def sequential_capture_row_items(items: List[PythonObject], context: PythonObjec
 
 def sequential_sequence_native(mut mods: NativeModules, value: PythonObject, context: PythonObject,
     float32_target: Bool = False, array_storage: Bool = True) raises -> SequenceBoundaryResult:
+    var nk = sequential_keys()
     var capture = _sequence_capture(mods, value, context, float32_target)
     var layout = NativeArrayLayout(capture.plan.shape.copy(), 4 if float32_target else capture.plan.itemsize)
     var storage = PythonObject(None)
     if array_storage:
-        var code = String("f") if float32_target else String(context["buffer_codes"][Python.tuple(capture.plan.kind, capture.plan.itemsize)])
+        var code = String("f") if float32_target else String(py_item(context, nk[].k_buffer_codes)[Python.tuple(capture.plan.kind, capture.plan.itemsize)])
         # lane fix-output-zero-fill (2026-11-14): unfilled like the bytearray branch below; the
         # parallel writer initializes every item.
         storage = native_array_unfilled(code, layout.count)
@@ -259,18 +264,19 @@ def sequential_sequence_native(value: PythonObject, context: PythonObject,
 
 
 def sequential_input(mut mods: NativeModules, value: PythonObject, context: PythonObject, samples: Bool = False) raises -> PythonObject:
+    var nk = sequential_keys()
     var b = mods.module("builtins")
-    if py_type(value) is context["ndarray"]:
+    if py_type(value) is py_item(context, nk[].k_ndarray):
         return value
-    if py_type(value) is context["array_class"]:
+    if py_type(value) is py_item(context, nk[].k_array_class):
         # Views returned from input preparation may escape into fitted state
         # or public outputs. Array._mv can be ownerless; retain its exporter.
         return native_array_ndarray_view(value, context)
-    if py_type(value) is b.memoryview or py_type(value) is context["array_type"] or py_type(value) is b.bytearray:
+    if py_type(value) is b.memoryview or py_type(value) is py_item(context, nk[].k_array_type) or py_type(value) is b.bytearray:
         return _buffer(mods, value, context, samples)
     var packed = sequential_sequence_native(mods, value, context, array_storage=False)
-    var dtype = context["numeric_dtypes"][Python.tuple(packed.kind, packed.itemsize)]
-    var windowed_result15 = py_call(context["ndarray"], native_shape_pack(packed.shape), dtype=dtype, buffer=packed.storage)
+    var dtype = py_item(context, nk[].k_numeric_dtypes)[Python.tuple(packed.kind, packed.itemsize)]
+    var windowed_result15 = py_call(py_item(context, nk[].k_ndarray), native_shape_pack(packed.shape), dtype=dtype, buffer=packed.storage)
     mods.released()
     return windowed_result15^
 

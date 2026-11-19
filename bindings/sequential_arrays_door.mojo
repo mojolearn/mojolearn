@@ -8,6 +8,8 @@ from core.cast_in import CastIn, CAST_KIND_BOOL, CAST_KIND_FLOAT, CAST_KIND_SIGN
 from core.native_array_layout import NativeArrayLayout
 from providers.python.array_layout_boundary_unpack import native_shape_unpack
 from providers.python.array_layout_boundary_pack import native_shape_pack
+from bindings.sequential_keys_unpack import sequential_keys
+from bindings.py_balanced import py_item
 
 
 def sequential_array(mut mods: NativeModules, shape: PythonObject, dtype: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -15,11 +17,12 @@ def sequential_array(mut mods: NativeModules, shape: PythonObject, dtype: Python
 
 
 def sequential_array_native(mut mods: NativeModules, shape: List[Int], dtype: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = sequential_keys()
     var layout = NativeArrayLayout(shape.copy(), Int(py=dtype.itemsize))
     var packed_shape = native_shape_pack(layout.shape)
-    var storage = py_call(context["native_bytearray_type"], layout.nbytes)
+    var storage = py_call(py_item(context, nk[].k_native_bytearray_type), layout.nbytes)
     mods.released()
-    var windowed_result13 = py_call(context["ndarray"], packed_shape, dtype=dtype, buffer=storage)
+    var windowed_result13 = py_call(py_item(context, nk[].k_ndarray), packed_shape, dtype=dtype, buffer=storage)
     mods.released()
     return windowed_result13^
 
@@ -36,7 +39,8 @@ def sequential_array(shape: PythonObject, dtype: PythonObject, context: PythonOb
 
 
 def sequential_address(value: PythonObject) raises -> PythonObject:
-    return value.__array_interface__["data"][0]
+    var nk = sequential_keys()
+    return py_item(value.__array_interface__, nk[].k_data)[0]
 
 
 struct SequentialInputSnapshot(Copyable, Movable):

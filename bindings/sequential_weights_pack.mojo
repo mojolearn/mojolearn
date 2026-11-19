@@ -22,10 +22,13 @@ from bindings.py_model_records import bump_model_generation
 from bindings.sequential_weights_unpack import (
     _exact_mapping,
 )
+from bindings.sequential_keys_unpack import sequential_keys
+from bindings.py_balanced import py_item
 
 
 def sequential_parameter_layers(model: PythonObject) raises -> PythonObject:
-    var layers = sequential_fields(model)["_layers"]
+    var nk = sequential_keys()
+    var layers = py_item(sequential_fields(model), nk[].k__layers)
     var result = Python.list()
     for k in range(len(layers)):  # driver-loop: over parameter layer metadata
         var layer = layers[k]
@@ -37,12 +40,13 @@ def sequential_parameter_layers(model: PythonObject) raises -> PythonObject:
 
 
 def sequential_load_weights(mut mods: NativeModules, model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = sequential_keys()
     # Generation word (bindings/py_model_records.mojo, lane ne1-e-records):
     # every stamped record of this object misses from here on.
     _ = bump_model_generation(model)
     var b = native_loaded_module("builtins")
     var fields = sequential_fields(model)
-    if len(fields["_layers"]) == 0:
+    if len(py_item(fields, nk[].k__layers)) == 0:
         raise Error("add at least one layer before load_state_dict")
     var source = args[0]
     var source_kind = args[1]
@@ -121,18 +125,18 @@ def sequential_load_weights(mut mods: NativeModules, model: PythonObject, args: 
         _ = py_call(records.extend, record)
     var sample = PythonObject(None)
     var width = 0
-    if py_contains(fields, "params_") and py_contains(fields, "n_features_in_"):
-        sample = py_get(fields, "_sample_shape")
-        width = Int(py=fields["n_features_in_"])
+    if py_contains(fields, nk[].k_params_) and py_contains(fields, nk[].k_n_features_in_):
+        sample = py_get(fields, nk[].k__sample_shape)
+        width = Int(py=py_item(fields, nk[].k_n_features_in_))
     else:
-        var uses_shape = fields["input_shape"] is not None
-        var description = fields["_layers"]
+        var uses_shape = py_item(fields, nk[].k_input_shape) is not None
+        var description = py_item(fields, nk[].k__layers)
         for k in range(len(description)):  # driver-loop: over shape-bearing layer kinds
             uses_shape = uses_shape or Int(py=description[k][0]) >= 9
         if uses_shape:
-            if fields["input_shape"] is None:
+            if py_item(fields, nk[].k_input_shape) is None:
                 raise Error("load_state_dict: set input_shape on a model with reshape, permute, flatten, conv2d or pooling layers")
-            sample = fields["input_shape"]
+            sample = py_item(fields, nk[].k_input_shape)
         else:
             var first = Int(py=layers[0][0])
             var linear = Int(py=description[first][0]) == 1
@@ -144,22 +148,22 @@ def sequential_load_weights(mut mods: NativeModules, model: PythonObject, args: 
     var table = sequential_table(model)
     var entries = sequential_entries(model, context)
     mods.released()
-    var counts = py_call_typed(entries["model_n_params"], program, table)
+    var counts = py_call_typed(py_item(entries, nk[].k_model_n_params), program, table)
     mods.released()
-    var params = sequential_array(mods, Python.tuple(counts[0]), context["float32"], context)
-    counts = py_call_typed(entries["model_import_params"], program, table, records, keys, sequential_address(params))
+    var params = sequential_array(mods, Python.tuple(counts[0]), py_item(context, nk[].k_float32), context)
+    counts = py_call_typed(py_item(entries, nk[].k_model_import_params), program, table, records, keys, sequential_address(params))
     mods.released()
     # Raw addresses remain borrowed until the native transfer has completed.
     _ = owners^
     _ = tensor_owners^
     _ = scalar_owners^
     _ = values^
-    py_setitem(fields, "params_", params)
-    py_setitem(fields, "n_features_in_", counts[2])
-    py_setitem(fields, "n_outputs_", counts[1])
-    py_setitem(fields, "_sample_shape", sample)
-    py_setitem(fields, "n_iter_", 0)
-    py_setitem(fields, "loss_curve_", Python.list())
-    py_setitem(fields, "_fit_state", PythonObject(None))
-    py_setitem(fields, "_imported", True)
+    py_setitem(fields, nk[].k_params_, params)
+    py_setitem(fields, nk[].k_n_features_in_, counts[2])
+    py_setitem(fields, nk[].k_n_outputs_, counts[1])
+    py_setitem(fields, nk[].k__sample_shape, sample)
+    py_setitem(fields, nk[].k_n_iter_, 0)
+    py_setitem(fields, nk[].k_loss_curve_, Python.list())
+    py_setitem(fields, nk[].k__fit_state, PythonObject(None))
+    py_setitem(fields, nk[].k__imported, True)
     return model
