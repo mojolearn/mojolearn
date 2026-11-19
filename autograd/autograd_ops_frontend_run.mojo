@@ -153,6 +153,12 @@ comptime _SOP_MAMBA_STEP = 136
 comptime _SOP_ATTENTION_STEP = 137
 comptime _SOP_SMALL_MLP = 138
 comptime _SOP_LM_HEAD_LOSS = 139
+# 2026-11-19: the generation ops (85, 86) with their rows state, and the LM
+# trainer's embedding (93)
+comptime _SOP_LM_ROWS = 140
+comptime _SOP_LM_PICK = 141
+comptime _SOP_LM_ALIVE = 142
+comptime _SOP_LM_EMBEDDING = 143
 
 
 struct _SessionOpCodes(Defaultable, Movable):
@@ -299,10 +305,14 @@ struct _SessionOpCodes(Defaultable, Movable):
         self.codes["attention_step"] = _SOP_ATTENTION_STEP
         self.codes["small_mlp"] = _SOP_SMALL_MLP
         self.codes["lm_head_loss"] = _SOP_LM_HEAD_LOSS
+        self.codes["lm_rows"] = _SOP_LM_ROWS
+        self.codes["lm_pick"] = _SOP_LM_PICK
+        self.codes["lm_alive"] = _SOP_LM_ALIVE
+        self.codes["lm_embedding"] = _SOP_LM_EMBEDDING
 
 
 # One table per process (identical contents in every extension that links this file).
-comptime _SESSION_OP_CODES = SharedSlot[_SessionOpCodes, "MojolearnSessionOpCodesV3"]
+comptime _SESSION_OP_CODES = SharedSlot[_SessionOpCodes, "MojolearnSessionOpCodesV4"]
 
 
 def _session_op_code(name: String) raises -> Int:

@@ -119,3 +119,7 @@ Session.attention_block	added 2026-11-19, not yet in a release verification
 Session.attention_step	added 2026-11-19, not yet in a release verification
 Session.small_mlp	added 2026-11-19, not yet in a release verification
 Session.lm_head_loss	added 2026-11-19, not yet in a release verification
+Session.lm_embedding	added 2026-11-19, not yet in a release verification
+Session.lm_rows	added 2026-11-19, not yet in a release verification
+Session.lm_pick	added 2026-11-19, not yet in a release verification
+Session.lm_alive	added 2026-11-19, not yet in a release verification

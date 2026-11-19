@@ -899,6 +899,56 @@ class Session:
         """
         return _SESSION_CALL(self, "lm_head_loss", (hidden, weight, codes))
 
+    def lm_embedding(self, table, ids, padding_idx=None):
+        """Rows of ``table`` picked by a tensor of token ids.
+
+        The values are those of :meth:`embedding`. ``ids`` is a tensor made
+        with :meth:`ids`. In a recording session the gradient of ``table``
+        is computed with the method the language-model trainers use, which
+        is faster for a long sequence over a large vocabulary; it gives the
+        same gradient bits as :meth:`embedding`.
+        """
+        return _SESSION_CALL(self, "lm_embedding", (table, ids, padding_idx))
+
+    def lm_rows(self, batch_size, eos_token_id=None):
+        """Create the bookkeeping of one text generation; returns its handle.
+
+        It records, for each of ``batch_size`` sequences, whether it has
+        finished and how many tokens it has produced. ``eos_token_id`` is
+        an id, or a list of ids, that ends a sequence. Pass the handle to
+        :meth:`lm_pick` and :meth:`lm_alive`.
+        """
+        return _SESSION_CALL(self, "lm_rows", (batch_size, eos_token_id))
+
+    def lm_pick(self, logits, rows, *, pad_token_id=0, do_sample=False, temperature=1.0, top_k=0,
+                top_p=1.0, seed=0):
+        """Choose the next token of every sequence; returns the ids.
+
+        ``logits`` is ``(batch_size, tokens, vocabulary)`` or
+        ``(batch_size, vocabulary)``; the last position of each sequence is
+        read. The result is a ``(batch_size, 1)`` tensor of int32 ids, as
+        :meth:`ids` makes: feed it to :meth:`lm_embedding` for the next
+        step. A finished sequence gets ``pad_token_id``.
+
+        ``do_sample=False`` takes the largest logit (the lowest id on a
+        tie). ``do_sample=True`` samples after ``temperature``, ``top_k``
+        (0 keeps every token) and ``top_p``, as in
+        :meth:`mojolearn.CausalLM.generate`; the draw depends only on
+        ``seed``, the sequence and its position, so it is the same on every
+        vendor. ``rows`` (from :meth:`lm_rows`) is updated in place.
+        """
+        return _SESSION_CALL(self, "lm_pick",
+                             (logits, rows, pad_token_id, do_sample, temperature, top_k, top_p, seed))
+
+    def lm_alive(self, ids, rows):
+        """Whether the generation should continue, as a ``(1, 1)`` tensor.
+
+        1.0 while at least one sequence is unfinished, else 0.0. ``ids`` is
+        the result of :meth:`lm_pick`. Capture it as the condition of
+        :meth:`Program.while_loop` to stop a decode loop on the device.
+        """
+        return _SESSION_CALL(self, "lm_alive", (ids, rows))
+
     # ------------------------------------------------------------ data steps
     def permutation(self, n, seed=0, epoch=0):
         """A random order of the rows ``0 .. n-1`` as an ``(n, 1)`` tensor,

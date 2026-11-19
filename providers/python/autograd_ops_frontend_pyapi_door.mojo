@@ -17,7 +17,8 @@ from providers.python.autograd_program_pyapi_door import program_input, _integer
 from autograd.ops_frontend_impl import session_split, clip_low_unbounded, clip_high_unbounded
 from autograd.ops_block_frontend import (
     SESSION_ATTENTION_MIN_PIECES, SESSION_ATTENTION_GATE, session_mamba_code, session_attention_ints,
-    session_attention_option_words, session_block_create, session_block_step,
+    session_attention_option_words, session_block_create, session_block_step, session_lm_rows, session_lm_pick,
+    session_lm_alive,
 )
 from autograd.block_step_ops import OPS_ATTN_STEP
 from autograd.program_io import ProgramInput
@@ -67,7 +68,7 @@ from autograd.autograd_ops_frontend_run import (
     _SOP_DROPOUT, _SOP_PERMUTATION, _SOP_GATHER_ROWS, _SOP_MSE, _SOP_MAE, _SOP_HUBER,
     _SOP_BCE_WITH_LOGITS, _SOP_CROSS_ENTROPY, _SOP_ACCURACY, _SOP_LOG_LOSS, _SOP_ROC_AUC,
     _SOP_STATE, _SOP_MAMBA_BLOCK, _SOP_ATTENTION_BLOCK, _SOP_MAMBA_STEP, _SOP_ATTENTION_STEP, _SOP_SMALL_MLP,
-    _SOP_LM_HEAD_LOSS,
+    _SOP_LM_HEAD_LOSS, _SOP_LM_ROWS, _SOP_LM_PICK, _SOP_LM_ALIVE, _SOP_LM_EMBEDDING,
 )
 
 
@@ -599,6 +600,22 @@ def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
             Int(py=sid), _int(args[0], "handle", 1), _int(block["weights"], "weights", 1),
             _int(block["state"], "state", 1), words, config, _float(block["dt_lo"], "dt_limit"),
             _float(block["dt_hi"], "dt_limit"), op == _SOP_ATTENTION_STEP))
+    if op == _SOP_LM_ROWS:
+        # args (batch_size, eos_token_ids): an int, or a sequence of ints
+        var eos = List[Int]()
+        if not _nil(args[1]):
+            eos = _ints(args[1], "eos_token_id", 0)
+        return PythonObject(session_lm_rows[E, KIND](Int(py=sid), _int(args[0], "batch_size", 1), eos))
+    if op == _SOP_LM_PICK:
+        # args (logits, rows, pad_token_id, do_sample, temperature, top_k, top_p, seed)
+        var seed = _seed_words(args[7])
+        return PythonObject(session_lm_pick[E, KIND](
+            Int(py=sid), _int(args[0], "logits", 1), _int(args[1], "rows", 1), _int(args[2], "pad_token_id", 0),
+            Bool(py=args[3]), _int(args[5], "top_k", 0), seed[0], seed[1], _float(args[4], "temperature"),
+            _float(args[6], "top_p")))
+    if op == _SOP_LM_ALIVE:
+        return PythonObject(session_lm_alive[E, KIND](
+            Int(py=sid), _int(args[0], "ids", 1), _int(args[1], "rows", 1)))
     var code = 0
     var hs = List[Int]()
     var ints = List[Int]()
@@ -983,6 +1000,14 @@ def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
         code = 88
         hs = [_int(args[0], "input", 1), _int(args[1], "weight1", 1), _int(args[2], "bias1", 1),
               _int(args[3], "weight2", 1), _int(args[4], "bias2", 1)]
+    elif op == _SOP_LM_EMBEDDING:
+        # OPS_LM_EMBEDDING (autograd/lm_embedding_op.mojo): a table and an
+        # ids() tensor; ints [padding_idx, -1 for none] as `embedding`
+        code = 93
+        hs = [_int(args[0], "table", 1), _int(args[1], "ids", 1)]
+        if not _nil(args[2]) and _int(args[2], "padding_idx") < 0:
+            raise Error("ValueError: padding_idx must be >= 0")
+        ints.append(-1 if _nil(args[2]) else _int(args[2], "padding_idx", 0))
     elif op == _SOP_LM_HEAD_LOSS:
         # lane fx-ops-session-blocks: OPS_LM_HEAD_V2 (autograd/lm_head_v2_op.mojo)
         code = 87

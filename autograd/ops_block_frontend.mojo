@@ -41,6 +41,9 @@ from autograd.block_step_ops import (
     block_weight_sizes, block_state_sizes, block_int_words,
 )
 from transformer.block_options import BlockOptions
+from autograd.generation_ops import OPS_LM_PICK, OPS_LM_ALIVE, lm_rows_words, LM_PICK_GREEDY, LM_PICK_SAMPLE
+from autograd.rankn import ShapeN
+from core.cast_in import CAST_KIND_SIGNED
 
 #: The weight arrays `Session.attention_block` takes (the default options'
 #: present pieces: two norms, q, k, v, o, gate, up, down), and the index of
@@ -261,3 +264,61 @@ def session_block_step[E: Exec & Movable & Deinitable, KIND: Int](
         fs.append(dt_hi)
     var s = ops_session[E, KIND](sid)
     return s[].op(code, hs, ints, fs)
+
+
+# ---------------------------------------------------------------- generation
+# `Session.lm_rows`, `Session.lm_pick`, `Session.lm_alive` (lane
+# fx-ops-session-blocks, 2026-11-19): the generation ops with the arguments
+# the causal LM decode program passes (transformer/causal_lm_program.mojo
+# `load_rows`, `set_policy`, `step`).
+def session_lm_rows[E: Exec & Movable & Deinitable, KIND: Int](sid: Int, b: Int, eos: List[Int]) raises -> Int:
+    """The rows state of a fresh generation of `b` rows (autograd/
+    generation_ops.mojo's layout): every row active with length 0, no
+    non-finite token seen, alive 1, the sampler's position 0, then the eos
+    ids. One int32-word tensor declared state; returns its handle."""
+    if b < 1:
+        raise Error("ValueError: lm_rows: batch_size must be positive")
+    var n = lm_rows_words(b, len(eos))
+    var w = List[Int32](length=n, fill=Int32(0))
+    for r in range(b):  # driver-loop: over batch rows (state words, no data)
+        w[2 * b + r] = Int32(-1)
+    w[3 * b] = Int32(1)
+    w[3 * b + 1] = Int32(-1)
+    w[3 * b + 3] = Int32(len(eos))
+    for i in range(len(eos)):  # small-loop(eos: the end ids): state words, no data
+        if eos[i] < 0 or eos[i] >= (1 << 31):
+            raise Error("ValueError: lm_rows: an eos token id must be a non-negative int32")
+        w[3 * b + 4 + i] = Int32(eos[i])
+    var s = ops_session[E, KIND](sid)
+    var h = s[].upload_ids(CastIn(Int(w.unsafe_ptr()), CAST_KIND_SIGNED, 4, 1, n, n * 4, 4), ShapeN.matrix(1, n))
+    _ = len(w)  # keep-alive past the staging copy
+    s[].declare_state(h)
+    return h
+
+
+def session_lm_pick[E: Exec & Movable & Deinitable, KIND: Int](
+    sid: Int, logits: Int, rows: Int, pad: Int, sample: Bool, top_k: Int, seed_lo: Int, seed_hi: Int,
+    temperature: Float32, top_p: Float32,
+) raises -> Int:
+    """OPS_LM_PICK on `logits` (b rows first, the vocabulary last) with the
+    decode program's policy words: greedy sends top_k 0, temperature 1 and
+    top_p 1, whatever was passed. Returns the (b, 1) int32 ids tensor."""
+    var s = ops_session[E, KIND](sid)
+    var sh = s[].shape_nd(logits)
+    var b = sh.d[0]
+    var vocab = sh.d[sh.ndim - 1]
+    var ints: List[Int] = [b, vocab, pad, LM_PICK_SAMPLE if sample else LM_PICK_GREEDY, top_k if sample else 0,
+                           seed_lo, seed_hi]
+    var fs: List[Float32] = [temperature if sample else Float32(1.0), top_p if sample else Float32(1.0)]
+    var hs: List[Int] = [logits, rows]
+    return s[].op(OPS_LM_PICK, hs, ints, fs)
+
+
+def session_lm_alive[E: Exec & Movable & Deinitable, KIND: Int](sid: Int, ids: Int, rows: Int) raises -> Int:
+    """OPS_LM_ALIVE: the rows state's alive word as a (1, 1) tensor (1.0
+    while some row is unfinished and none failed); `ids` holds b rows."""
+    var s = ops_session[E, KIND](sid)
+    var b = s[].shape_nd(ids).d[0]
+    var hs: List[Int] = [ids, rows]
+    var bl: List[Int] = [b]
+    return s[].op(OPS_LM_ALIVE, hs, bl, List[Float32]())
