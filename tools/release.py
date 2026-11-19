@@ -1000,7 +1000,11 @@ def launch_detached(ctx, legs):
             leg.command = command + ["--run-id", str(attach)]
             ctx.say(f"  {leg.name}: collecting the succeeded GitHub run {attach} (--run-id; no new dispatch)")
         prov = leg.provenance
-        if prov is None and type(leg) is Leg and callable(getattr(ctx, "leg_provenance", None)):
+        # a RemoteLeg (--pack github) records its launch provenance too: a B arm finds its base's PTX proof through
+        # legs/<leg>.provenance.json (release_reuse._ptx_leg_docs). Without it (2026-11-19, `type(leg) is Leg`) every
+        # arm on a GitHub-packed base lost the proof, refused the published PTX set and launched an sm_80 leg
+        # despite --timed-on sm_89.
+        if prov is None and type(leg) in (Leg, RemoteLeg) and callable(getattr(ctx, "leg_provenance", None)):
             prov = ctx.leg_provenance(leg)
         if compile_requirements is not None:
             prov = dict(prov or {}, compile_requirements=compile_requirements)
@@ -1026,7 +1030,9 @@ def github_attach_run(ctx, leg):
     run its command already names, else the run its last attempt's GHA/run-id.json names when that run built this
     commit with these defines and concluded success (release_github_build.succeeded_run). None for any other leg.
     2026-11-13: collectors killed by GitHub's quota refusals left succeeded runs; their reruns dispatched anew."""
-    if type(leg) is not Leg or not any("release_github_build.py" in str(c) for c in leg.command or []):
+    # RemoteLeg too (--pack github): its records-only collector attaches the same way (2026-11-19: `type(leg) is
+    # not Leg` re-dispatched a whole GitHub build for a remote leg whose collector died after its run succeeded)
+    if type(leg) not in (Leg, RemoteLeg) or not any("release_github_build.py" in str(c) for c in leg.command or []):
         return None
     if "--run-id" in leg.command:
         return leg.command[leg.command.index("--run-id") + 1]
@@ -3672,7 +3678,7 @@ class Release(release_identity_wheels.IdentityOnWheels):
             for l in legs:
                 if l.running() or l.exit_code() is None:
                     continue
-                if (l.exit_code() == release_github_build.DOWNLOAD_PENDING_EXIT and type(l) is Leg
+                if (l.exit_code() == release_github_build.DOWNLOAD_PENDING_EXIT and type(l) in (Leg, RemoteLeg)
                         and pending[l.name] < DOWNLOAD_PENDING_RELAUNCHES):
                     # its run succeeded and only the artifact download failed: collect that run again
                     # (launch_detached attaches by --run-id), never a failed leg
@@ -4110,6 +4116,12 @@ class Release(release_identity_wheels.IdentityOnWheels):
         write_json(final_dir / "split-audit.json", report)
         if report["problems"] or not all(finals.values()):
             raise StepFailed("the final split wheels fail their audit: " + "; ".join(report["problems"] or ["missing"]))
+        # every final wheel's runtime bytes are the ones its own LINUX_PAYLOAD records: the bytes a B arm reuses
+        # from this base (release_reuse.extract_member refuses any other). 2026-11-19: a GitHub-packed base whose
+        # packer rebuilt libMojolearnMath.so passed this step and failed all 12 arms on it.
+        drift = [f"{w.name}: {line}" for w in finals.values() for line in release_reuse.payload_runtime_mismatches(w)]
+        if drift:
+            raise StepFailed("the final wheels' runtime bytes differ from their LINUX_PAYLOAD: " + "; ".join(drift))
         self.state["linux_layout"] = "split"
         return ", ".join(f"{w.name} sha256 {sha256(w)}" for w in finals.values())
 

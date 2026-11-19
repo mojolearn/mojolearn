@@ -1589,6 +1589,15 @@ def make_plan(commit, cache_dir, root=ROOT, host_toolchain=None, prev=None, buil
         legs.append(name)
         why[name] = ("%d host binding(s)" % len(host_build) if host_build else "the runtime closure") + \
             " need a build box and no set does: the cheapest leg builds them"
+    elif host_build and HOST_LEG in LINUX_SETS and "%s-%s" % HOST_LEG not in legs:
+        # Host rows BUILD and only other sets' legs run (a B arm timed on some sets whose PTX set was refused: its
+        # sm_80 leg runs, the timed sm_89 set reads the define in host bindings only). The host owner's set is
+        # assembled from its own leg (place_merged: a merged host file serving a binding to BUILD must be the
+        # set's leg's), so its leg runs. 2026-11-19 arm fx-lc-test-reuse: legs cuda-sm_80 only, refused at assemble
+        # ("cuda/sm_89 _mojolearn_native_orchestration_host.so serves ... to BUILD and no leg built it").
+        name = "%s-%s" % HOST_LEG
+        legs = [f"{v}-{a}" for v, a in LINUX_SETS if f"{v}-{a}" in legs or (v, a) == HOST_LEG]
+        why[name] = "%d host binding(s) to build: the host owner's set is assembled from its own leg" % len(host_build)
     plan = dict(schema=PLAN_SCHEMA, commit=commit, made=dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
                 previous=prev, previous_identities_from=prev_source, considered=considered, rows=rows, runtime=runtime,
                 legs=legs, leg_reasons=why, ptx_proof=ptx_proof, host_toolchain=host_toolchain,
@@ -1887,6 +1896,25 @@ def linux_payload(whl):
         if len(names) != 1:
             raise SystemExit(f"release_reuse: {whl} carries no LINUX_PAYLOAD.json")
         return json.loads(z.read(names[0]))
+
+
+def payload_runtime_mismatches(whl):
+    """The runtime members of WHL whose bytes differ from its own LINUX_PAYLOAD runtime_sha256 (or are missing),
+    as 'member: got X, payload Y' lines. The pack step refuses a final wheel with any: a B arm reuses the runtime
+    closure from its base wheel against exactly these records (extract_member), so a base that disagrees with
+    itself is refused at the base's pack instead of at every arm's assemble. A member the wheel does not carry is
+    skipped (a split plugin's payload lists the shared closure that ships in the core wheel)."""
+    payload = linux_payload(whl)
+    out = []
+    with zipfile.ZipFile(whl) as z:
+        members = set(z.namelist())
+        for member, want in sorted((payload.get("runtime_sha256") or {}).items()):
+            if member not in members:
+                continue
+            got = hashlib.sha256(z.read(member)).hexdigest()
+            if got != want:
+                out.append(f"{member}: got {got[:12]}, payload {want[:12]}")
+    return out
 
 
 def extract_member(z, member, dest, want_sha=None):
