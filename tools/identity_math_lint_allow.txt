@@ -1,6 +1,7 @@
 # tools/identity_math_lint.py allow list: <path>:<function>:<op>  # <CLASS>: <reason>
 # CLASS: SAFE-FAST (reachable only in FAST), SAFE-EXACT (exact on every backend for its values, or feeds only an
-# integer/layout decision), SAFE-NOT-SHIPPED (in no product build). Classified 2026-11-17 (lane fb13-identity-audit),
+# integer/layout decision), SAFE-NOT-SHIPPED (in no product build), SAFE-ROW (reachable only under a relaxed row of
+# checks/mode_policy.mojo; the reason starts with the row: `# SAFE-ROW: vendor_math: ...`). Classified 2026-11-17 (lane fb13-identity-audit),
 # per-site evidence: ~/mojolearn-evidence/briefs-20261117/fb13/classified_bucket{0,1,2}.tsv. A new raw call is fixed
 # through checks/numerics.mojo, not added here, unless it is one of these classes with a cited reason.
 arima/impl/fast_arma_ls.mojo:_givens_row:sqrt  # SAFE-FAST: fast_arma_ls_kernel launched only under comptime X0_FAST_LS = NUMERIC_FAST and TARGET_HAS_APPLE_GPU (arima/impl/estimate_x0.mojo:100, :568)

@@ -63,3 +63,20 @@ def test_the_repository_allow_list_is_well_formed():
     text = (lint.ROOT / lint.ALLOW).read_text()
     allow, bad = lint.read_allow(text)
     assert bad == [] and allow
+
+
+def test_the_mode_policy_table_is_out_of_scope_and_its_rows_are_known():
+    assert not lint.in_scope(lint.POLICY_MODULE)
+    assert (lint.ROOT / lint.POLICY_MODULE).is_file()
+    table = (lint.ROOT / lint.POLICY_MODULE).read_text()
+    for bit, row in enumerate(lint.POLICY_ROWS):
+        assert f"comptime POLICY_ROW_{row.upper()} = {bit}\n" in table, row
+
+
+def test_a_safe_row_line_names_a_row_of_the_table():
+    allow, bad = lint.read_allow(
+        "a/k.mojo:f:exp  # SAFE-ROW: vendor_math: else arm of comptime if not ROW_VENDOR_MATH\n"
+        "a/k.mojo:g:exp  # SAFE-ROW: no_such_row: reason\n"
+        "a/k.mojo:h:exp  # SAFE-ROW: reason with no row\n")
+    assert list(allow) == [("a/k.mojo", "f", "exp")]
+    assert len(bad) == 2
