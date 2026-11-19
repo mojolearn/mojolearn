@@ -19,6 +19,32 @@ from bindings.native_json_door import native_json_parse
 from core.sha256 import sha256_hex_addr
 from bindings.optimizer_public_words_unpack import optimizer_python_error, PYTHON_ERROR_PENDING
 from bindings.parallel_byte_native_door import parallel_byte_shard_words, parallel_byte_step_shards
+from bindings.py_keys import py_op_code
+from bindings.lm_keys_unpack import (
+    lm_keys,
+    LM_OPN_BATCHES_DESCRIBE,
+    LM_OPN_BATCHES_IDS,
+    LM_OPN_BATCHES_INIT,
+    LM_OPN_BATCHES_PARALLEL_STEP,
+    LM_OPN_BATCHES_PREFETCH,
+    LM_OPN_BATCHES_SCHEDULE,
+    LM_OPN_BATCHES_VOCABULARY,
+    LM_OPN_CONNECT,
+    LM_OPN_CORPUS_BATCHES,
+    LM_OPN_CORPUS_INIT,
+    LM_OPN_CORPUS_N_VOCAB,
+    LM_OPN_CORPUS_REPR,
+    LM_OPN_CORPUS_TOKENIZER,
+    LM_OPN_CORPUS_VOCABULARY,
+    LM_OPN_EXPECTED_VOCABULARY,
+    LM_OPN_ITERATOR_ITER,
+    LM_OPN_ITERATOR_NEXT,
+    LM_OPN_PREPARE,
+    LM_OPN_REQUIRE_VOCABULARY,
+    LM_OPN_TOKENIZE,
+    LM_OPN_TOKENIZER_FOR,
+)
+from bindings.py_balanced import py_item
 
 comptime TOKENS_SCHEMA = "mojolearn.byte-lm.tokens.v1"
 comptime CORPUS_SCHEMA = "mojolearn.byte-lm.corpus.v1"
@@ -56,6 +82,7 @@ def _default_cache() raises -> PythonObject:
 
 
 def _source(path_value: PythonObject) raises -> PythonObject:
+    var nk = lm_keys()
     # pass 3 (N174): the corpus is hashed by the native streamed digest and
     # sized by stat; its bytes are read only when a cache miss needs them
     # (`_source_data`). A cache hit read the whole file through 1 MiB posix
@@ -70,31 +97,32 @@ def _source(path_value: PythonObject) raises -> PythonObject:
     if corpus_exists(manifest):
         var raw = corpus_read(manifest)
         var record = native_json_parse(raw)
-        if py_type(record) is native_loaded_module("builtins").dict and Bool(py=py_get(record, "schema") == PythonObject(CORPUS_SCHEMA)):
-            if not Bool(py=py_get(record, "sha256") == sha) or not Bool(py=py_get(record, "bytes") == PythonObject(size)):
+        if py_type(record) is native_loaded_module("builtins").dict and Bool(py=py_get(record, nk[].k_schema) == PythonObject(CORPUS_SCHEMA)):
+            if not Bool(py=py_get(record, nk[].k_sha256) == sha) or not Bool(py=py_get(record, nk[].k_bytes) == PythonObject(size)):
                 raise Error("ValueError: mojolearn: pinned corpus length/SHA mismatch for " + String(path))
-            py_setitem(source, "schema", PythonObject(CORPUS_SCHEMA))
-            py_setitem(source, "manifest_sha256", corpus_hash_bytes(raw))
-            py_setitem(source, "source_url", py_get(record, "source_url"))
+            py_setitem(source, nk[].k_schema, PythonObject(CORPUS_SCHEMA))
+            py_setitem(source, nk[].k_manifest_sha256, corpus_hash_bytes(raw))
+            py_setitem(source, nk[].k_source_url, py_get(record, nk[].k_source_url))
             for key in [String("train_range"), String("validation_range"), String("test_range")]:  # small-loop(three named corpus ranges)
                 var span = py_get(record, key)
                 if span is not None and Bool(py=span):
                     if py_type(span) is not native_loaded_module("builtins").list or len(span) != 2:
                         raise Error("ValueError: corpus ranges require two offsets")
                     py_setitem(ranges, key, Python.list(corpus_int(span[0], "range start"), corpus_int(span[1], "range end")))
-    if not py_contains(ranges, "train_range"):
+    if not py_contains(ranges, nk[].k_train_range):
         ranges = Python.dict(train_range=Python.list(0, size))
     return Python.tuple(PythonObject(None), source, ranges)
 
 
 def _source_data(mut data: PythonObject, source: PythonObject) raises:
+    var nk = lm_keys()
     # The corpus bytes, read once, on the first cache miss that needs them.
     # They must be the bytes `_source` hashed: a file changed in between is
     # refused (the vocabulary and token files are keyed by that hash).
     if data is not None:
         return
-    var read = corpus_read(source["path"])
-    if not Bool(py=PythonObject(len(read)) == source["bytes"]) or not Bool(py=corpus_hash_bytes(read) == source["sha256"]):
+    var read = corpus_read(py_item(source, nk[].k_path))
+    if not Bool(py=PythonObject(len(read)) == py_item(source, nk[].k_bytes)) or not Bool(py=corpus_hash_bytes(read) == py_item(source, nk[].k_sha256)):
         raise Error("ValueError: mojolearn: the corpus changed while it was being prepared; run prepare again")
     data = read
 
@@ -130,17 +158,19 @@ def _vocabulary_record(identity: PythonObject, recipe: PythonObject) raises -> P
 
 
 def _check_vocab(directory: PythonObject) raises -> PythonObject:
+    var nk = lm_keys()
     var record = corpus_read_json(_join(directory, "vocabulary.json"))
     var identity = tokenizer_bpe_identity_file(_join(directory, "ranks.tsv"))
-    if not Bool(py=identity["sha256"] == record["identity"]["sha256"]):
+    if not Bool(py=py_item(identity, nk[].k_sha256) == py_item(py_item(record, nk[].k_identity), nk[].k_sha256)):
         raise Error("ValueError: mojolearn: cached vocabulary does not match its vocabulary.json; remove it to rebuild")
     return record
 
 
 def _trained_vocabulary(mut data: PythonObject, source: PythonObject, ranges: PythonObject, sha: PythonObject,
     cache: PythonObject, size: Int, frequency: Int, sample: Int, document_bytes: Int) raises -> PythonObject:
-    var lo = Int(py=ranges["train_range"][0])
-    var hi = min(Int(py=ranges["train_range"][1]), lo + sample)
+    var nk = lm_keys()
+    var lo = Int(py=py_item(ranges, nk[].k_train_range)[0])
+    var hi = min(Int(py=py_item(ranges, nk[].k_train_range)[1]), lo + sample)
     var key = _prefix(sha) + "-v" + String(size) + "-f" + String(frequency) + "-s" + String(hi - lo)
     var final = _join(_join(cache, "vocab"), key)
     if corpus_exists(_join(final, "vocabulary.json")):
@@ -155,10 +185,10 @@ def _trained_vocabulary(mut data: PythonObject, source: PythonObject, ranges: Py
         var exported = tokenizer_bpe_export(trained)
         var info = tokenizer_trained_info(trained)
         corpus_write(_join(temporary, "ranks.tsv"), py_call(exported[0].encode, "ascii"))
-        var recipe = Python.dict(trainer=PythonObject("mojolearn.tokenizer.BpeVocabularyTrainer"), backend=info["backend"],
-            format=info["format"], tie_break=info["tie_break"], vocab_size=PythonObject(size), min_frequency=PythonObject(frequency),
+        var recipe = Python.dict(trainer=PythonObject("mojolearn.tokenizer.BpeVocabularyTrainer"), backend=py_item(info, nk[].k_backend),
+            format=py_item(info, nk[].k_format), tie_break=py_item(info, nk[].k_tie_break), vocab_size=PythonObject(size), min_frequency=PythonObject(frequency),
             corpus_sha256=sha, sample=Python.list(lo, hi), document_bytes=PythonObject(document_bytes),
-            n_tokens=info["n_tokens"], n_merges=info["n_merges"], n_ties_broken=info["n_ties_broken"], train_seconds=PythonObject(seconds))
+            n_tokens=py_item(info, nk[].k_n_tokens), n_merges=py_item(info, nk[].k_n_merges), n_ties_broken=py_item(info, nk[].k_n_ties_broken), train_seconds=PythonObject(seconds))
         corpus_write_json(_join(temporary, "vocabulary.json"), _vocabulary_record(exported[3], recipe))
         corpus_atomic_commit(temporary, final)
     except error:
@@ -168,9 +198,10 @@ def _trained_vocabulary(mut data: PythonObject, source: PythonObject, ranges: Py
 
 
 def _user_vocabulary(value: PythonObject, cache: PythonObject) raises -> PythonObject:
+    var nk = lm_keys()
     var exported = tokenizer_bpe_export(value)
     var identity = exported[3]
-    var final = _join(_join(cache, "vocab"), "user-" + _prefix(identity["sha256"]))
+    var final = _join(_join(cache, "vocab"), "user-" + _prefix(py_item(identity, nk[].k_sha256)))
     if not corpus_exists(_join(final, "vocabulary.json")):
         var temporary = corpus_atomic_begin(final)
         try:
@@ -186,6 +217,7 @@ def _user_vocabulary(value: PythonObject, cache: PythonObject) raises -> PythonO
 
 def _tokenize(data: PythonObject, source: PythonObject, ranges: PythonObject, tokenizer: PythonObject,
     identity: PythonObject, output: PythonObject, document_bytes: Int) raises:
+    var nk = lm_keys()
     var began = corpus_seconds()
     var encoded = tokenizer_bpe_encode_corpus(tokenizer, data, _split_points(ranges, len(data)), PythonObject(document_bytes))
     var seconds = corpus_seconds() - began
@@ -208,40 +240,44 @@ def _tokenize(data: PythonObject, source: PythonObject, ranges: PythonObject, to
         bytes_per_token=PythonObject(Float64(len(data)) / Float64(count)) if count else PythonObject(None),
         max_id=encoded[3], ids_above_255=encoded[4])
     py_call(manifest.update, token_ranges)
-    py_setitem(manifest, "schedule", PythonObject(SCHEDULE))
-    py_setitem(manifest, "tokenize_seconds", PythonObject(seconds))
-    py_setitem(manifest, "encode_seconds", PythonObject(seconds))
-    py_setitem(manifest, "encode_bytes_per_second", PythonObject(Float64(len(data)) / seconds) if seconds != 0 else PythonObject(None))
+    py_setitem(manifest, nk[].k_schedule, PythonObject(SCHEDULE))
+    py_setitem(manifest, nk[].k_tokenize_seconds, PythonObject(seconds))
+    py_setitem(manifest, nk[].k_encode_seconds, PythonObject(seconds))
+    py_setitem(manifest, nk[].k_encode_bytes_per_second, PythonObject(Float64(len(data)) / seconds) if seconds != 0 else PythonObject(None))
     corpus_write(_join(output, "tokens.i32"), payload)
     corpus_write_json(_join(output, "manifest.json"), manifest)
 
 
 def _corpus_fields(value: PythonObject, context: PythonObject) raises -> PythonObject:
-    return corpus_fields(value, context["corpus_class"], Python.tuple("tokens_dir", "vocabulary_path", "manifest"))
+    var nk = lm_keys()
+    return corpus_fields(value, py_item(context, nk[].k_corpus_class), Python.tuple("tokens_dir", "vocabulary_path", "manifest"))
 
 
 def _corpus_init(value: PythonObject, directory: PythonObject, ranks: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = lm_keys()
     var fields = _corpus_fields(value, context)
     var path = corpus_path(directory)
     var vocabulary = corpus_path(ranks)
     var manifest = corpus_read_json(_join(path, "manifest.json"))
     corpus_dict(manifest)
-    if not Bool(py=py_get(manifest, "schema") == PythonObject(TOKENS_SCHEMA)):
+    if not Bool(py=py_get(manifest, nk[].k_schema) == PythonObject(TOKENS_SCHEMA)):
         raise Error("ValueError: mojolearn: corpus manifest is not " + String(TOKENS_SCHEMA))
-    py_setitem(fields, "tokens_dir", corpus_path_object(path))
-    py_setitem(fields, "vocabulary_path", corpus_path_object(vocabulary))
-    py_setitem(fields, "manifest", manifest)
-    py_setitem(fields, "_tokens_verified", PythonObject(None))
+    py_setitem(fields, nk[].k_tokens_dir, corpus_path_object(path))
+    py_setitem(fields, nk[].k_vocabulary_path, corpus_path_object(vocabulary))
+    py_setitem(fields, nk[].k_manifest, manifest)
+    py_setitem(fields, nk[].k__tokens_verified, PythonObject(None))
     return PythonObject(None)
 
 
 def _corpus_construct(directory: PythonObject, ranks: PythonObject, context: PythonObject) raises -> PythonObject:
-    var result = corpus_new(context["corpus_class"])
+    var nk = lm_keys()
+    var result = corpus_new(py_item(context, nk[].k_corpus_class))
     _corpus_init(result, directory, ranks, context)
     return result
 
 
 def _prepare(args: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = lm_keys()
     var size = _positive(args[3], "vocab_size")
     var frequency = _positive(args[4], "min_frequency")
     var sample = _positive(args[5], "vocab_sample_bytes")
@@ -259,33 +295,33 @@ def _prepare(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var ranges = source[2]
     var vocabulary = PythonObject(None)
     if vocab is None:
-        vocabulary = _trained_vocabulary(data, src, ranges, src["sha256"], cache, size, frequency, sample, document_bytes)
+        vocabulary = _trained_vocabulary(data, src, ranges, py_item(src, nk[].k_sha256), cache, size, frequency, sample, document_bytes)
     else:
         vocabulary = _user_vocabulary(vocab, cache)
-    var identity = vocabulary[1]["identity"]
+    var identity = py_item(vocabulary[1], nk[].k_identity)
     var ranks = _join(vocabulary[0], "ranks.tsv")
-    var key = _prefix(src["sha256"]) + "-" + _prefix(identity["sha256"]) + "-d" + String(document_bytes)
+    var key = _prefix(py_item(src, nk[].k_sha256)) + "-" + _prefix(py_item(identity, nk[].k_sha256)) + "-d" + String(document_bytes)
     var final = _join(_join(cache, "tokens"), key)
     if corpus_exists(_join(final, "manifest.json")):
         var result = _corpus_construct(final, ranks, context)
-        var manifest = _fields(result)["manifest"]
-        if not Bool(py=manifest["source"]["sha256"] == src["sha256"]) or not Bool(py=manifest["vocabulary"]["sha256"] == identity["sha256"]):
+        var manifest = py_item(_fields(result), nk[].k_manifest)
+        if not Bool(py=py_item(py_item(manifest, nk[].k_source), nk[].k_sha256) == py_item(src, nk[].k_sha256)) or not Bool(py=py_item(py_item(manifest, nk[].k_vocabulary), nk[].k_sha256) == py_item(identity, nk[].k_sha256)):
             raise Error("ValueError: mojolearn: cached tokens were made from another corpus or vocabulary; remove the directory to rebuild")
         # pass 3 (N174): the cached token file is mapped and its mapping
         # hashed once here; the verified mapping rides on the corpus, so
         # batches() reuses it instead of mapping and hashing the file again
         # (it re-checks the path, size and manifest hash before trusting it).
         # The token path as batches() spells it (from the corpus's tokens_dir).
-        var token_file = _join(corpus_path(_fields(result)["tokens_dir"]), "tokens.i32")
+        var token_file = _join(corpus_path(py_item(_fields(result), nk[].k_tokens_dir)), "tokens.i32")
         var token_size = corpus_file_size(token_file)
         var mapped = corpus_mapped(token_file, token_size, context)
         var token_sha = PythonObject(sha256_hex_addr(Int(py=mapped._addr), token_size))
-        if not Bool(py=token_sha == manifest["sha256"]):
+        if not Bool(py=token_sha == py_item(manifest, nk[].k_sha256)):
             raise Error("ValueError: mojolearn: cached token hash differs from its manifest; remove the directory to rebuild")
-        py_setitem(_fields(result), "_tokens_verified", Python.tuple(token_file, PythonObject(token_size), token_sha, mapped))
+        py_setitem(_fields(result), nk[].k__tokens_verified, Python.tuple(token_file, PythonObject(token_size), token_sha, mapped))
         return result
     var tokenizer = tokenizer_bpe_for(ranks)
-    if not Bool(py=tokenizer_bpe_identity(tokenizer)["sha256"] == identity["sha256"]):
+    if not Bool(py=py_item(tokenizer_bpe_identity(tokenizer), nk[].k_sha256) == py_item(identity, nk[].k_sha256)):
         raise Error("ValueError: mojolearn: cached rank file identity differs from its vocabulary manifest")
     _source_data(data, src)
     var temporary = corpus_atomic_begin(final)
@@ -299,25 +335,28 @@ def _prepare(args: PythonObject, context: PythonObject) raises -> PythonObject:
 
 
 def _batch_fields(value: PythonObject, context: PythonObject) raises -> PythonObject:
-    return corpus_fields(value, context["batches_class"], Python.tuple("dir", "manifest", "manifest_sha256", "sha256",
+    var nk = lm_keys()
+    return corpus_fields(value, py_item(context, nk[].k_batches_class), Python.tuple("dir", "manifest", "manifest_sha256", "sha256",
         "ids_all", "batch", "length", "lo", "hi", "modulus"))
 
 
 def _batch_method(owner: PythonObject, fields: PythonObject, context: PythonObject) raises:
-    if py_contains(fields, "ids"):
+    var nk = lm_keys()
+    if py_contains(fields, nk[].k_ids):
         raise Error("TypeError: native prefetch cannot call an overridden Python ids method; request batches with the native ids operation")
     var bi = native_loaded_module("builtins")
-    var ancestry = py_call(bi.type.__dict__["__mro__"].__get__, py_type(owner))
+    var ancestry = py_call(py_item(bi.type.__dict__, nk[].k___mro__).__get__, py_type(owner))
     for i in range(len(ancestry)):  # small-loop(pinned public batch operation ancestry)
         var namespace = _class_fields(ancestry[i])
-        if py_contains(namespace, "ids"):
-            if namespace["ids"] is not context["batch_ids_method"]:
+        if py_contains(namespace, nk[].k_ids):
+            if py_item(namespace, nk[].k_ids) is not py_item(context, nk[].k_batch_ids_method):
                 raise Error("TypeError: native prefetch cannot call an overridden Python ids method")
             return
     raise Error("TypeError: native batch operation connection changed")
 
 
 def _batch_verified(verified: PythonObject, token_file: PythonObject, size: Int, manifest: PythonObject) raises -> Bool:
+    var nk = lm_keys()
     # A verdict carried from prepare (N174) is used only for the same token
     # file, at the same size, against the manifest just read, and only in the
     # exact form prepare stored; anything else is verified afresh.
@@ -328,19 +367,20 @@ def _batch_verified(verified: PythonObject, token_file: PythonObject, size: Int,
         return False
     if not Bool(py=verified[0] == token_file) or Int(py=verified[1]) != size:
         return False
-    if not Bool(py=verified[2] == py_get(manifest, "sha256")):
+    if not Bool(py=verified[2] == py_get(manifest, nk[].k_sha256)):
         return False
     return True
 
 
 def _batch_init(value: PythonObject, directory: PythonObject, batch_value: PythonObject,
                  length_value: PythonObject, context: PythonObject, verified: PythonObject) raises -> PythonObject:
+    var nk = lm_keys()
     var fields = _batch_fields(value, context)
     var path = corpus_path(directory)
     var raw = corpus_read(_join(path, "manifest.json"))
     var manifest = native_json_parse(raw)
     corpus_dict(manifest)
-    if not Bool(py=py_get(manifest, "schema") == PythonObject(TOKENS_SCHEMA)):
+    if not Bool(py=py_get(manifest, nk[].k_schema) == PythonObject(TOKENS_SCHEMA)):
         raise Error("ValueError: mojolearn: token manifest is not " + String(TOKENS_SCHEMA))
     var token_file = _join(path, "tokens.i32")
     var size = corpus_file_size(token_file)
@@ -354,11 +394,11 @@ def _batch_init(value: PythonObject, directory: PythonObject, batch_value: Pytho
     else:
         mapped = corpus_mapped(token_file, size, context)
         sha = PythonObject(sha256_hex_addr(Int(py=mapped._addr), size))
-    if not Bool(py=sha == manifest["sha256"]) or not Bool(py=PythonObject(size) == manifest["bytes"]):
+    if not Bool(py=sha == py_item(manifest, nk[].k_sha256)) or not Bool(py=PythonObject(size) == py_item(manifest, nk[].k_bytes)):
         raise Error("ValueError: mojolearn: pinned tokens length/SHA mismatch for " + String(token_file))
     var batch = corpus_int(batch_value, "batch")
     var length = corpus_int(length_value, "length")
-    var span = py_get(manifest, "train_range")
+    var span = py_get(manifest, nk[].k_train_range)
     if span is None or not Bool(py=span):
         span = Python.list(0, size // 4)
     if py_type(span) is not native_loaded_module("builtins").list or len(span) != 2:
@@ -367,37 +407,39 @@ def _batch_init(value: PythonObject, directory: PythonObject, batch_value: Pytho
     var hi = corpus_int(span[1], "train range end")
     if length < 0 or length > 2147483645 or hi - lo < length + 2:
         raise Error("ValueError: mojolearn: the train range is shorter than one batch row")
-    py_setitem(fields, "dir", corpus_path_object(path))
-    py_setitem(fields, "manifest", manifest)
-    py_setitem(fields, "manifest_sha256", corpus_hash_bytes(raw))
-    py_setitem(fields, "sha256", sha)
-    py_setitem(fields, "ids_all", mapped)
-    py_setitem(fields, "batch", batch)
-    py_setitem(fields, "length", length)
-    py_setitem(fields, "lo", lo)
-    py_setitem(fields, "hi", hi)
-    py_setitem(fields, "modulus", hi - lo - length - 1)
+    py_setitem(fields, nk[].k_dir, corpus_path_object(path))
+    py_setitem(fields, nk[].k_manifest, manifest)
+    py_setitem(fields, nk[].k_manifest_sha256, corpus_hash_bytes(raw))
+    py_setitem(fields, nk[].k_sha256, sha)
+    py_setitem(fields, nk[].k_ids_all, mapped)
+    py_setitem(fields, nk[].k_batch, batch)
+    py_setitem(fields, nk[].k_length, length)
+    py_setitem(fields, nk[].k_lo, lo)
+    py_setitem(fields, nk[].k_hi, hi)
+    py_setitem(fields, nk[].k_modulus, hi - lo - length - 1)
     return PythonObject(None)
 
 
 def _batch_construct(directory: PythonObject, batch: PythonObject, length: PythonObject, context: PythonObject,
                      verified: PythonObject) raises -> PythonObject:
-    var result = corpus_new(context["batches_class"])
+    var nk = lm_keys()
+    var result = corpus_new(py_item(context, nk[].k_batches_class))
     _batch_init(result, directory, batch, length, context, verified)
     return result
 
 
 def _batch_ids(value: PythonObject, step_value: PythonObject, context: PythonObject,
                captured_fields: PythonObject) raises -> PythonObject:
+    var nk = lm_keys()
     var fields = captured_fields
-    var batch = corpus_int(fields["batch"], "batch", True)
-    var length = corpus_int(fields["length"], "length", True)
-    var lo = corpus_int(fields["lo"], "lo", True)
-    var modulus = corpus_int(fields["modulus"], "modulus", True)
+    var batch = corpus_int(py_item(fields, nk[].k_batch), "batch", True)
+    var length = corpus_int(py_item(fields, nk[].k_length), "length", True)
+    var lo = corpus_int(py_item(fields, nk[].k_lo), "lo", True)
+    var modulus = corpus_int(py_item(fields, nk[].k_modulus), "modulus", True)
     if batch < 0 or length < 1:
         raise Error("ValueError: tokens_gather_rows: bad dims")
     var base = corpus_batch_base(step_value, batch, length)
-    var source = corpus_ids_snapshot(fields["ids_all"], context)
+    var source = corpus_ids_snapshot(py_item(fields, nk[].k_ids_all), context)
     var result = corpus_empty(Python.tuple(batch, length + 1), context)
     _ = tokenizer_gather_rows_native(Int(py=source._addr), Int(py=source.size), Int(py=result._addr), Int(py=result.size),
         batch, length, lo, modulus, base)
@@ -412,17 +454,18 @@ def lm_corpus_gather_steps(owner: PythonObject, steps: List[Int], batch: Int, le
     ONE admission of the batches owner (fields, ids method, token snapshot).
     The same rows, in the same order, as `ids`: `ids(s)` reads base
     s * batch * length; here the base is computed natively for exact ints."""
+    var nk = lm_keys()
     var fields = _batch_fields(owner, context)
     _batch_method(owner, fields, context)
-    var have_batch = corpus_int(fields["batch"], "batch", True)
-    var have_length = corpus_int(fields["length"], "length", True)
-    var lo = corpus_int(fields["lo"], "lo", True)
-    var modulus = corpus_int(fields["modulus"], "modulus", True)
+    var have_batch = corpus_int(py_item(fields, nk[].k_batch), "batch", True)
+    var have_length = corpus_int(py_item(fields, nk[].k_length), "length", True)
+    var lo = corpus_int(py_item(fields, nk[].k_lo), "lo", True)
+    var modulus = corpus_int(py_item(fields, nk[].k_modulus), "modulus", True)
     if have_batch < 0 or have_length < 1:
         raise Error("ValueError: tokens_gather_rows: bad dims")
     if have_batch != batch or have_length != length:
         raise Error("ValueError: parallel input has wrong shape")
-    var source = corpus_ids_snapshot(fields["ids_all"], context)
+    var source = corpus_ids_snapshot(py_item(fields, nk[].k_ids_all), context)
     var source_address = Int(py=source._addr)
     var source_count = Int(py=source.size)
     var cells = batch * (length + 1)
@@ -503,6 +546,7 @@ struct LmCorpusIteratorHandle(Movable, Writable):
 
 def _prefetch(owner: PythonObject, start_value: PythonObject, steps_value: PythonObject,
               depth_value: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = lm_keys()
     var bi = native_loaded_module("builtins")
     if py_type(start_value) is not bi.int or py_type(steps_value) is not bi.int or py_type(depth_value) is not bi.int:
         raise Error("ValueError: prefetch start_step/steps require nonnegative ints and depth a positive int")
@@ -514,22 +558,23 @@ def _prefetch(owner: PythonObject, start_value: PythonObject, steps_value: Pytho
     var fields = _batch_fields(owner, context)
     _batch_method(owner, fields, context)
     var handle = LmCorpusIteratorHandle(owner, start, start + steps)
-    handle.batch = corpus_int(fields["batch"], "batch", True)
-    handle.length = corpus_int(fields["length"], "length", True)
-    handle.lo = corpus_int(fields["lo"], "lo", True)
-    handle.modulus = corpus_int(fields["modulus"], "modulus", True)
+    handle.batch = corpus_int(py_item(fields, nk[].k_batch), "batch", True)
+    handle.length = corpus_int(py_item(fields, nk[].k_length), "length", True)
+    handle.lo = corpus_int(py_item(fields, nk[].k_lo), "lo", True)
+    handle.modulus = corpus_int(py_item(fields, nk[].k_modulus), "modulus", True)
     # Bad dimensions keep raising at the first step, as before (source None).
     if handle.batch >= 0 and handle.length >= 1:
-        handle.source = corpus_ids_snapshot(fields["ids_all"], context)
-    var iterator = corpus_new(context["iterator_class"])
-    var slots = corpus_fields(iterator, context["iterator_class"], Python.tuple("_handle"))
-    py_setitem(slots, "_handle", PythonObject(alloc=handle^))
+        handle.source = corpus_ids_snapshot(py_item(fields, nk[].k_ids_all), context)
+    var iterator = corpus_new(py_item(context, nk[].k_iterator_class))
+    var slots = corpus_fields(iterator, py_item(context, nk[].k_iterator_class), Python.tuple("_handle"))
+    py_setitem(slots, nk[].k__handle, PythonObject(alloc=handle^))
     return iterator
 
 
 def _iterator_next(value: PythonObject, context: PythonObject) raises -> PythonObject:
-    var fields = corpus_fields(value, context["iterator_class"], Python.tuple("_handle"))
-    var owner = fields["_handle"]
+    var nk = lm_keys()
+    var fields = corpus_fields(value, py_item(context, nk[].k_iterator_class), Python.tuple("_handle"))
+    var owner = py_item(fields, nk[].k__handle)
     var handle = owner.downcast_value_ptr[LmCorpusIteratorHandle]()
     if handle[].closed or handle[].current >= handle[].stop:
         handle[].closed = True
@@ -554,70 +599,74 @@ def _iterator_next(value: PythonObject, context: PythonObject) raises -> PythonO
 
 
 def _batch_describe(owner: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = lm_keys()
     var fields = _batch_fields(owner, context)
-    var manifest = corpus_plain(fields["manifest"])
-    var vocabulary = manifest["vocabulary"]
-    var source = corpus_ids_snapshot(fields["ids_all"], context)
-    var lo = corpus_int(fields["lo"], "lo", True)
-    var hi = corpus_int(fields["hi"], "hi", True)
-    return Python.dict(path=_join(corpus_path(fields["dir"]), "tokens.i32"), sha256=corpus_plain(fields["sha256"]),
-        manifest_sha256=corpus_plain(fields["manifest_sha256"]), tokens=source.size, train_range=Python.list(lo, hi),
-        corpus_sha256=manifest["source"]["sha256"], vocabulary_sha256=vocabulary["sha256"], n_vocab=vocabulary["n_vocab"],
+    var manifest = corpus_plain(py_item(fields, nk[].k_manifest))
+    var vocabulary = py_item(manifest, nk[].k_vocabulary)
+    var source = corpus_ids_snapshot(py_item(fields, nk[].k_ids_all), context)
+    var lo = corpus_int(py_item(fields, nk[].k_lo), "lo", True)
+    var hi = corpus_int(py_item(fields, nk[].k_hi), "hi", True)
+    return Python.dict(path=_join(corpus_path(py_item(fields, nk[].k_dir)), "tokens.i32"), sha256=corpus_plain(py_item(fields, nk[].k_sha256)),
+        manifest_sha256=corpus_plain(py_item(fields, nk[].k_manifest_sha256)), tokens=source.size, train_range=Python.list(lo, hi),
+        corpus_sha256=py_item(py_item(manifest, nk[].k_source), nk[].k_sha256), vocabulary_sha256=py_item(vocabulary, nk[].k_sha256), n_vocab=py_item(vocabulary, nk[].k_n_vocab),
         schedule=PythonObject("step k row b: ids[lo + (k*batch*length + b*length) % (hi - lo - length - 1) : +length+1] over the TRAIN range [lo, hi) in tokens; targets shifted one id"))
 
 
 def _batch_schedule(owner: PythonObject, extra: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = lm_keys()
     var fields = _batch_fields(owner, context)
-    var manifest = corpus_plain(fields["manifest"])
-    var vocabulary = manifest["vocabulary"]
-    var result = Python.dict(schema=PythonObject(TOKENS_SCHEMA), schedule=PythonObject(SCHEDULE), tokens_sha256=corpus_plain(fields["sha256"]),
-        corpus_sha256=manifest["source"]["sha256"], batch=PythonObject(corpus_int(fields["batch"], "batch", True)),
-        length=PythonObject(corpus_int(fields["length"], "length", True)),
-        train_range=Python.list(corpus_int(fields["lo"], "lo", True), corpus_int(fields["hi"], "hi", True)),
-        vocabulary=Python.dict(schema=vocabulary["schema"], sha256=vocabulary["sha256"], n_vocab=vocabulary["n_vocab"]))
+    var manifest = corpus_plain(py_item(fields, nk[].k_manifest))
+    var vocabulary = py_item(manifest, nk[].k_vocabulary)
+    var result = Python.dict(schema=PythonObject(TOKENS_SCHEMA), schedule=PythonObject(SCHEDULE), tokens_sha256=corpus_plain(py_item(fields, nk[].k_sha256)),
+        corpus_sha256=py_item(py_item(manifest, nk[].k_source), nk[].k_sha256), batch=PythonObject(corpus_int(py_item(fields, nk[].k_batch), "batch", True)),
+        length=PythonObject(corpus_int(py_item(fields, nk[].k_length), "length", True)),
+        train_range=Python.list(corpus_int(py_item(fields, nk[].k_lo), "lo", True), corpus_int(py_item(fields, nk[].k_hi), "hi", True)),
+        vocabulary=Python.dict(schema=py_item(vocabulary, nk[].k_schema), sha256=py_item(vocabulary, nk[].k_sha256), n_vocab=py_item(vocabulary, nk[].k_n_vocab)))
     corpus_dict(extra)
     py_call(result.update, extra)
     return result
 
 
 def _expected_vocabulary(input: PythonObject) raises -> PythonObject:
+    var nk = lm_keys()
     var bi = native_loaded_module("builtins")
     var model = input
     if py_type(model) is not bi.dict:
         # A trainer is a passive source of stored schedule metadata. Never
         # call its getter, __getattr__, descriptor, or schedule method.
-        var ancestry = py_call(bi.type.__dict__["__mro__"].__get__, py_type(model))
+        var ancestry = py_call(py_item(bi.type.__dict__, nk[].k___mro__).__get__, py_type(model))
         for i in range(len(ancestry)):  # driver-loop: raw trainer schedule descriptor admission
             var namespace = _class_fields(ancestry[i])
-            if py_contains(namespace, "data_schedule"):
-                var member = namespace["data_schedule"]
-                var bases = py_call(bi.type.__dict__["__mro__"].__get__, py_type(member))
+            if py_contains(namespace, nk[].k_data_schedule):
+                var member = py_item(namespace, nk[].k_data_schedule)
+                var bases = py_call(py_item(bi.type.__dict__, nk[].k___mro__).__get__, py_type(member))
                 for j in range(len(bases)):  # small-loop(descriptor protocol ancestry)
-                    if py_contains(_class_fields(bases[j]), "__get__"):
+                    if py_contains(_class_fields(bases[j]), nk[].k___get__):
                         raise Error("TypeError: vocabulary checks require a stored data_schedule or an explicit checkpoint/schedule dictionary")
         var fields = _fields(model)
-        model = py_get(fields, "data_schedule")
+        model = py_get(fields, nk[].k_data_schedule)
     if model is None or py_type(model) is not bi.dict:
         return PythonObject(None)
     corpus_dict(model)
-    var nested = py_get(model, "data_schedule")
+    var nested = py_get(model, nk[].k_data_schedule)
     if nested is not None and py_type(nested) is bi.dict:
         model = nested
         corpus_dict(model)
-    var vocabulary = py_get(model, "vocabulary")
+    var vocabulary = py_get(model, nk[].k_vocabulary)
     if vocabulary is not None and py_type(vocabulary) is bi.dict:
         corpus_dict(vocabulary)
-        if py_contains(vocabulary, "sha256"):
+        if py_contains(vocabulary, nk[].k_sha256):
             return corpus_plain(vocabulary)
     return PythonObject(None)
 
 
 def _require_vocabulary(model: PythonObject, tokenizer: PythonObject) raises -> PythonObject:
+    var nk = lm_keys()
     var expected = _expected_vocabulary(model)
     if expected is None:
         raise Error("ValueError: mojolearn: this model carries no vocabulary identity (a byte model, or trained without lm_corpus); there is nothing to check a tokenizer against")
     var got = tokenizer_bpe_identity(tokenizer)
-    if not Bool(py=got["sha256"] == expected["sha256"]) or not Bool(py=got["n_vocab"] == expected["n_vocab"]):
+    if not Bool(py=py_item(got, nk[].k_sha256) == py_item(expected, nk[].k_sha256)) or not Bool(py=py_item(got, nk[].k_n_vocab) == py_item(expected, nk[].k_n_vocab)):
         raise Error("ValueError: mojolearn: vocabulary mismatch: the model and tokenizer have different vocabulary hashes or sizes; its ids would decode to the wrong text")
     return tokenizer
 
@@ -627,17 +676,22 @@ def _arity(args: PythonObject, count: Int) raises:
         raise Error("TypeError: corpus public operation received the wrong argument count")
 
 
-def lm_corpus_public_call(operation: String, args: PythonObject) raises -> PythonObject:
+def lm_corpus_public_call(name: PythonObject, args: PythonObject) raises -> PythonObject:
+    var nk = lm_keys()
+    # One lookup with the caller's own str (bindings/py_keys.mojo): the
+    # former door copied the name into a String and made up to 24 compares
+    # (17 before iterator_next, the per-batch call).
+    var operation = py_op_code(nk[].ops, name)
     var bi = native_loaded_module("builtins")
     if py_type(args) is not bi.tuple:
         raise Error("TypeError: corpus operations require their native argument tuple")
-    if operation == "connect":
+    if operation == LM_OPN_CONNECT:
         return corpus_connect(args)
     var context = corpus_context()
-    if operation == "prepare":
+    if operation == LM_OPN_PREPARE:
         _arity(args, 9)
         return _prepare(args, context)
-    if operation == "tokenize":
+    if operation == LM_OPN_TOKENIZE:
         _arity(args, 9)
         _progress(args[8])
         var document_bytes = _positive(args[6], "document_bytes")
@@ -652,73 +706,73 @@ def lm_corpus_public_call(operation: String, args: PythonObject) raises -> Pytho
         corpus_dict(identity)
         _tokenize(args[0], source, ranges, args[3], identity, corpus_path(args[5]), document_bytes)
         return PythonObject(None)
-    if operation == "corpus_init":
+    if operation == LM_OPN_CORPUS_INIT:
         _arity(args, 3)
         return _corpus_init(args[0], args[1], args[2], context)
-    if operation == "corpus_batches":
+    if operation == LM_OPN_CORPUS_BATCHES:
         _arity(args, 3)
         var fields = _corpus_fields(args[0], context)
-        return _batch_construct(fields["tokens_dir"], args[1], args[2], context, py_get(fields, "_tokens_verified"))
-    if operation == "corpus_vocabulary" or operation == "corpus_n_vocab" or operation == "corpus_tokenizer" or operation == "corpus_repr":
+        return _batch_construct(py_item(fields, nk[].k_tokens_dir), args[1], args[2], context, py_get(fields, nk[].k__tokens_verified))
+    if operation == LM_OPN_CORPUS_VOCABULARY or operation == LM_OPN_CORPUS_N_VOCAB or operation == LM_OPN_CORPUS_TOKENIZER or operation == LM_OPN_CORPUS_REPR:
         _arity(args, 1)
         var fields = _corpus_fields(args[0], context)
-        var manifest = corpus_plain(fields["manifest"])
+        var manifest = corpus_plain(py_item(fields, nk[].k_manifest))
         corpus_dict(manifest)
-        var vocabulary = manifest["vocabulary"]
+        var vocabulary = py_item(manifest, nk[].k_vocabulary)
         corpus_dict(vocabulary)
-        if operation == "corpus_vocabulary":
+        if operation == LM_OPN_CORPUS_VOCABULARY:
             return py_call(bi.dict, vocabulary)
-        if operation == "corpus_n_vocab":
-            return PythonObject(corpus_int(vocabulary["n_vocab"], "n_vocab"))
-        if operation == "corpus_tokenizer":
-            var tokenizer = tokenizer_bpe_for(fields["vocabulary_path"])
+        if operation == LM_OPN_CORPUS_N_VOCAB:
+            return PythonObject(corpus_int(py_item(vocabulary, nk[].k_n_vocab), "n_vocab"))
+        if operation == LM_OPN_CORPUS_TOKENIZER:
+            var tokenizer = tokenizer_bpe_for(py_item(fields, nk[].k_vocabulary_path))
             return _require_vocabulary(manifest, tokenizer)
-        var count = corpus_int(manifest["tokens"], "tokens")
-        var n_vocab = corpus_int(vocabulary["n_vocab"], "n_vocab")
-        var path = corpus_path(fields["tokens_dir"])
+        var count = corpus_int(py_item(manifest, nk[].k_tokens), "tokens")
+        var n_vocab = corpus_int(py_item(vocabulary, nk[].k_n_vocab), "n_vocab")
+        var path = corpus_path(py_item(fields, nk[].k_tokens_dir))
         return PythonObject("TokenizedCorpus(tokens=" + String(count) + ", n_vocab=" + String(n_vocab)
-            + ", sha256=" + _prefix(manifest["sha256"]) + ", dir=" + String(py_call(bi.repr, path)) + ")")
-    if operation == "batches_init":
+            + ", sha256=" + _prefix(py_item(manifest, nk[].k_sha256)) + ", dir=" + String(py_call(bi.repr, path)) + ")")
+    if operation == LM_OPN_BATCHES_INIT:
         _arity(args, 4)
         return _batch_init(args[0], args[1], args[2], args[3], context, PythonObject(None))
-    if operation == "batches_ids":
+    if operation == LM_OPN_BATCHES_IDS:
         _arity(args, 2)
         return _batch_ids(args[0], args[1], context, _batch_fields(args[0], context))
-    if operation == "batches_parallel_step":
+    if operation == LM_OPN_BATCHES_PARALLEL_STEP:
         _arity(args, 3)
         return _batch_parallel_step(args[0], args[1], args[2], context)
-    if operation == "batches_prefetch":
+    if operation == LM_OPN_BATCHES_PREFETCH:
         _arity(args, 4)
         return _prefetch(args[0], args[1], args[2], args[3], context)
-    if operation == "batches_vocabulary":
+    if operation == LM_OPN_BATCHES_VOCABULARY:
         _arity(args, 1)
         var fields = _batch_fields(args[0], context)
-        var manifest = corpus_plain(fields["manifest"])
+        var manifest = corpus_plain(py_item(fields, nk[].k_manifest))
         corpus_dict(manifest)
-        var vocabulary = manifest["vocabulary"]
+        var vocabulary = py_item(manifest, nk[].k_vocabulary)
         corpus_dict(vocabulary)
         return py_call(bi.dict, vocabulary)
-    if operation == "batches_describe":
+    if operation == LM_OPN_BATCHES_DESCRIBE:
         _arity(args, 1)
         return _batch_describe(args[0], context)
-    if operation == "batches_schedule":
+    if operation == LM_OPN_BATCHES_SCHEDULE:
         _arity(args, 2)
         return _batch_schedule(args[0], args[1], context)
-    if operation == "iterator_iter":
+    if operation == LM_OPN_ITERATOR_ITER:
         _arity(args, 1)
-        var fields = corpus_fields(args[0], context["iterator_class"], Python.tuple("_handle"))
-        _ = fields["_handle"].downcast_value_ptr[LmCorpusIteratorHandle]()
+        var fields = corpus_fields(args[0], py_item(context, nk[].k_iterator_class), Python.tuple("_handle"))
+        _ = py_item(fields, nk[].k__handle).downcast_value_ptr[LmCorpusIteratorHandle]()
         return args[0]
-    if operation == "iterator_next":
+    if operation == LM_OPN_ITERATOR_NEXT:
         _arity(args, 1)
         return _iterator_next(args[0], context)
-    if operation == "expected_vocabulary":
+    if operation == LM_OPN_EXPECTED_VOCABULARY:
         _arity(args, 1)
         return _expected_vocabulary(args[0])
-    if operation == "require_vocabulary":
+    if operation == LM_OPN_REQUIRE_VOCABULARY:
         _arity(args, 2)
         return _require_vocabulary(args[0], args[1])
-    if operation == "tokenizer_for":
+    if operation == LM_OPN_TOKENIZER_FOR:
         _arity(args, 2)
         var tokenizer = tokenizer_bpe_for(args[1])
         return _require_vocabulary(args[0], tokenizer)
@@ -731,7 +785,7 @@ def lm_corpus_public_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
         var bi = native_loaded_module("builtins")
         if py_type(args) is not bi.tuple or len(args) != 2 or py_type(args[0]) is not bi.str:
             raise Error("TypeError: corpus public binding requires an operation string and argument tuple")
-        var result = lm_corpus_public_call(String(args[0]), args[1])
+        var result = lm_corpus_public_call(args[0], args[1])
         return result.steal_data()
     except error:
         var message = String(error)

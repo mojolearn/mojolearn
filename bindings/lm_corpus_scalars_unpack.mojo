@@ -19,6 +19,8 @@ from bindings.py_balanced import py_call, py_type, py_get
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.native_scalar_promotion_unpack import native_scalar_weak_promotion
 from bindings.neural_block_admission_door import neural_native_scalar
+from bindings.lm_keys_unpack import lm_keys
+from bindings.py_balanced import py_item
 
 
 def _integer_base(step: PythonObject, batch: Int, length: Int,
@@ -50,6 +52,7 @@ def _floating_base(step: PythonObject, batch: Int, length: Int, width: Int) rais
 
 
 def corpus_numeric_base(step: PythonObject, batch: Int, length: Int, context: PythonObject) raises -> Int:
+    var nk = lm_keys()
     var bi = native_loaded_module("builtins")
     var cls = py_type(step)
     if cls is bi.int or cls is bi.float or cls is bi.bool:
@@ -59,8 +62,8 @@ def corpus_numeric_base(step: PythonObject, batch: Int, length: Int, context: Py
         return Int(py=py_call(bi.int, product))
     if not neural_native_scalar(step, context):
         raise Error("TypeError: corpus step_index requires a native numeric scalar without multiplication hooks")
-    var admission = context["admission_context"]
-    var classes = admission["class_dtypes"]
+    var admission = py_item(context, nk[].k_admission_context)
+    var classes = py_item(admission, nk[].k_class_dtypes)
     var kind = -1
     var width = 0
     for k in range(4):  # small-loop(four native NumPy scalar kinds)
@@ -71,7 +74,7 @@ def corpus_numeric_base(step: PythonObject, batch: Int, length: Int, context: Py
                 width = size
     if kind < 0:
         raise Error("TypeError: corpus step_index requires an admitted NumPy numeric scalar")
-    var weak = native_scalar_weak_promotion(context["admission_context"], "corpus")
+    var weak = native_scalar_weak_promotion(py_item(context, nk[].k_admission_context), "corpus")
     if kind == 2:
         return _floating_base(step, batch, length, width if weak else 8)
     if kind == 0 and width == 8 and not weak:

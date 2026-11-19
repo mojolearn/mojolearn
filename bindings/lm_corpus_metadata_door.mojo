@@ -11,6 +11,8 @@ from bindings.lm_corpus_files_door import corpus_files_initialize
 from bindings.lm_corpus_scalars_unpack import corpus_numeric_base
 from providers.python.borrowed_buffer_pyapi_unpack import admit_native_buffer_exporter, connect_native_mmap_exporter
 from core.shared_slot import SharedSlot
+from bindings.lm_keys_unpack import lm_keys
+from bindings.py_balanced import py_item
 
 
 struct CorpusConnection(Defaultable, Movable):
@@ -31,6 +33,7 @@ def corpus_context() raises -> PythonObject:
 
 
 def corpus_connect(args: PythonObject) raises -> PythonObject:
+    var nk = lm_keys()
     var bi = native_loaded_module("builtins")
     if py_type(args) is not bi.tuple or len(args) != 6:
         raise Error("TypeError: corpus connection requires its native classes")
@@ -40,7 +43,7 @@ def corpus_connect(args: PythonObject) raises -> PythonObject:
         for i in range(5):  # small-loop(import connection cannot replace retained owner identities)
             if args[i] is not prior[prior_names[i]]:
                 raise Error("TypeError: corpus import connection cannot be replaced")
-        if args[5] is not prior["scalar_connection"]:
+        if args[5] is not py_item(prior, nk[].k_scalar_connection):
             raise Error("TypeError: corpus scalar admission connection cannot be replaced")
         return PythonObject(None)
     var context = Python.dict()
@@ -51,13 +54,13 @@ def corpus_connect(args: PythonObject) raises -> PythonObject:
         py_setitem(context, names[i], args[i])
     corpus_dict(args[5])
     var admission = py_call(bi.dict, args[5])
-    py_setitem(admission, "native_module_type", py_type(bi))
-    py_setitem(context, "scalar_connection", args[5])
-    py_setitem(context, "admission_context", admission)
-    py_setitem(context, "array_slots", neural_array_slots(context))
-    py_setitem(context, "batch_ids_method", _class_fields(context["batches_class"])["ids"])
-    py_setitem(context, "mmap_hooks", corpus_mmap_hooks(context["mmap_class"]))
-    connect_native_mmap_exporter(context["mmap_class"])
+    py_setitem(admission, nk[].k_native_module_type, py_type(bi))
+    py_setitem(context, nk[].k_scalar_connection, args[5])
+    py_setitem(context, nk[].k_admission_context, admission)
+    py_setitem(context, nk[].k_array_slots, neural_array_slots(context))
+    py_setitem(context, nk[].k_batch_ids_method, py_item(_class_fields(py_item(context, nk[].k_batches_class)), nk[].k_ids))
+    py_setitem(context, nk[].k_mmap_hooks, corpus_mmap_hooks(py_item(context, nk[].k_mmap_class)))
+    connect_native_mmap_exporter(py_item(context, nk[].k_mmap_class))
     corpus_files_initialize()
     CORPUS_CONNECTION.get_or_create_ptr()[].context = context
     return PythonObject(None)
@@ -111,13 +114,14 @@ def corpus_plain(value: PythonObject, depth: Int = 0) raises -> PythonObject:
 
 
 def corpus_fields(owner: PythonObject, cls: PythonObject, names: PythonObject) raises -> PythonObject:
+    var nk = lm_keys()
     var bi = native_loaded_module("builtins")
-    var ancestry = py_call(bi.type.__dict__["__mro__"].__get__, py_type(owner))
+    var ancestry = py_call(py_item(bi.type.__dict__, nk[].k___mro__).__get__, py_type(owner))
     var admitted = False
     for i in range(len(ancestry)):  # driver-loop: passive subclass ancestry without isinstance hooks
         admitted = admitted or ancestry[i] is cls
         var namespace = _class_fields(ancestry[i])
-        if py_contains(namespace, "__getattr__") or py_contains(namespace, "__del__"):
+        if py_contains(namespace, nk[].k___getattr__) or py_contains(namespace, nk[].k___del__):
             raise Error("TypeError: corpus records cannot invoke Python attribute hooks")
         for hook in [String("__getattribute__"), String("__setattr__")]:  # small-loop(native record access hooks)
             if py_contains(namespace, hook) and namespace[hook] is not bi.object.__dict__[hook]:
@@ -131,16 +135,18 @@ def corpus_fields(owner: PythonObject, cls: PythonObject, names: PythonObject) r
 
 
 def corpus_new(cls: PythonObject) raises -> PythonObject:
+    var nk = lm_keys()
     var bi = native_loaded_module("builtins")
-    var ancestry = py_call(bi.type.__dict__["__mro__"].__get__, cls)
+    var ancestry = py_call(py_item(bi.type.__dict__, nk[].k___mro__).__get__, cls)
     for i in range(len(ancestry)):  # small-loop(public record allocation finalizer admission)
-        if py_contains(_class_fields(ancestry[i]), "__del__"):
+        if py_contains(_class_fields(ancestry[i]), nk[].k___del__):
             raise Error("TypeError: native corpus records cannot invoke Python finalizers")
     return py_call(native_loaded_module("builtins").object.__new__, cls)
 
 
 def corpus_array(store: PythonObject, shape: PythonObject, context: PythonObject,
                  readonly: Bool = False) raises -> PythonObject:
+    var nk = lm_keys()
     var bi = native_loaded_module("builtins")
     var slots = neural_array_slots(context)
     admit_native_buffer_exporter(store)
@@ -157,7 +163,7 @@ def corpus_array(store: PythonObject, shape: PythonObject, context: PythonObject
         stride *= size
     if Int(py=view.nbytes) != count * 4:
         raise Error("ValueError: corpus int32 storage differs from its shape")
-    var result = corpus_new(context["array_class"])
+    var result = corpus_new(py_item(context, nk[].k_array_class))
     var values = Python.dict(_store=store, _base=PythonObject(None), _pin=PythonObject(None),
         _mv=py_call(py_call(view.cast, "B").cast, "i"), _addr=PythonObject(native_buffer_address(store)),
         _readonly=PythonObject(readonly), shape=py_call(bi.tuple, shape), dtype=PythonObject("<i4"),
@@ -180,8 +186,9 @@ def corpus_empty(shape: PythonObject, context: PythonObject) raises -> PythonObj
 
 
 def corpus_mmap_hooks(cls: PythonObject) raises -> PythonObject:
+    var nk = lm_keys()
     var bi = native_loaded_module("builtins")
-    var ancestry = py_call(bi.type.__dict__["__mro__"].__get__, cls)
+    var ancestry = py_call(py_item(bi.type.__dict__, nk[].k___mro__).__get__, cls)
     var hooks = Python.dict()
     for name in ["__new__", "__init__", "__del__", "__buffer__", "__release_buffer__"]:  # small-loop(mmap allocation and lifetime slots)
         # Optional, not a PythonObject(None) sentinel (modular/modular#7546); PACK stores None for an absent slot.
@@ -202,14 +209,15 @@ def corpus_mmap_hooks(cls: PythonObject) raises -> PythonObject:
 
 
 def corpus_mapped(path: PythonObject, size: Int, context: PythonObject) raises -> PythonObject:
+    var nk = lm_keys()
     if size == 0:
         return corpus_empty(Python.tuple(0), context)
     var file = py_call(native_loaded_module("builtins").open, path, "rb")
     var mapping = PythonObject(None)
     try:
-        var cls = context["mmap_class"]
+        var cls = py_item(context, nk[].k_mmap_class)
         var hooks = corpus_mmap_hooks(cls)
-        var expected = context["mmap_hooks"]
+        var expected = py_item(context, nk[].k_mmap_hooks)
         var keys = py_call(native_loaded_module("builtins").list, hooks.keys())
         for i in range(len(keys)):  # small-loop(import-pinned native mmap lifecycle slots)
             if hooks[keys[i]] is not expected[keys[i]]:
