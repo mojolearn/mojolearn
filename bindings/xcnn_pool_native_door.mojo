@@ -38,6 +38,8 @@ from bindings.xcnn_common_door import (
     XK_XSHAPE, XK_IDX_HOST, XK_IDX_DEV, XK_IDX_SHAPE, XK_LAYER, XK_POOL_CACHE, XK_OUTPUT_SIZE, XK_KERNEL_SIZE,
     XK_STRIDE, XK_PADDING, XK_DILATION, XK_COUNT_INCLUDE_PAD, XK_CEIL_MODE, XK_DIVISOR,
 )
+# fx-maxpool (2026-11-19): a resident input's admission hands over its dimensions.
+from bindings.xcnn_common_door import xcnn_dev_word_shape
 from x_cnn.door_run import xcnn_run_copy_f32
 from x_cnn.pool_run import (
     PoolSettings, pool_run_words, pool_run_out_words, pool_run_flat_rest, pool_run_row_dims, pool_run_check_nchw,
@@ -585,7 +587,16 @@ def xcnn_dropout_forward(model: PythonObject, x: PythonObject, context: PythonOb
     if xcnn_is_t(x, context):
         var bt = xcnn_entries(fields, context)
         var xs = xcnn_shape(x)
-        if xcnn_on_dev(bt, x, context) and xcnn_idn(bt, XCNN_F_LAYER_IO) and xcnn_size(xs) > 0:
+        # fx-maxpool (2026-11-19): x is admitted once (`xcnn_dev_word`: the
+        # verdict `xcnn_on_dev` gave, with the handle word; the class test
+        # and layout check `xcnn_is_t` made two lines up are not made again,
+        # and the handle is not read a second time by name), and the mask's
+        # array is found through the layer fields this call already admitted
+        # (`xcnn_dev_get_f`; `xcnn_dev_get` admitted the layer's instance
+        # dictionary a second time), before the output's allocation as in
+        # the max pools. Same entry, words and residency bits.
+        var x_word = xcnn_dev_word(bt, x, context)
+        if x_word != 0 and xcnn_idn(bt, XCNN_F_LAYER_IO) and xcnn_size(xs) > 0:
             # x, y and the mask resident; eval mode is the same resident words
             if not training:
                 _set(fields, "_mask_host", PythonObject(None))
@@ -593,10 +604,10 @@ def xcnn_dropout_forward(model: PythonObject, x: PythonObject, context: PythonOb
                 return xcnn_reshape_t(x, xs, context)
             var s4 = pool_run_dropout_shape(xs)
             var prm = _dropout_words(fields, probability, s4[0], s4[1], s4[2] * s4[3], context)
+            var h = xcnn_dev_get_f(fields, bt, "mask", xcnn_size(xs), context)
             var y = xcnn_new(bt, xs, True, context)   # every path stores each mask and y word
-            var h = xcnn_dev_get(model, bt, "mask", xcnn_size(xs), context)
             var key = xcnn_ref(bt)
-            var addrs: List[Int] = [xcnn_word(x.h), xcnn_word(y.h), xcnn_word(h)]
+            var addrs: List[Int] = [x_word, xcnn_word(y.h), xcnn_word(h)]
             var py = Python()
             with GILReleased(py):
                 pool_run_dropout_m(key, 7, addrs[0], addrs[1], addrs[2], prm, probability)
@@ -732,16 +743,23 @@ def xcnn_adaptive_forward(model: PythonObject, x: PythonObject, context: PythonO
     var xt = xcnn_is_t(x, context)
     var value = x
     var x_word = 0
+    # fx-maxpool (2026-11-19): a resident x's dimensions come from its
+    # admission (`xcnn_dev_word_shape`), which reads and checks the tuple
+    # `xcnn_shape` read a second time right after it (a class record lookup,
+    # an attribute read and a second parse per forward of every adaptive
+    # pool). Every other input reads its shape as before.
+    var xs = List[Int]()
     if xt and not m:
         value = xcnn_f32(x, "x", context)
         xt = False
     elif xt:
-        x_word = xcnn_dev_word(entries, x, context)
+        x_word = xcnn_dev_word_shape(entries, x, context, xs)
         if x_word == 0:
             return xcnn_wrap(entries, xcnn_adaptive_forward(model, xcnn_host_of(x, context), context), context)
     else:
         value = xcnn_f32(x, "x", context)
-    var xs = xcnn_shape(value)
+    if x_word == 0:
+        xs = xcnn_shape(value)
     if len(xs) != 4:   # the class name is read only for the refusal
         pool_run_check_nchw(xs, _class_name(model))
     var xshape = xcnn_tuple(xs)
