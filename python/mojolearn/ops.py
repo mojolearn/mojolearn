@@ -1326,7 +1326,9 @@ class Session:
 
     # ------------------------------------------------------------ optimizers
     def optimizer(self, kind="adam", lr=1e-3, *, momentum=0.0, nesterov=False, beta1=0.9, beta2=0.999,
-                  eps=1e-8, weight_decay=0.0, schedule="constant", step_size=1, gamma=0.1):
+                  eps=1e-8, weight_decay=0.0, schedule="constant", step_size=1, gamma=0.1,
+                  alpha=0.99, centered=False, lr_decay=0.0, initial_accumulator_value=0.0,
+                  clip_grad_norm=None, clip_grad_value=None):
         """Create an optimizer for :meth:`step`; returns its integer handle.
 
         Parameters
@@ -1363,7 +1365,9 @@ class Session:
         >>> with ops.Session(record=True) as s:
         ...     opt = s.optimizer("sgd", lr=0.1, momentum=0.9, nesterov=True)
         """
-        return _SESSION_CALL(self, "optimizer", (kind, lr, momentum, nesterov, beta1, beta2, eps, weight_decay, schedule, step_size, gamma))
+        return _SESSION_CALL(self, "optimizer", (kind, lr, momentum, nesterov, beta1, beta2, eps, weight_decay, schedule, step_size, gamma,
+                                                 alpha, centered, lr_decay, initial_accumulator_value,
+                                                 clip_grad_norm, clip_grad_value))
 
     def step(self, optimizer, params):
         """Update the parameters in place from the last :meth:`backward`.

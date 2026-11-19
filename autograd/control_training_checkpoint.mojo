@@ -4,6 +4,7 @@
 # optimizer kinds are accepted; no Python serialization or state preparation.
 from autograd.ops_api import OpsSession
 from autograd.optim import optimizer_slots
+from autograd.optimizer_requests import OpsOptimizerExtras, ops_optimizer_request
 from autograd.program import _Reader
 from autograd.rankn import ShapeN
 from sequence.exec_trait import Exec
@@ -32,7 +33,17 @@ def save_control_training[E: Exec & Movable & Deinitable](
     ck.ext_ints.append(Int64(option.epoch))
     ck.ext_ints.append(Int64(option.sched))
     ck.ext_ints.append(Int64(option.sched_step))
+    # Lane fx-ops-session-blocks (2026-11-19): the settings the fixed record
+    # fields do not hold (RMSprop's centered and alpha, Adagrad's lr_decay and
+    # initial accumulator, the two gradient clips), so a restored optimizer
+    # is the saved one. One integer and five floats after the schedule's.
+    ck.ext_ints.append(Int64(1) if option.cfg.centered else Int64(0))
     ck.ext_floats.append(option.gamma)
+    ck.ext_floats.append(option.cfg.alpha)
+    ck.ext_floats.append(option.cfg.lr_decay)
+    ck.ext_floats.append(option.cfg.init_acc)
+    ck.ext_floats.append(option.cfg.clip if option.cfg.clip_global else Float32(0))
+    ck.ext_floats.append(option.cfg.clip_value)
     for k in range(len(handles)):  # driver-loop: over unique checkpoint parameter state
         var si = -1
         for j in range(len(s.opt_states)):  # driver-loop: over existing native optimizer states
@@ -67,8 +78,13 @@ struct ControlTraining(Movable):
     var floats: List[Float32]
     var steps: List[Int]
     var scalar_at: Int
+    #: [alpha, lr_decay, initial accumulator, clip_grad_norm, clip_grad_value]
+    var extras: List[Float32]
+    var centered: Bool
 
     def __init__(out self):
+        self.extras = List[Float32]()
+        self.centered = False
         self.present = False
         self.epoch = 0
         self.ints = List[Int]()
@@ -86,13 +102,17 @@ def read_control_training(
     out.epoch = r.take(ck.ext_ints, what)
     var sched = r.take(ck.ext_ints, what)
     var interval = r.take(ck.ext_ints, what)
-    if out.epoch < 0 or interval < 1 or sched < 0 or sched > 2:
+    var centered = r.take(ck.ext_ints, what)
+    if out.epoch < 0 or interval < 1 or sched < 0 or sched > 2 or centered < 0 or centered > 1:
         raise Error(what + ": invalid epoch or schedule")
-    if len(ck.ext_floats) - float_at != 1 + 3 * len(kinds):
+    if len(ck.ext_floats) - float_at != 6 + 3 * len(kinds):
         raise Error(what + ": invalid scalar count")
+    out.centered = centered == 1
+    for k in range(5):  # small-loop(5: optimizer settings words): metadata
+        out.extras.append(ck.ext_floats[float_at + 1 + k])
     out.ints = [ck.opt_kind, Int(ck.nesterov), sched, interval]
     out.floats = [ck.lr, ck.momentum, ck.beta1, ck.beta2, ck.eps, ck.weight_decay, ck.ext_floats[float_at]]
-    float_at += 1
+    float_at += 6
     out.scalar_at = float_at
     for k in range(len(kinds)):  # driver-loop: over serialized optimizer counters
         var step = r.take(ck.ext_ints, what)
@@ -114,7 +134,10 @@ def restore_control_training[E: Exec & Movable & Deinitable](
     # The ordinary native constructor validates the exact same options as the
     # public optimizer call. A failed restore removes this new optimizer, and
     # the caller retires every partial graph/parameter/state allocation.
-    var opt = s.optimizer(metadata.ints, metadata.floats)
+    var opt = s.optimizer_with(
+        ops_optimizer_request(metadata.ints, metadata.floats),
+        OpsOptimizerExtras(metadata.extras[0], metadata.centered, metadata.extras[1], metadata.extras[2],
+                           metadata.extras[3], metadata.extras[4]))
     var oi = s._opt_index(opt)
     try:
         s.opts[oi].epoch = metadata.epoch

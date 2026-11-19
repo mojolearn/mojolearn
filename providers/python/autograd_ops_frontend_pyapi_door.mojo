@@ -9,6 +9,7 @@ from providers.python.autograd_python_errors_pyapi_pack import graph_int
 from sequence.exec_trait import Exec
 from sequence.ops import FP
 from autograd.ops_api import ops_session, ops_session_registry_token
+from autograd.optimizer_requests import OpsOptimizerExtras
 from autograd.optimizer_requests import (
     OpsOptimizerRequest, OpsOptimizerRestoreRequest, ops_optimizer_codes,
 )
@@ -402,7 +403,22 @@ def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
             _int(args[9], "step_size", 1), _float(args[1], "lr"), _float(args[2], "momentum"),
             _float(args[4], "beta1"), _float(args[5], "beta2"), _float(args[6], "eps"),
             _float(args[7], "weight_decay"), _float(args[10], "gamma"), Float32(0))
-        return PythonObject(s[].optimizer(request))
+        # lane fx-ops-session-blocks: args[11..16] = alpha, centered, lr_decay,
+        # initial_accumulator_value, clip_grad_norm, clip_grad_value (None: no
+        # clip); a clip given must be positive.
+        var clip_norm = Float32(0)
+        var clip_value = Float32(0)
+        if not _nil(args[15]):
+            clip_norm = _float(args[15], "clip_grad_norm")
+            if not (clip_norm > Float32(0)):
+                raise Error("ValueError: clip_grad_norm must be positive")
+        if not _nil(args[16]):
+            clip_value = _float(args[16], "clip_grad_value")
+            if not (clip_value > Float32(0)):
+                raise Error("ValueError: clip_grad_value must be positive")
+        var extras = OpsOptimizerExtras(_float(args[11], "alpha"), Bool(py=args[12]), _float(args[13], "lr_decay"),
+            _float(args[14], "initial_accumulator_value"), clip_norm, clip_value)
+        return PythonObject(s[].optimizer_with(request, extras))
     if op == _SOP_STEP or op == _SOP_SCHEDULER_STEP or op == _SOP_LEARNING_RATE or op == _SOP_OPTIMIZER_STATE or op == _SOP_LOAD_OPTIMIZER_STATE:
         var opt = _int(args[0], "optimizer", 1)
         var oi = s[]._opt_index(opt)
@@ -419,7 +435,16 @@ def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
             # PACK the native snapshot directly into the documented mapping.
             var state = Python.dict()
             py_setitem(state, "step", snapshot.step)
-            if snapshot.kind != 0:
+            if snapshot.kind == 3 or snapshot.kind == 4:
+                # RMSprop / Adagrad (sequence/ops.mojo OPT_RMSPROP 3,
+                # OPT_ADAGRAD 4), torch's state names
+                if snapshot.first != 0:
+                    py_setitem(state, "momentum_buffer", snapshot.first)
+                if snapshot.second != 0:
+                    py_setitem(state, "square_avg" if snapshot.kind == 3 else "sum", snapshot.second)
+                if snapshot.third != 0:
+                    py_setitem(state, "grad_avg", snapshot.third)
+            elif snapshot.kind != 0:
                 py_setitem(state, "beta1_power", Float64(snapshot.beta1_power))
                 py_setitem(state, "beta2_power", Float64(snapshot.beta2_power))
                 if snapshot.kind == 9:
@@ -442,9 +467,20 @@ def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
         var beta2 = Float32(1)
         var mu = Float32(1)
         var opt_kind = s[].opts[oi].cfg.kind
+        var third = 0
         if opt_kind == 0:
             if py_contains(state, "momentum_buffer"):
                 first = _int(state["momentum_buffer"], "momentum_buffer", 1)
+        elif opt_kind == 3 or opt_kind == 4:
+            if py_contains(state, "momentum_buffer"):
+                first = _int(state["momentum_buffer"], "momentum_buffer", 1)
+            if opt_kind == 3:
+                if py_contains(state, "square_avg"):
+                    second = _int(state["square_avg"], "square_avg", 1)
+            elif py_contains(state, "sum"):
+                second = _int(state["sum"], "sum", 1)
+            if py_contains(state, "grad_avg"):
+                third = _int(state["grad_avg"], "grad_avg", 1)
         else:
             if py_contains(state, "exp_avg"):
                 first = _int(state["exp_avg"], "exp_avg", 1)
@@ -458,7 +494,7 @@ def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
             beta2 = Float32(py=state["beta2_power"])
             if opt_kind == 9:
                 mu = Float32(py=state["mu_product"])
-        var request = OpsOptimizerRestoreRequest(step, first, second, 0, beta1, beta2, mu)
+        var request = OpsOptimizerRestoreRequest(step, first, second, third, beta1, beta2, mu)
         s[].load_optimizer_state(opt, _int(args[1], "param", 1), request)
         return PythonObject(None)
     if op == _SOP_MAMBA_BLOCK or op == _SOP_ATTENTION_BLOCK:
