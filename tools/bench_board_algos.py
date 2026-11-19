@@ -7849,8 +7849,9 @@ def worker(args):
                         # the warm-up repeats the exact timed call (every algos call resets its
                         # optimizer, reloads its weights or reruns a stateless layer, so a repeat
                         # is the same work from the same state) until one call compiles nothing
-                        compile_rec["warmup_settle"] = COMPILE.settle(lambda: (runner.prepare(), runner.fit(),
-                                                                               runner.infer()))
+                        # each settle call is prepare() then fit() then infer(), the timed call's own sequence
+                        settle_call = lambda: (runner.prepare(), runner.fit(), runner.infer())  # noqa: E731
+                        compile_rec["warmup_settle"] = COMPILE.settle(settle_call)
                 last = runner.outputs()
                 runner.sync_for_receipt()
                 operation_ms = (time.perf_counter() - whole_start) * 1000.0
