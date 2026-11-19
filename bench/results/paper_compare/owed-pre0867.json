@@ -697,6 +697,16 @@
    "define": "MOJOLEARN_GEMM_FAST_DX_CONCAT",
    "status": "define in code (autograd/kernels/transformer.mojo BWD_GEMM_DX_CONCAT, bwd_dx_concat_pack_kernel, bwd_dx_concat3; autograd/rules_transformer.mojo _dx_fanin_cat; transformer/checks/transformer_backward_oracle.mojo BWD_HOST_DX_CONCAT; IDENTICAL, no poison build): B = the transformer backward's q/k/v fan-in dX (S29-32) as ONE product, d(norm1.out) = GEMM_contract([dQ | dK | dV], [Wq; Wk; Wv]) over K = q_width + 2 kv_width walked ascending in that order, after one pack launch that bit-copies the three gradients and the three weights into two stage scratch buffers; A = the default: three products into tmp0/tmp1/tmp2, then bwd_add3_kernel (q + k) + v. BITS CHANGE under B on every column and in the host oracle together (another rounding order of the same sum): digests of d(norm1.out) and of everything downstream of it MOVE, and must be equal between the device and the host column of the B build. Launches for the fan-in dX: pack 1 + one product (2 where it runs as groups + fold), against three products (6) + 1. gate/up (S9) is not changed",
    "owed": "RUN"
+  },
+  "llama-stage-keep": {
+   "define": "MOJOLEARN_LLAMA_FAST_STAGE_KEEP",
+   "status": "define in code (transformer/impl/llama/modeling_llama.mojo LLAMA_FAST_STAGE_KEEP, LlamaDeviceStages.reset_flags; autograd/block_step_ops.mojo AttnPrefill.prepare keep_bytes, attn_step_fresh_prefill, _run_attn_on): B = a forward-only attention step run of L > 1 tokens on kept stages of the same shape (the stateless TransformerBlock.forward, a forward with the caller's caches, an inference-only stack layer) restores the stages' host flags and does not zero-fill the stage buffers again; A = the default, LlamaDeviceStages.reset before every such call (thirty zero fills and a wait; on NVIDIA the fills include the kept exp stash, B x n_heads x L x S floats). A run a backward may read, the CausalLM layer run and every L = 1 step are A in both arms. No float is produced differently",
+   "owed": "RUN"
+  },
+  "byte-lm-logits-hugepage": {
+   "define": "MOJOLEARN_BYTE_LM_FAST_LOGITS_HUGEPAGE",
+   "status": "define in code (bindings/byte_lm_trainer_native_door.mojo BYTE_LM_LOGITS_HUGEPAGE, _pooled_logits; bindings/native_array_storage_door.mojo native_scratch_advise_huge): B = a FRESH resident logits store (a pool miss) is advised for transparent huge pages (Linux madvise MADV_HUGEPAGE over the whole 2 MiB pages inside it) before the one download first-touches it; A = the default, the unfilled store on small pages (one page fault per 4 KiB of logits). A pooled store is untouched in both arms; nothing on Darwin; transport only, no output byte moves",
+   "owed": "RUN"
   }
  },
  "rows": [
@@ -4177,6 +4187,152 @@
     ]
    },
    "decides": "B at least as fast as the candidate at both cases, quality equal; a slower case blocks the promotion decided on fx-gemm-dx-concat-rows. OWED TOOLING (shared with fx-gemm-epi-sizes): the board harness has no driver for a transformer train step at a caller-given d_model; until one exists these two cases are timed with the lm-train-step recipe at the stated widths"
+  },
+  {
+   "id": "llama-stage-keep",
+   "source": "lane fx-transformer-forward (2026-11-19): ~/mojolearn-evidence/briefs-20261118/fx-transformer-forward-RESULT.md section 2b row 2 (30 zero fills, 1 wait and about 178 MB written before every stateless forward at B1 L2048 d384 h6 on the L40S, 100.7 MB of it the kept exp stash) and section 4",
+   "kind": "ab",
+   "lane": [
+    "transformer-forward",
+    "samba-forward",
+    "lm-forward",
+    "lm-train-step",
+    "transformer-decode"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "llama-stage-keep"
+   ],
+   "decides": "keep A (the default: every stage zero-filled before the call) unless B is faster on transformer-forward on the NVIDIA L40S, base and arm back to back in one job, with every output digest and the host-reference check equal to A's (the arm produces no float differently: a moved digest is a defect in the arm, not a bits change) and samba-forward not slower; then B becomes the default with a _OFF define and LlamaDeviceStages.reset keeps only its other callers. lm-forward, lm-train-step and transformer-decode are controls (their stages are never reset in either arm, or are L = 1). Expected from the arithmetic: transformer-forward -0.5 to -1.0 ms of 2.5 (medium confidence: the fill rate of the L40S and the cost of a queued fill are assumed, not measured). Before a flip the native transformer checks run with the define on, including a forward of one shape after a forward of another and a forward after a backward on the same block; and the cases of llama-stage-keep-shapes are timed (no dimension targeting)"
+  },
+  {
+   "id": "llama-stage-keep-shapes",
+   "source": "lane fx-transformer-forward (2026-11-19): ~/mojolearn-evidence/briefs-20261118/fx-transformer-forward-RESULT.md section 4; the neighbouring shapes and the non-board model of llama-stage-keep (no dimension targeting)",
+   "kind": "driver",
+   "driver": "transformer_forward",
+   "vendor": "nvidia",
+   "shape": {
+    "cases": [
+     {
+      "name": "longer-l4096",
+      "batch": 1,
+      "length": 4096,
+      "d_model": 384,
+      "n_heads": 6,
+      "head_dim": 64,
+      "intermediate": 1024
+     },
+     {
+      "name": "d512-heads8",
+      "batch": 1,
+      "length": 2048,
+      "d_model": 512,
+      "n_heads": 8,
+      "head_dim": 64,
+      "intermediate": 2048
+     },
+     {
+      "name": "nonboard-3x700-d320",
+      "batch": 3,
+      "length": 700,
+      "d_model": 320,
+      "n_heads": 5,
+      "head_dim": 64,
+      "intermediate": 896
+     },
+     {
+      "name": "short-l128",
+      "batch": 4,
+      "length": 128,
+      "d_model": 384,
+      "n_heads": 6,
+      "head_dim": 64,
+      "intermediate": 1024
+     }
+    ]
+   },
+   "arms": [
+    "candidate",
+    "llama-stage-keep"
+   ],
+   "b_arms": [
+    "llama-stage-keep"
+   ],
+   "decides": "TransformerBlock.forward (stateless) at a longer sequence, at the block of a 12-layer d_model 512 model, at a non-board size and at a short sequence, candidate (A) against the B wheel set, median of 20 calls, each line with its output digest: B must not be slower at any case and every digest must equal A's. Expected: the gain grows with L (the kept exp stash is B x n_heads x L x S floats) and is about thirty queued fills at the short case"
+  },
+  {
+   "id": "byte-lm-logits-hugepage",
+   "source": "lane fx-transformer-forward (2026-11-19): ~/mojolearn-evidence/briefs-20261118/fx-transformer-forward-RESULT.md section 2c (lm-forward 37.5-39.7 ms on the L40S: 13-15 ms of device work, a 4-5 ms copy and an estimated 17-20 ms of first-touch page faults on a fresh 64 MiB output store, 16,384 faults) and section 4",
+   "kind": "ab",
+   "lane": [
+    "lm-forward",
+    "lm-train-step",
+    "transformer-forward"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "byte-lm-logits-hugepage"
+   ],
+   "decides": "keep A (the default: the fresh logits store on small pages) unless B is faster on lm-forward on the NVIDIA L40S, base and arm back to back in one job, with mean_nll and the output digest equal to A's (transport only); then B becomes the default with a _OFF define, and the same advice is opened as its own arm for the other large fresh result stores (native_scratch_bytes callers). lm-train-step and transformer-forward are controls (no logits store). Expected from the arithmetic: lm-forward -8 to -15 ms of 37.5 WHERE THE BOX GRANTS HUGE PAGES; record /sys/kernel/mm/transparent_hugepage/enabled and defrag of the box with the result: on `never` the arm is a no-op and the row decides nothing (low-medium confidence: the split of the row is an estimate, and a box with fragmented memory may compact at fault time). Before a flip the cases of byte-lm-logits-hugepage-shapes are timed (no dimension targeting)"
+  },
+  {
+   "id": "byte-lm-logits-hugepage-shapes",
+   "source": "lane fx-transformer-forward (2026-11-19): ~/mojolearn-evidence/briefs-20261118/fx-transformer-forward-RESULT.md section 4; the neighbouring shapes and the non-board model of byte-lm-logits-hugepage (no dimension targeting)",
+   "kind": "driver",
+   "driver": "lm_logits",
+   "vendor": "nvidia",
+   "shape": {
+    "cases": [
+     {
+      "name": "half-length",
+      "batch": 1,
+      "length": 1024,
+      "d_model": 384,
+      "n_heads": 6,
+      "n_kv": 6,
+      "head_dim": 64,
+      "intermediate": 1024,
+      "n_layers": 8,
+      "vocab_size": 8192
+     },
+     {
+      "name": "nonboard-12x512",
+      "batch": 1,
+      "length": 1024,
+      "d_model": 512,
+      "n_heads": 8,
+      "n_kv": 8,
+      "head_dim": 64,
+      "intermediate": 2048,
+      "n_layers": 12,
+      "vocab_size": 16384
+     },
+     {
+      "name": "small-2x300-v1000",
+      "batch": 2,
+      "length": 300,
+      "d_model": 320,
+      "n_heads": 5,
+      "n_kv": 5,
+      "head_dim": 64,
+      "intermediate": 896,
+      "n_layers": 4,
+      "vocab_size": 1000
+     }
+    ]
+   },
+   "arms": [
+    "candidate",
+    "byte-lm-logits-hugepage"
+   ],
+   "b_arms": [
+    "byte-lm-logits-hugepage"
+   ],
+   "decides": "LanguageModelTrainer(resident=True).logits at 32 MiB of logits, at a 12-layer d_model 512 model with 64 MiB, and at 2.3 MiB (one whole huge page inside the store), candidate (A) against the B wheel set; each line carries the fresh-store time (the scored value), the pooled median and the output digest: B must not be slower on the fresh store at any case, the pooled times must not move, every digest must equal A's"
   }
  ]
 }
