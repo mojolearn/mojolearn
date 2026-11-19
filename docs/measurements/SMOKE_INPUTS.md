@@ -6,12 +6,12 @@ Each board recipe's smoke input, all of it generated on the box (the smoke stage
 
 | input | recipes |
 |---|---:|
-| verify fixture | 591 |
+| verify fixture | 595 |
 | synthetic file | 27 |
 | NO VERIFY LANE | 30 |
-| total | 648 |
+| total | 652 |
 
-Under `--inputs synthetic` (every smoke run over a tree whose board takes it): 0 bytes staged. A synthetic file holds the full file's keys and dtypes with 5120 head rows and 1024 tail rows (`tools/smoke_inputs.py`; a corpus: 65536 bytes of generated text) and is deleted with the race's scratch. From the nvidia plan, the work dir at most 1.36 GB at 64 workers (budget 2.0 GB): 54 distinct prep blocks 96.8 MB, race scratch 103.0 MB, synthetic files 106.9 MB, LM checkpoints 918.0 MB, layer fixtures 136.0 MB.
+Under `--inputs synthetic` (every smoke run over a tree whose board takes it): 0 bytes staged. A synthetic file holds the full file's keys and dtypes with 5120 head rows and 1024 tail rows (`tools/smoke_inputs.py`; a corpus: 65536 bytes of generated text) and is deleted with the race's scratch. From the nvidia plan, the work dir at most 1.38 GB at 64 workers (budget 2.0 GB): 54 distinct prep blocks 96.8 MB, race scratch 103.0 MB, synthetic files 106.9 MB, LM checkpoints 918.0 MB, layer fixtures 152.0 MB.
 
 | recipe | input | smoke input | full-size files | vendors |
 |---|---|---|---|---|
@@ -128,10 +128,14 @@ Under `--inputs synthetic` (every smoke run over a tree whose board takes it): 0
 | `algos/gaussian-nb/taxi/rows=2000` | verify fixture | verify fixture `x-prep-gaussian-nb` (+3) | gbm-bench/taxi/taxi_speed.npz | nvidia,amd |
 | `algos/gaussian-rp/istella/rows=2000` | verify fixture | verify fixture `x-decomp-grp` (+1) | gbm-bench/istella/istella_speed.npz | nvidia,amd |
 | `algos/gaussian-rp/taxi/rows=2000` | verify fixture | verify fixture `x-decomp-grp` (+1) | gbm-bench/taxi/taxi_speed.npz | nvidia,amd |
+| `algos/gcn-default-call/istella/rows=2000` | verify fixture | verify fixture `x-cnn-gcn` | gbm-bench/istella/istella_speed.npz | nvidia,amd |
+| `algos/gcn-default-call/taxi/rows=2000` | verify fixture | verify fixture `x-cnn-gcn` | gbm-bench/taxi/taxi_speed.npz | nvidia,amd |
 | `algos/gcn/istella/rows=2000` | verify fixture | verify fixture `x-cnn-gcn` | gbm-bench/istella/istella_speed.npz | nvidia,amd |
 | `algos/gcn/taxi/rows=2000` | verify fixture | verify fixture `x-cnn-gcn` | gbm-bench/taxi/taxi_speed.npz | nvidia,amd |
 | `algos/global-avgpool/synthetic/rows=2000` | verify fixture | verify fixture `x-cnn-globalpool` (+1) | - | nvidia,amd |
 | `algos/global-maxpool/synthetic/rows=2000` | verify fixture | verify fixture `x-cnn-globalpool` (+1) | - | nvidia,amd |
+| `algos/graphsage-default-call/istella/rows=2000` | verify fixture | verify fixture `x-cnn-sage` (+1) | gbm-bench/istella/istella_speed.npz | nvidia,amd |
+| `algos/graphsage-default-call/taxi/rows=2000` | verify fixture | verify fixture `x-cnn-sage` (+1) | gbm-bench/taxi/taxi_speed.npz | nvidia,amd |
 | `algos/graphsage/istella/rows=2000` | verify fixture | verify fixture `x-cnn-sage` (+1) | gbm-bench/istella/istella_speed.npz | nvidia,amd |
 | `algos/graphsage/taxi/rows=2000` | verify fixture | verify fixture `x-cnn-sage` (+1) | gbm-bench/taxi/taxi_speed.npz | nvidia,amd |
 | `algos/grid-search-cv/istella/rows=2000` | verify fixture | verify fixture `x-metrics-search` | gbm-bench/istella/istella_speed.npz | nvidia,amd |

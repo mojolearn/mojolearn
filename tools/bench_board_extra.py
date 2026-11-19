@@ -927,13 +927,27 @@ def build(lane, arm, D, A):
         if t == "selectd":
             rec["d_candidates"] = [0, 1]
         if ours:
+            # FAIRNESS FIX (2026-11-18 audit, lane fx-harness-honest): the (n_obs, series) block was made contiguous
+            # (a harness transpose copy) and the results cast INSIDE our clock on every call; the statsmodels arm
+            # reads Y64 made before its clock. The block is made once here, before the clock, and the casts run in
+            # outputs(), after it. Cell: HARNESS_CLOCK_OURS.
+            YT = np.ascontiguousarray(Y.T)
+            held = A["_held"]
+            info["harness_clock"] = A["HARNESS_CLOCK_OURS"]
+
             def fit():
                 if t == "kpss":
-                    st, stat = fn(np.ascontiguousarray(Y.T), return_statistic=True, **p)
-                    S["o"] = {"flag": A["_arr"](st, np.int64), "stat": A["_arr"](stat, np.float64)}
+                    S["raw"] = tuple(held(v) for v in fn(YT, return_statistic=True, **p))
                 else:
-                    S["o"] = {"d": A["_arr"](fn(np.ascontiguousarray(Y.T), **p), np.int64)}
-            return Runner(info, fit, lambda: S["o"], record=rec)
+                    S["raw"] = held(fn(YT, **p))
+
+            def outputs():
+                if "raw" in S:
+                    r = S.pop("raw")
+                    S["o"] = ({"flag": A["_arr"](r[0], np.int64), "stat": A["_arr"](r[1], np.float64)}
+                              if t == "kpss" else {"d": A["_arr"](r, np.int64)})
+                return S["o"]
+            return Runner(info, fit, outputs, record=rec)
         import warnings
         import statsmodels
         from statsmodels.tsa.stattools import kpss
