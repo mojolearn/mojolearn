@@ -19,8 +19,8 @@
 # parse group, the checks build, the check slices (dealt from the plan once the build passes) and the tool tests. They
 # run at once, admitted by MEMORY: a unit starts when the box-wide reservations (every concurrent check job on the box
 # shares one ledger, $CPU_CHECKS_HOME/ledger) plus its estimate fit in 85 percent of the allocation's memory; a unit
-# larger than that runs when nothing else is reserved. Each unit is itself multi-threaded on every core (mojo build -j
-# nproc, run_tool_tests.sh workers = cores), so memory, not cores, bounds the count. Estimates are MEASURED: each unit
+# larger than that runs when nothing else is reserved. Each unit is itself multi-threaded on every core (the compiler at
+# -j nproc, run_tool_tests.sh workers = cores), so memory, not cores, bounds the count. Estimates are MEASURED: each unit
 # runs under /usr/bin/time -v and its peak RSS goes to $CPU_CHECKS_HOME/peaks.tsv, which the next job on the box reads;
 # until a group has a measurement: host parse 8 GiB, device parse 12 GiB (the release recorded 10-12.5), checks build
 # 40 GiB (the GPU column's build peaked at 43 GB), a check 2 GiB (largest 1.64 GB), a tool test file 0.5 GiB x cores.

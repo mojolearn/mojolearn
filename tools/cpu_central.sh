@@ -71,7 +71,7 @@ queue_slots() { echo "$CPC_SLOTS"; }
 refuse_apple() {
     local v
     for v in "$@"; do
-        if printf '%s' "$v" | grep -qiE 'apple|macos|darwin|osx'; then
+        if grep -qiE 'apple|macos|darwin|osx' <<< "$v"; then
             die "refused: '$v' names an Apple machine. Never an Apple machine without Andrew's express permission (AGENTS.md hard rule); nothing rented"
         fi
     done
