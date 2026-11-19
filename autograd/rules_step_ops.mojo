@@ -46,6 +46,10 @@ from autograd.cnn_block_op import (
 # backward (the same words, contract 6 clause (d)).
 from autograd.lm_embedding_op import LM_EMBEDDING_TAG, lm_embedding_backward_device
 from autograd.embedding_ops import AG_EMB_PLAN_AUTO, embedding_plan, embedding_perm_words, embedding_backward_into
+# Lane fx-ops-session-blocks (2026-11-19): the recurrent scan op's two
+# nodes (RNN_LINEAR, RNN_LAYER) are the recurrent trainer's own tags and
+# rules; every answer for them is RecurrentRules'.
+from autograd.rules_recurrent import RecurrentRules
 
 comptime _ScratchRef = MutPointer[BlockStepScratch, MutUntrackedOrigin]
 
@@ -58,6 +62,8 @@ struct StepOpRules(BackwardRules, ImplicitlyCopyable, Movable):
     var scratch: Int
 
     def supports(self, tag: Int) -> Bool:
+        if RecurrentRules().supports(tag):
+            return True
         if step_tag_code(tag) != 0:
             return self.scratch != 0
         if tag == LM_HEAD_V2_TAG or tag == SMALL_MLP_TAG or tag == CNN_CONV_BLOCK_TAG or tag == CNN_LINEAR_TAG or tag == LM_EMBEDDING_TAG:
@@ -65,6 +71,8 @@ struct StepOpRules(BackwardRules, ImplicitlyCopyable, Movable):
         return ImportRules().supports(tag)
 
     def zeroed_destination(self, tag: Int, saved: Args, edge: Int) -> Bool:
+        if RecurrentRules().supports(tag):
+            return RecurrentRules().zeroed_destination(tag, saved, edge)
         if tag == LM_HEAD_V2_TAG or tag == LM_EMBEDDING_TAG:
             # the rule writes all of d_hidden and d_weight (lm_embedding:
             # every cell of d_table, seeded +0.0, the padding row +0.0)
@@ -85,6 +93,8 @@ struct StepOpRules(BackwardRules, ImplicitlyCopyable, Movable):
         return ImportRules().zeroed_destination(tag, saved, edge)
 
     def writes_total(self, tag: Int, saved: Args, edge: Int) -> Bool:
+        if RecurrentRules().supports(tag):
+            return RecurrentRules().writes_total(tag, saved, edge)
         if tag == LM_HEAD_V2_TAG or tag == SMALL_MLP_TAG or tag == CNN_CONV_BLOCK_TAG or tag == CNN_LINEAR_TAG or tag == LM_EMBEDDING_TAG:
             return False
         if step_tag_code(tag) != 0:
@@ -95,6 +105,9 @@ struct StepOpRules(BackwardRules, ImplicitlyCopyable, Movable):
         self, mut ex: E, tag: Int, saved: Args, output: FP, upstream: FP,
         inputs: List[FP], gradients: List[FP], rows: List[Int], cols: List[Int],
     ) raises:
+        if RecurrentRules().supports(tag):
+            RecurrentRules().apply(ex, tag, saved, output, upstream, inputs, gradients, rows, cols)
+            return
         if tag == ATTN_STEP_TAG:
             if self.scratch == 0 or len(gradients) != 2:
                 raise Error("ops: attention_step backward needs the session's step entries")

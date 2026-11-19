@@ -46,7 +46,9 @@ from sequence.ops import (
     gates_of,
 )
 from sequence.recurrent_scan import OP_CELL_BWD_SCAN, OP_CELL_FWD_SCAN, SEQ_LSTM_SCAN, scan_routes
-from sequence.recurrent import Net, Work, RnnStep, SEQ_WGRAD_BLOCKED, TASK_CE, bias_rows, fill, gather_seq, gemm
+from sequence.recurrent import (
+    Net, Work, RnnStep, SEQ_WGRAD_BLOCKED, TASK_CE, WGRAD_IDN_SCRATCH, bias_rows, fill, gather_seq, gemm,
+)
 from autograd.kernels.recurrent import colsum, wgrad_block, wgrad_blocked
 
 # The recurrent trainer's backward runs on the tape (promoted 2026-10-19). One run per arm, HIGGS
@@ -380,6 +382,68 @@ struct RecurrentRules(BackwardRules):
             _copy(ex, gradients[0] + saved.i0, upstream, saved.i1)
         else:
             raise Error("unknown recurrent backward rule")
+
+
+# ------------------------------------------------------------------ the session op
+#: Session operation code of one recurrent layer over a whole sequence (lane
+#: fx-ops-session-blocks, 2026-11-19; autograd/ops_api.mojo `_rnn_scan`,
+#: public `Session.lstm` / `Session.gru` / `Session.rnn`).
+comptime OPS_RNN_SCAN = 94
+
+
+def rnn_scan_op[E: Exec](
+    mut tape: Tape, mut ex: E, x: Tensor, w_ih: Tensor, w_hh: Tensor, b_ih: Tensor, b_hh: Tensor,
+    cell: Int, T: Int, B: Int,
+) raises -> Tensor:
+    """One recurrent layer (cell CELL_LSTM, CELL_GRU or the tanh RNN) over a
+    time-major sequence x [T B, D] from h_0 = c_0 = 0: returns h_1..h_T
+    [T B, H]. PyTorch's layouts and gate order: w_ih (G H, D), w_hh
+    (G H, H), b_ih and b_hh (1, G H).
+
+    It is the trainer's own layer, launch for launch: `rnn_linear` (the
+    input projection with b_ih folded into gx, the blocked weight-gradient
+    order) then `rnn_layer` (the scan route or the per-step chain), exactly
+    as `rnn_forward_autograd` records layer 0, so the output words and, in
+    a recording session, the gradients (RecurrentRules: RNN_LINEAR,
+    RNN_LAYER) are the recurrent estimators' for the same weights. The only
+    difference: dX is computed when x takes a gradient (the trainer's first
+    layer reads data). The work buffers are tape storage, released at the
+    tape's reset, of the sizes `Work` allocates for one layer.
+
+    Serial by nature over time (h_t reads h_{t-1}); the rows of the batch
+    are the scan launch's threads."""
+    var H = tape.cols(w_hh)
+    var GH = tape.rows(w_hh)
+    var D = tape.cols(x)
+    if T < 1 or B < 1:
+        raise Error("ValueError: ops: a recurrent layer needs at least one step and one sequence")
+    if GH != gates_of(cell) * H:
+        raise Error("ValueError: ops: weight_hh must be (gates * hidden, hidden)")
+    if tape.rows(x) != T * B:
+        raise Error("ValueError: ops: x must hold steps * batch rows of input features")
+    if tape.rows(w_ih) != GH or tape.cols(w_ih) != D:
+        raise Error("ValueError: ops: weight_ih must be (gates * hidden, inputs)")
+    if tape.rows(b_ih) != 1 or tape.cols(b_ih) != GH or tape.rows(b_hh) != 1 or tape.cols(b_hh) != GH:
+        raise Error("ValueError: ops: bias_ih and bias_hh must each hold gates * hidden values")
+    var train = tape.is_recording()
+    var tb = T * B if train else 1
+    var gxb = tape.reserve(ex, T * B * GH)
+    var gh = tape.reserve(ex, T * B * GH)
+    var act = tape.reserve(ex, T * B * GH)
+    var hall = tape.reserve(ex, (T + 1) * B * H)
+    var call = tape.reserve(ex, (T + 1) * B * H)
+    var dgh = tape.reserve(ex, tb * GH)
+    var dh = tape.reserve(ex, B * H if train else 1)
+    var dhn = tape.reserve(ex, B * H if train else 1)
+    var dc = tape.reserve(ex, B * H if train else 1)
+    var one = tape.reserve(ex, 1)
+    fill(ex, one, 1, Float32(1.0))
+    var wsplit = one
+    comptime if SEQ_WGRAD_BLOCKED:
+        wsplit = tape.reserve(ex, WGRAD_IDN_SCRATCH if train else 1)
+    var w = Work(gxb, gh, act, hall, call, dgh, dh, dhn, dc, one, wsplit)
+    var gx = rnn_linear(tape, ex, x, w_ih, b_ih, gxb, RNN_INPUT_BIAS_IN_GX, True, tape.requires_grad(x), w)
+    return rnn_layer(tape, ex, gx, w_hh, b_hh, tape.value(b_ih), cell, T, B, w, 0)
 
 
 # ------------------------------------------------------------------ trainer step

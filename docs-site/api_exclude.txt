@@ -125,3 +125,6 @@ Session.lm_pick	added 2026-11-19, not yet in a release verification
 Session.lm_alive	added 2026-11-19, not yet in a release verification
 Session.conv_block	added 2026-11-19, not yet in a release verification
 Session.conv_linear	added 2026-11-19, not yet in a release verification
+Session.lstm	added 2026-11-19, not yet in a release verification
+Session.gru	added 2026-11-19, not yet in a release verification
+Session.rnn	added 2026-11-19, not yet in a release verification

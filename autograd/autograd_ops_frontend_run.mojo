@@ -162,6 +162,10 @@ comptime _SOP_LM_EMBEDDING = 143
 # the fused CNN block and head (90, 91)
 comptime _SOP_CONV_BLOCK = 144
 comptime _SOP_CONV_LINEAR = 145
+# one recurrent layer over a sequence (94)
+comptime _SOP_LSTM = 146
+comptime _SOP_GRU = 147
+comptime _SOP_RNN = 148
 
 
 struct _SessionOpCodes(Defaultable, Movable):
@@ -314,6 +318,9 @@ struct _SessionOpCodes(Defaultable, Movable):
         self.codes["lm_embedding"] = _SOP_LM_EMBEDDING
         self.codes["conv_block"] = _SOP_CONV_BLOCK
         self.codes["conv_linear"] = _SOP_CONV_LINEAR
+        self.codes["lstm"] = _SOP_LSTM
+        self.codes["gru"] = _SOP_GRU
+        self.codes["rnn"] = _SOP_RNN
 
 
 # One table per process (identical contents in every extension that links this file).

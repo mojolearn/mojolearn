@@ -80,7 +80,8 @@ comptime PROGRAM_PARAM_STATE_WORDS = 2
 # `lm_embedding`, public the same way; 89 and 92 are unused codes, which a
 # replay refuses by name.
 comptime PROGRAM_MAX_CODE_V2 = 80
-comptime PROGRAM_MAX_CODE = 93
+# 94: the recurrent scan (`lstm`, `gru`, `rnn`; autograd/rules_recurrent.mojo).
+comptime PROGRAM_MAX_CODE = 94
 
 
 struct OpsLog(Movable):

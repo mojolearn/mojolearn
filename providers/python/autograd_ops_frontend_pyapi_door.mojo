@@ -18,8 +18,9 @@ from autograd.ops_frontend_impl import session_split, clip_low_unbounded, clip_h
 from autograd.ops_block_frontend import (
     SESSION_ATTENTION_MIN_PIECES, SESSION_ATTENTION_GATE, session_mamba_code, session_attention_ints,
     session_attention_option_words, session_block_create, session_block_step, session_lm_rows, session_lm_pick,
-    session_lm_alive,
+    session_lm_alive, session_rnn,
 )
+from sequence.ops import CELL_LSTM, CELL_GRU, CELL_RNN_TANH
 from autograd.block_step_ops import OPS_ATTN_STEP
 from autograd.program_io import ProgramInput
 from core.cast_in import CastIn
@@ -69,7 +70,7 @@ from autograd.autograd_ops_frontend_run import (
     _SOP_BCE_WITH_LOGITS, _SOP_CROSS_ENTROPY, _SOP_ACCURACY, _SOP_LOG_LOSS, _SOP_ROC_AUC,
     _SOP_STATE, _SOP_MAMBA_BLOCK, _SOP_ATTENTION_BLOCK, _SOP_MAMBA_STEP, _SOP_ATTENTION_STEP, _SOP_SMALL_MLP,
     _SOP_LM_HEAD_LOSS, _SOP_LM_ROWS, _SOP_LM_PICK, _SOP_LM_ALIVE, _SOP_LM_EMBEDDING, _SOP_CONV_BLOCK,
-    _SOP_CONV_LINEAR,
+    _SOP_CONV_LINEAR, _SOP_LSTM, _SOP_GRU, _SOP_RNN,
 )
 
 
@@ -601,6 +602,12 @@ def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
             Int(py=sid), _int(args[0], "handle", 1), _int(block["weights"], "weights", 1),
             _int(block["state"], "state", 1), words, config, _float(block["dt_lo"], "dt_limit"),
             _float(block["dt_hi"], "dt_limit"), op == _SOP_ATTENTION_STEP))
+    if op == _SOP_LSTM or op == _SOP_GRU or op == _SOP_RNN:
+        # args (x, weight_ih, weight_hh, bias_ih, bias_hh): tensor handles
+        var cell = CELL_LSTM if op == _SOP_LSTM else (CELL_GRU if op == _SOP_GRU else CELL_RNN_TANH)
+        return PythonObject(session_rnn[E, KIND](
+            Int(py=sid), cell, _int(args[0], "input", 1), _int(args[1], "weight_ih", 1),
+            _int(args[2], "weight_hh", 1), _int(args[3], "bias_ih", 1), _int(args[4], "bias_hh", 1)))
     if op == _SOP_LM_ROWS:
         # args (batch_size, eos_token_ids): an int, or a sequence of ints
         var eos = List[Int]()

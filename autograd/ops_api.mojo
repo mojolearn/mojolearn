@@ -128,6 +128,7 @@ from autograd.block_step_ops import (
     block_part_floats, BLOCK_PART_WEIGHTS, BLOCK_PART_STATE, BLOCK_PART_WORDS, attn_append_restore,
 )
 from autograd.rules_step_ops import StepOpRules
+from autograd.rules_recurrent import OPS_RNN_SCAN, rnn_scan_op
 # Generation ops (lane x45c): the language model's token pick and the decode
 # loop's condition, session codes 85, 86 (autograd/generation_ops.mojo).
 from autograd.lm_head_v2_op import OPS_LM_HEAD_V2, LM_HEAD_V2_TAG, lm_head_v2_check, lm_head_v2_forward_device
@@ -1582,6 +1583,10 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             return self._cnn_conv_block(hs, ints, fs, x)
         if code == OPS_CNN_LINEAR:
             return self._cnn_linear(hs, ints, fs, x)
+        if code == OPS_RNN_SCAN:
+            # Lane fx-ops-session-blocks: one recurrent layer over a sequence,
+            # the recurrent trainer's own records (autograd/rules_recurrent.mojo).
+            return self._rnn_scan(hs, ints, fs, x)
         if code == OPS_LM_EMBEDDING:
             # Lane r1-restore-measured-winners: the byte LM trainer's tuned
             # embedding backward, one custom node (autograd/lm_embedding_op.mojo).
@@ -2265,6 +2270,20 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         rx.append(x[1])
         rx.append(x[2])
         var rt = self.tape.custom(self.ex, rx, dst, n, d_out, CNN_LINEAR_TAG, saved)
+        return self._add(rt, 0, self.tape.requires_grad(rt), 0)
+
+    def _rnn_scan(mut self, hs: List[Int], ints: List[Int], fs: List[Float32], x: List[Tensor]) raises -> Int:
+        """OPS_RNN_SCAN: [x (steps * batch rows of inputs, time-major),
+        weight_ih (G H, inputs), weight_hh (G H, H), bias_ih (G H values),
+        bias_hh (G H values)], ints [cell, steps, batch] -> h_1..h_T as a
+        (steps * batch, H) tensor, from a zero initial state. The trainer's
+        layer (`rnn_scan_op`); recorded as its two custom nodes, which
+        StepOpRules hands to RecurrentRules."""
+        _need("rnn_scan", len(x), 5, 3, len(ints), 0, len(fs))
+        for i in range(5):  # small-loop(five operands): operand kinds, no data
+            if self.int_words[self._slot(hs[i])]:
+                raise Error("ValueError: ops: a recurrent layer takes floating-point tensors")
+        var rt = rnn_scan_op(self.tape, self.ex, x[0], x[1], x[2], x[3], x[4], ints[0], ints[1], ints[2])
         return self._add(rt, 0, self.tape.requires_grad(rt), 0)
 
     def _lm_embedding(mut self, hs: List[Int], ints: List[Int], fs: List[Float32], x: List[Tensor]) raises -> Int:

@@ -899,6 +899,40 @@ class Session:
         """
         return _SESSION_CALL(self, "lm_head_loss", (hidden, weight, codes))
 
+    def lstm(self, x, weight_ih, weight_hh, bias_ih, bias_hh):
+        """One LSTM layer over a whole sequence; returns every hidden state.
+
+        ``x`` is ``(steps, batch, inputs)``, time first, as
+        ``torch.nn.LSTM`` takes it by default. The weights have PyTorch's
+        shapes and gate order (input, forget, cell, output):
+        ``weight_ih`` ``(4 * hidden, inputs)``, ``weight_hh``
+        ``(4 * hidden, hidden)``, ``bias_ih`` and ``bias_hh`` as
+        ``(1, 4 * hidden)`` tensors. The hidden and cell states start at
+        zero. The result is ``(steps, batch, hidden)``; its last step,
+        ``index`` or ``take`` it out, is the final hidden state. To stack
+        layers, pass the result as the next layer's ``x``. In a recording
+        session the layer is differentiable with respect to ``x`` and all
+        four parameters.
+        """
+        return _SESSION_CALL(self, "lstm", (x, weight_ih, weight_hh, bias_ih, bias_hh))
+
+    def gru(self, x, weight_ih, weight_hh, bias_ih, bias_hh):
+        """One GRU layer over a whole sequence; returns every hidden state.
+
+        As :meth:`lstm`, with PyTorch's GRU gate order (reset, update, new):
+        ``weight_ih`` is ``(3 * hidden, inputs)``, ``weight_hh``
+        ``(3 * hidden, hidden)`` and each bias ``(1, 3 * hidden)``.
+        """
+        return _SESSION_CALL(self, "gru", (x, weight_ih, weight_hh, bias_ih, bias_hh))
+
+    def rnn(self, x, weight_ih, weight_hh, bias_ih, bias_hh):
+        """One tanh RNN layer over a whole sequence; returns every hidden state.
+
+        As :meth:`lstm`, with ``weight_ih`` ``(hidden, inputs)``,
+        ``weight_hh`` ``(hidden, hidden)`` and each bias ``(1, hidden)``.
+        """
+        return _SESSION_CALL(self, "rnn", (x, weight_ih, weight_hh, bias_ih, bias_hh))
+
     def conv_block(self, x, weight, bias, *, padding=0, pool_size=None):
         """A convolution block ``max_pool(relu(conv2d(x, weight) + bias))``.
 

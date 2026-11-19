@@ -44,6 +44,7 @@ from transformer.block_options import BlockOptions
 from autograd.generation_ops import OPS_LM_PICK, OPS_LM_ALIVE, lm_rows_words, LM_PICK_GREEDY, LM_PICK_SAMPLE
 from autograd.rankn import ShapeN
 from core.cast_in import CAST_KIND_SIGNED
+from autograd.rules_recurrent import OPS_RNN_SCAN
 
 #: The weight arrays `Session.attention_block` takes (the default options'
 #: present pieces: two norms, q, k, v, o, gate, up, down), and the index of
@@ -322,3 +323,27 @@ def session_lm_alive[E: Exec & Movable & Deinitable, KIND: Int](sid: Int, ids: I
     var hs: List[Int] = [ids, rows]
     var bl: List[Int] = [b]
     return s[].op(OPS_LM_ALIVE, hs, bl, List[Float32]())
+
+
+# ---------------------------------------------------------------- recurrent layers
+def session_rnn[E: Exec & Movable & Deinitable, KIND: Int](
+    sid: Int, cell: Int, x: Int, w_ih: Int, w_hh: Int, b_ih: Int, b_hh: Int,
+) raises -> Int:
+    """`Session.lstm` / `Session.gru` / `Session.rnn`: one layer over a
+    time-major (steps, batch, inputs) tensor, as torch.nn.LSTM / GRU / RNN
+    with batch_first=False and a zero initial state. Returns the
+    (steps, batch, hidden) outputs: OPS_RNN_SCAN, then the rank-3 view
+    (operation 33, `reshape`) of its (steps * batch, hidden) result."""
+    var s = ops_session[E, KIND](sid)
+    var sh = s[].shape_nd(x)
+    if sh.ndim != 3:
+        raise Error("ValueError: ops: a recurrent layer takes a (steps, batch, inputs) tensor")
+    var steps = sh.d[0]
+    var batch = sh.d[1]
+    var hidden = s[].shape_nd(w_hh).d[1]
+    var hs: List[Int] = [x, w_ih, w_hh, b_ih, b_hh]
+    var ints: List[Int] = [cell, steps, batch]
+    var flat = s[].op(OPS_RNN_SCAN, hs, ints, List[Float32]())
+    var fh: List[Int] = [flat]
+    var view: List[Int] = [0, steps, batch, hidden]
+    return s[].op(33, fh, view, List[Float32]())
