@@ -72,25 +72,9 @@ n=$(grep -c . "$RES/planned.txt")
 $PY tools/generated_sources.py prepare --repo "$PWD" < /dev/null > "$RES/logs/generated-sources.log" 2>&1 \
     || { say "generated sources failed (logs/generated-sources.log)"; exit 2; }
 
-# Busy cores of total, sampled every 15 s while the build and the tasks run (part of this job, not a watcher): the
-# cgroup's CPU time (cpu.stat usage_usec) per wall second, else the whole host's /proc/stat busy share times its CPUs.
-busy_sampler() {   # file
-    ( if [ -r /sys/fs/cgroup/cpu.stat ]; then
-          prev=$(awk '/^usage_usec/ {print $2}' /sys/fs/cgroup/cpu.stat)
-          while sleep 15; do
-              cur=$(awk '/^usage_usec/ {print $2}' /sys/fs/cgroup/cpu.stat)
-              awk -v a="$prev" -v b="$cur" 'BEGIN {printf "%.1f\n", (b - a) / 15e6}'; prev=$cur
-          done
-      else
-          host=$(grep -c '^cpu[0-9]' /proc/stat); prev=$(awk '/^cpu / {print $2+$3+$4+$7+$8, $5+$6}' /proc/stat)
-          while sleep 15; do
-              cur=$(awk '/^cpu / {print $2+$3+$4+$7+$8, $5+$6}' /proc/stat)
-              echo "$prev $cur" | awk -v h="$host" '{b=$3-$1; i=$4-$2; if (b+i>0) printf "%.1f\n", b/(b+i)*h}'; prev=$cur
-          done
-      fi ) > "$1" 2>/dev/null &
-    echo $!
-}
-busy_of() { awk '{s+=$1; if ($1>m) m=$1; n++} END {if (n) printf "mean %.1f, max %.1f", s/n, m; else print "not sampled"}' "$1" 2>/dev/null; }
+# Busy cores of total, sampled every 15 s while the build and the tasks run (part of this job, not a watcher), and
+# the allocation's cores and memory: tools/ops/box_cores_lib.sh (busy_sampler, busy_of, alloc_cores, alloc_mem_kb).
+. "$(dirname "$SELF")/box_cores_lib.sh"
 
 # The one compile: every registered device-column check in one binary.
 mkdir -p "$RES/bin"
@@ -112,18 +96,8 @@ $PY tools/ops/native_checks_report.py result build-gpu --log "$RES/logs/build-gp
 say "build rc=$brc in $(( $(date +%s) - bstart ))s"
 
 # Cores of the allocation (cgroup quota, affinity), not the host's visible CPUs.
-cores=$(nproc)
-if [ -r /sys/fs/cgroup/cpu.max ]; then
-    read -r q p < /sys/fs/cgroup/cpu.max
-    [ "$q" != max ] && cores=$(( (q + p - 1) / p < cores ? (q + p - 1) / p : cores ))
-elif [ -r /sys/fs/cgroup/cpu/cpu.cfs_quota_us ]; then
-    q=$(cat /sys/fs/cgroup/cpu/cpu.cfs_quota_us); p=$(cat /sys/fs/cgroup/cpu/cpu.cfs_period_us)
-    [ "$q" -gt 0 ] && cores=$(( (q + p - 1) / p < cores ? (q + p - 1) / p : cores ))
-fi
-mem_kb=$(awk '/MemAvailable/ {print $2}' /proc/meminfo)
-if [ -r /sys/fs/cgroup/memory.max ] && [ "$(cat /sys/fs/cgroup/memory.max)" != max ]; then
-    cg_kb=$(( $(cat /sys/fs/cgroup/memory.max) / 1024 )); [ "$cg_kb" -lt "$mem_kb" ] && mem_kb=$cg_kb
-fi
+cores=$(alloc_cores)
+mem_kb=$(alloc_mem_kb)
 # K = min(cores, MemAvailable x 0.8 / the largest check's peak RSS): every core of the allocation, unless memory
 # measured per check says fewer (the build's RSS is not a check's and is not in this figure)
 check_kb=$(( ${NC_CHECK_PEAK_MB:-2048} * 1024 ))
