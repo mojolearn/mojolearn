@@ -491,6 +491,32 @@ class StoredBaseline(unittest.TestCase):
         self.assertIn("HOST-STALL", summ)
         self.assertNotIn("worst regressions", summ)
 
+    def test_unbound_workers_on_different_nodes_are_numa_mixed(self):
+        # lane fx-cagra-taxi (2026-11-19): cagra taxi fit 4,480 ms on node 1 (the GPU's) and 11,382 ms on node 0, the
+        # same code objects; two unbound workers on different nodes are shown, never a REGRESSION or FASTER
+        def nodes(new_node, base_node, bound=None):
+            cand = self.with_upload(on_host(new_board(), HOST_A), 41.0)
+            base = self.stored()
+            for c in self.ours_fit_cells(cand):
+                c.update(worker_numa={"node_now": new_node, "placement": {"node": bound, "why": "x"}})
+            for c in self.ours_fit_cells(base):
+                c.update(worker_numa={"node_now": base_node, "placement": {"node": bound, "why": "x"}})
+            res = PC.compare(self.doc, [cand], {}, stored_baseline=base)
+            return {r["key"]: r for r in res["rows"]}[KM], res
+        km, res = nodes(0, 1)
+        self.assertIn("NUMA-MIXED", km["flags"])
+        self.assertNotIn("REGRESSION", km["flags"])
+        self.assertEqual(km["numa_mixed"], {"new": 0, "baseline": 1, "replaced": ["REGRESSION"]})
+        self.assertAlmostEqual(km["ratio"], 1.3)                       # shown
+        summ = PC.render_summary(res)
+        self.assertIn("NUMA-MIXED", summ)
+        self.assertNotIn("worst regressions", summ)
+        km, _ = nodes(1, 1)                                            # the same node: a verdict as before
+        self.assertIn("REGRESSION", km["flags"])
+        self.assertNotIn("NUMA-MIXED", km["flags"])
+        km, _ = nodes(0, 1, bound=1)                                   # bound by the conductor: never mixed
+        self.assertIn("REGRESSION", km["flags"])
+
     def test_harness_clock_change_is_never_faster(self):
         # lane fx-harness (2026-11-18): the stored 0.8.55 cell was timed with the harness's copies in the clock
         cand = self.with_upload(on_host(new_board(), HOST_A), 41.0)
