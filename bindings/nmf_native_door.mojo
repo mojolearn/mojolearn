@@ -28,6 +28,8 @@ from x_decomp.nmf_owner import (
     NMF_INIT_RANDOM, NMF_INIT_NNDSVD, NMF_INIT_NNDSVDA, NMF_INIT_NNDSVDAR,
     NMF_INIT_GIVEN, NMF_TRANSFORM,
 )
+from bindings.nmf_keys_unpack import nmf_keys
+from bindings.py_balanced import py_item
 
 
 @fieldwise_init
@@ -59,27 +61,30 @@ def _truth(value: PythonObject, context: PythonObject) raises -> Bool:
 
 
 def _seed(value: PythonObject) raises -> Int:
+    var nk = nmf_keys()
     if value is None:
         return 0
     var b = native_loaded_module("builtins")
     if py_type(value) is not b.int:
         raise Error("TypeError: random_state must be None or an int (the counter-based RNG takes an integer seed)")
-    return Int(py=py_call(b.int.__dict__["__and__"], value, PythonObject(0xFFFFFFFF)))
+    return Int(py=py_call(py_item(b.int.__dict__, nk[].k___and__), value, PythonObject(0xFFFFFFFF)))
 
 
 def _address(value: PythonObject, context: PythonObject) raises -> Int:
-    if py_type(value) is context["array_class"]:
-        return Int(py=array_storage_address(value, context["array_class"], context["array_storage_slots"]))
+    var nk = nmf_keys()
+    if py_type(value) is py_item(context, nk[].k_array_class):
+        return Int(py=array_storage_address(value, py_item(context, nk[].k_array_class), py_item(context, nk[].k_array_storage_slots)))
     return native_buffer_address(value)
 
 
 def _beta(fields: PythonObject, context: PythonObject) raises -> Float64:
-    var loss = fields["beta_loss"]
+    var nk = nmf_keys()
+    var loss = py_item(fields, nk[].k_beta_loss)
     decomp_scalar_admit(loss, context)
     var cls = py_type(loss)
     var b = native_loaded_module("builtins")
     # The previous dictionary lookup refused these before value comparison.
-    if cls is py_get(context, "ndarray"):
+    if cls is py_get(context, nk[].k_ndarray):
         raise Error("TypeError: unhashable type: 'numpy.ndarray'")
     if cls is b.bytearray:
         raise Error("TypeError: unhashable type: 'bytearray'")
@@ -98,8 +103,9 @@ def _beta(fields: PythonObject, context: PythonObject) raises -> Float64:
 
 
 def _validate(fields: PythonObject, context: PythonObject) raises -> NMFOptions:
+    var nk = nmf_keys()
     var beta = _beta(fields, context)
-    var solver = fields["solver"]
+    var solver = py_item(fields, nk[].k_solver)
     decomp_scalar_admit(solver, context)
     var mu = _name(solver, "mu")
     if beta != 2.0 and not mu:
@@ -110,17 +116,19 @@ def _validate(fields: PythonObject, context: PythonObject) raises -> NMFOptions:
 
 
 def _regs(fields: PythonObject, n: Int, d: Int, context: PythonObject) raises -> NMFRegularization:
-    var alpha_h = fields["alpha_H"]
-    var a_w = _float(fields["alpha_W"], context)
+    var nk = nmf_keys()
+    var alpha_h = py_item(fields, nk[].k_alpha_H)
+    var a_w = _float(py_item(fields, nk[].k_alpha_W), context)
     decomp_scalar_admit(alpha_h, context)
     var a_h = a_w if _name(alpha_h, "same") else _float(alpha_h, context)
-    var l1 = _float(fields["l1_ratio"], context)
+    var l1 = _float(py_item(fields, nk[].k_l1_ratio), context)
     return nmf_regularization(n, d, a_w, a_h, l1)
 
 
 def _run(model: PythonObject, fields: PythonObject, admitted: AdmittedXView, nc: Int, init: Int,
          w_address: Int, h_address: Int, seed: Int, update_h: Bool, options: NMFOptions,
          context: PythonObject, publish_w: Bool = True) raises -> NMFPackedFit:
+    var nk = nmf_keys()
     var connection = nmf_connection(model, fields, context, NMF_CAP_FIT, "x_decomp_nmf_fit")
     var n = admitted.rows
     var d = admitted.cols
@@ -132,20 +140,20 @@ def _run(model: PythonObject, fields: PythonObject, admitted: AdmittedXView, nc:
     var w_output: Int
     var h_output: Int
     if publish_w:
-        w = classical_typed_native(nmf_output_shape(n, nc), "<f4", context["output_context"])
+        w = classical_typed_native(nmf_output_shape(n, nc), "<f4", py_item(context, nk[].k_output_context))
         w_output = _address(w, context)
     else:
         w_scratch = NMFScratch(n, nc)
         w_output = w_scratch.value().address()
     if update_h:
-        h = classical_typed_native(nmf_output_shape(nc, d), "<f4", context["output_context"])
+        h = classical_typed_native(nmf_output_shape(nc, d), "<f4", py_item(context, nk[].k_output_context))
         h_output = _address(h, context)
     else:
         h_scratch = NMFScratch(nc, d)
         h_output = h_scratch.value().address()
-    var max_iter = _int(fields["max_iter"], context)
-    var shuffle = _truth(fields["shuffle"], context)
-    var tol = _float(fields["tol"], context)
+    var max_iter = _int(py_item(fields, nk[].k_max_iter), context)
+    var shuffle = _truth(py_item(fields, nk[].k_shuffle), context)
+    var tol = _float(py_item(fields, nk[].k_tol), context)
     var args = NmfArgs(options.beta, update_h, max_iter, tol, regs.l1w, regs.l1h, regs.l2w, regs.l2h, shuffle, seed)
     var request = NMFFitRequest(admitted.address, w_address if w_address >= 0 else h_output,
         h_address if h_address >= 0 else h_output, w_output, h_output,
@@ -163,6 +171,7 @@ def _run(model: PythonObject, fields: PythonObject, admitted: AdmittedXView, nc:
 
 def nmf_fit_transform(model: PythonObject, source: PythonObject, w_given: PythonObject, h_given: PythonObject,
                       context: PythonObject, publish_w: Bool = True) raises -> PythonObject:
+    var nk = nmf_keys()
     var fields = py_fields(model)
     decomp_set_mode(fields, context)
     # TOMBSTONE: NMF admission host scan of a borrowed X deleted 2026-11-09 by lane a8d-device-x-decomp-manifold; code recoverable at 0ce88411d3.
@@ -171,7 +180,7 @@ def nmf_fit_transform(model: PythonObject, source: PythonObject, w_given: Python
     var n = admitted.rows
     var d = admitted.cols
     var options = _validate(fields, context)
-    var init_value = fields["init"]
+    var init_value = py_item(fields, nk[].k_init)
     decomp_scalar_admit(init_value, context)
     var result: NMFPackedFit
     if _name(init_value, "custom"):
@@ -181,11 +190,11 @@ def nmf_fit_transform(model: PythonObject, source: PythonObject, w_given: Python
         if wm.rows != n or wm.cols != nc or hm.cols != d:
             raise Error("NMF: W must be (n_samples, n_components) and H (n_components, n_features) for init='custom'")
         result = _run(model, fields, admitted.view(), nc, NMF_INIT_GIVEN, wm.address, hm.address,
-                      _seed(fields["random_state"]), True, options, context, publish_w)
+                      _seed(py_item(fields, nk[].k_random_state)), True, options, context, publish_w)
         _ = wm^
         _ = hm^
     else:
-        var requested = fields["n_components"]
+        var requested = py_item(fields, nk[].k_n_components)
         decomp_scalar_admit(requested, context)
         var nc = d if requested is None or _name(requested, "auto") else _int(requested, context)
         var smaller = min(n, d)
@@ -206,17 +215,18 @@ def nmf_fit_transform(model: PythonObject, source: PythonObject, w_given: Python
         if code != NMF_INIT_RANDOM and nc > smaller:
             raise Error("init = 'nndsvd' can only be used when n_components <= min(n_samples, n_features)")
         result = _run(model, fields, admitted.view(), nc, code, -1, -1,
-                      _seed(fields["random_state"]), True, options, context, publish_w)
-    py_setitem(fields, "components_", result.h)
-    py_setitem(fields, "n_components_", PythonObject(result.count))
-    py_setitem(fields, "n_iter_", PythonObject(result.result.iterations))
-    py_setitem(fields, "n_features_in_", PythonObject(d))
-    py_setitem(fields, "reconstruction_err_", PythonObject(result.result.error))
+                      _seed(py_item(fields, nk[].k_random_state)), True, options, context, publish_w)
+    py_setitem(fields, nk[].k_components_, result.h)
+    py_setitem(fields, nk[].k_n_components_, PythonObject(result.count))
+    py_setitem(fields, nk[].k_n_iter_, PythonObject(result.result.iterations))
+    py_setitem(fields, nk[].k_n_features_in_, PythonObject(d))
+    py_setitem(fields, nk[].k_reconstruction_err_, PythonObject(result.result.error))
     _ = admitted^
     return result.w
 
 
 def nmf_fit(model: PythonObject, source: PythonObject, params: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = nmf_keys()
     var b = native_loaded_module("builtins")
     if py_type(params) is not b.dict:
         raise Error("TypeError: NMF fit keywords require a native dictionary")
@@ -227,11 +237,12 @@ def nmf_fit(model: PythonObject, source: PythonObject, params: PythonObject, con
         var key = String(keys[k])
         if key != "W" and key != "H" and key != "y":
             raise Error("TypeError: fit_transform() got an unexpected keyword argument " + decomp_scalar_repr(keys[k], context))
-    _ = nmf_fit_transform(model, source, py_get(params, "W"), py_get(params, "H"), context, False)
+    _ = nmf_fit_transform(model, source, py_get(params, nk[].k_W), py_get(params, nk[].k_H), context, False)
     return model
 
 
 def nmf_transform(model: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = nmf_keys()
     var fields = py_fields(model)
     decomp_check(model, fields, "components_")
     var admitted = decomp_admit(source, "NMF", context, defer_finite=True)
@@ -239,22 +250,23 @@ def nmf_transform(model: PythonObject, source: PythonObject, context: PythonObje
     if admitted.cols != fitted:
         raise Error("X has " + String(admitted.cols) + " features, but NMF is expecting " + String(fitted))
     var options = _validate(fields, context)
-    var h = admit_f32(fields["components_"], 2, "components_", context)
+    var h = admit_f32(py_item(fields, nk[].k_components_), 2, "components_", context)
     var result = _run(model, fields, admitted.view(), h.rows, NMF_TRANSFORM, -1, h.address,
-                      _seed(fields["random_state"]), False, options, context)
+                      _seed(py_item(fields, nk[].k_random_state)), False, options, context)
     _ = admitted^
     _ = h^
     return result.w
 
 
 def nmf_inverse_transform(model: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = nmf_keys()
     var fields = py_fields(model)
     decomp_check(model, fields, "components_")
     var connection = nmf_connection(model, fields, context, NMF_CAP_INVERSE, "x_decomp_nmf_inverse")
     var w = decomp_admit(source, "NMF", context)
-    var h = admit_f32(fields["components_"], 2, "components_", context)
+    var h = admit_f32(py_item(fields, nk[].k_components_), 2, "components_", context)
     decomp_gemm_check(w.cols, h.rows)
-    var dst = classical_typed_native(nmf_output_shape(w.rows, h.cols), "<f4", context["output_context"])
+    var dst = classical_typed_native(nmf_output_shape(w.rows, h.cols), "<f4", py_item(context, nk[].k_output_context))
     var request = NMFInverseRequest(w.address, h.address, _address(dst, context), w.rows, h.cols, w.cols)
     nmf_run_inverse(connection, request)
     _ = h^
