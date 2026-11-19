@@ -427,6 +427,16 @@ jobs:
           include-hidden-files: true
           retention-days: 14
           if-no-files-found: error
+      # THE SET'S RECORDS ALONE (lane fx-pack-offload, 2026-11-19): a measurement build packs on GitHub
+      # (candidate-pack.yml takes the tree above), so its Mac collector (release_github_build.py run
+      # --records-only) downloads only these: timings, cache outcomes and the binding-cache uploads it promotes.
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: release-${{ matrix.arch == 'gfx942' && 'hip' || 'cuda' }}-${{ matrix.arch }}-gha
+          path: ${{ runner.temp }}/w/art/leg/GHA
+          retention-days: 14
+          if-no-files-found: warn
 
   host:
     needs: [plan, assemble]
