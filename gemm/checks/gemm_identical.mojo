@@ -8905,17 +8905,10 @@ comptime GEMM_KPACK_LOADAHEAD = (
     if is_defined["MOJOLEARN_GEMM_FAST_LOADAHEAD"]() else 1
 )
 
-# lane fx-gemm-epi (2026-11-18, `-D MOJOLEARN_GEMM_FAST_EPI=1`, default OFF,
-# OPEN: no A/B yet). THE STORE EPILOGUE: a product whose output is only ever
-# joined to the value already in its destination stores the join, so the
-# follower add launch (`autograd/kernels/transformer.mojo` `bwd_add2_kernel`,
-# `bwd_add3_kernel`) is not issued. The kinds are the follower's expressions,
-# character for character, with `cell` the product's stored cell (`ftz(root)`,
-# contract 5g) and `prior` the destination word read before the store:
-#   GEMM_EPI_C_PLUS_CELL  ftz(ftz(prior) + ftz(cell))   bwd_add3's two joins
-#                         `ftz(ftz(va) + ftz(vb))`, `ftz(ftz(acc) + ftz(vc))`
-#   GEMM_EPI_CELL_PLUS_C  ftz(ftz(cell) + ftz(prior))   bwd_add2
-#                         `ftz(ftz(a) + ftz(bb))` with a = this product
+# THE STORE EPILOGUE (`-D MOJOLEARN_GEMM_FAST_EPI=1`, default OFF, A/B owed: row gemm-seq-packed-epi-mlp). A
+# product whose output is only ever read by a follower launch over the same cells stores the follower's result,
+# so the follower launch is not issued. The kinds below are the followers' expressions, with `cell` the product's
+# stored cell (`ftz(root)`, contract 5g).
 # SAME BITS, by construction: the follower read the product back from memory
 # (the stored `ftz(root)` word) and flushed it again; here the same word is
 # flushed in a register (`ftz` is idempotent). One IEEE add, round to nearest
@@ -8924,14 +8917,10 @@ comptime GEMM_KPACK_LOADAHEAD = (
 # (`checks/numerics.mojo`: NVIDIA `llvm.nvvm.fma.rn.ftz.f(x, 1.0, -0.0)` and a
 # NaN select, AMD a class test and a select, Apple a compare and a select, the
 # host the integer spelling), never of a bare product, so neither LLVM's
-# fp-contract nor ptxas has a multiply to fuse into this add; it is the add
-# `bwd_add2_kernel` compiles. Kinds that read a SECOND buffer (bias, bias +
-# ReLU, the activation derivative, a residual whose other term is not the
-# destination) need one more pointer in the kernel's argument block and are
-# not here: see the lane's RESULT file.
+# fp-contract nor ptxas has a multiply to fuse into this add.
+# TOMBSTONE: MOJOLEARN_GEMM_FAST_EPI, its transformer-backward use (NOISE, A/B round 1 NVIDIA L40S, job nvc-ab-20261119T125554Z-6f7afc: lm-train-step 0.98 = the row's other bases, samba-train-step 1.05) kinds 1 and 2 (GEMM_EPI_C_PLUS_CELL, GEMM_EPI_CELL_PLUS_C: the join to the destination word) and gemm_epi_cell; the numbers 1 and 2 are not reused deleted 2026-11-19 by lane/fx-arm-cleanup; code recoverable at a7c89e7558. The define stays for the packed sequence route's fused follower store (owed row gemm-seq-packed-epi-mlp).
+# Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_EPI-transformer-backward.patch
 comptime GEMM_EPI_NONE = 0
-comptime GEMM_EPI_C_PLUS_CELL = 1
-comptime GEMM_EPI_CELL_PLUS_C = 2
 # lane/fx-gemm-worklist (2026-11-19, coordinator follow-up): kinds that read a SECOND buffer. They are served by
 # `identical_gemm_kpack_epi_ptr_kernel` only (below `_kpack_launch`), whose argument block carries the pointer
 # `epi_p` and one Int32 `epi_i`; the single-product kernel keeps its arguments and passes the
@@ -8954,25 +8943,12 @@ comptime GEMM_EPI_PLUS_BIAS = 3
 #   GEMM_EPI_ACT_BWD      ftz(act_bwd_value(ftz(cell), ftz(epi_p[i n + j]), epi_i))
 #                         `op_act_bwd`: d = ld(C[t]), z = ld(p1[t]) (the forward activation, dense, row stride n),
 #                         `act_bwd_value`'s branch, `st`. `mul` and `sub` are sequence/ops.mojo's (the follower's).
-# SAME BITS as the follower launch by the argument above `gemm_epi_cell`: the follower read the stored `ftz(root)`
+# SAME BITS as the follower launch by the argument above: the follower read the stored `ftz(root)`
 # word back and flushed it; here the same word is flushed in a register. PLUS_BIAS is `op_bias` alone as well
 # (`add(ld(C), ld(b[j]))` is `ftz(ftz(c) + ftz(b[j]))`, the expression above), so a sequence bias with no activation
 # takes kind 3.
 comptime GEMM_EPI_BIAS_ACT = 4
 comptime GEMM_EPI_ACT_BWD = 5
-
-
-@always_inline
-def gemm_epi_cell[EPI: Int](cell: Float32, prior: Float32) -> Float32:
-    """The stored word of a product cell under epilogue kind `EPI` (above).
-    `cell` is the product's own cell as the plain store writes it; `prior`
-    is the destination word loaded before the store."""
-    comptime assert EPI == GEMM_EPI_C_PLUS_CELL or EPI == GEMM_EPI_CELL_PLUS_C, (
-        "gemm_epi_cell: kind 1 (prior + cell) or 2 (cell + prior)"
-    )
-    comptime if EPI == GEMM_EPI_C_PLUS_CELL:
-        return ftz(ftz(prior) + ftz(cell))
-    return ftz(ftz(cell) + ftz(prior))
 
 
 @always_inline
@@ -9575,10 +9551,8 @@ def _kpack_kernel_body[
     var outv = _fold_drain_local[NCELL, FS, HWFOLD](fl, occ)
     comptime if DIAG == 4 or DIAG == 5:
         outv = acc
-    # lane fx-gemm-epi: `EPI != 0` (all-leaves mode only) stores
-    # `gemm_epi_cell[EPI](cell, dst word)`, ONE store per cell: the destination
-    # is the epilogue's operand, so the detect seam's exact cell (FASTK) is
-    # chosen BEFORE the store, not written over it afterwards.
+    # `EPI != 0` (all-leaves mode only) stores the follower's result, ONE store per cell: the detect seam's exact
+    # cell (FASTK) is chosen BEFORE the epilogue is applied, not written over the store afterwards.
     comptime assert EPI == GEMM_EPI_NONE or (not GROUP and not SAB and DIAG == 0), (
         "identical_gemm_kpack_kernel: the store epilogue is the all-leaves"
         " store of the clean body (no group nodes, no sabotage, no DIAG)"
@@ -9616,8 +9590,6 @@ def _kpack_kernel_body[
                         elif EPI == GEMM_EPI_ACT_BWD:
                             # `op_act_bwd` on the stored word and the forward activation of the same cell.
                             cell = ftz(act_bwd_value(ftz(cell), ftz(epi_p.unsafe_load(gi * n + gj)), Int(epi_i)))
-                        else:
-                            cell = gemm_epi_cell[EPI](cell, dst.unsafe_load(gi * n + gj))
                     dst.unsafe_store(gi * n + gj, cell)
     comptime if FASTK and EPI == GEMM_EPI_NONE:
         # lane/amd-step-time: a step result of my cells was subnormal; every
@@ -9717,7 +9689,6 @@ def identical_gemm_kpack_kernel[
     DIAG: Int = 0,
     HWFOLD: Bool = False,
     GATHER: Bool = False,
-    EPI: Int = 0,
 ](
     dst: MutPointer[Float32, MutAnyOrigin],
     a: MutPointer[Float32, MutAnyOrigin],
@@ -9739,20 +9710,14 @@ def identical_gemm_kpack_kernel[
     group mode `block_idx.y` is the leaf group. Same name, same arguments
     and same launches as before the body moved into the helper.
 
-    The comptime list is the body's, in the body's order, `EPI` (lane
-    fx-gemm-epi, the store epilogue) last and passed through: every
-    positional instantiation written against the kernel before the split
-    (13 parameters, or 14 with `EPI`) names the same kernel, and with `EPI`
-    0 this is the kernel as it was. Kinds that read a second buffer
-    (`GEMM_EPI_PTR_FIRST` and above) need `identical_gemm_kpack_epi_ptr_kernel`."""
-    comptime assert EPI < GEMM_EPI_PTR_FIRST, (
-        "identical_gemm_kpack_kernel: this epilogue kind reads a second buffer;"
-        " launch identical_gemm_kpack_epi_ptr_kernel"
-    )
+    The comptime list is the body's without its last parameter (the store
+    epilogue kind, 0 here): every positional instantiation written against
+    the kernel before the split (13 parameters) names the same kernel. An
+    epilogue kind needs `identical_gemm_kpack_epi_ptr_kernel`."""
     var q_in = Int32(0)
     comptime if GROUP:
         q_in = Int32(Int(block_idx.y))
-    _kpack_kernel_body[RPT, CPT, TC, KS, FS, PAGES, GROUP, SAB, PAD, ALIGN, DIAG, HWFOLD, GATHER, EPI](
+    _kpack_kernel_body[RPT, CPT, TC, KS, FS, PAGES, GROUP, SAB, PAD, ALIGN, DIAG, HWFOLD, GATHER, GEMM_EPI_NONE](
         dst, a, b, m_in, n_in, k_in, leaf_in, p_in, a_si_in, a_sp_in, b_sp_in, b_sj_in,
         gleaves_in, groups_in, Int32(Int(block_idx.x)), q_in, dst, Int32(0),
     )

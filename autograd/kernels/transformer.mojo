@@ -70,7 +70,6 @@ from gemm.neural_backward import (
     gemm_backward_b_call,
 )
 from gemm.neural_dispatch import GemmWorkspace, identical_gemm
-from gemm.neural_dispatch import gemm_workspace_epi_takes, gemm_workspace_run_epi
 from gemm.contract import OP_NN, OP_NT, OP_TN
 from checks.numerics import (
     identical_mul,
@@ -2099,62 +2098,8 @@ def _afn_wgrad(
 # Restore: git apply experiments/removed/LLAMA_DECODER_LAYER_BACKWARD_HAND_WALK.patch
 
 
-# lane fx-gemm-epi (2026-11-18, `-D MOJOLEARN_GEMM_FAST_EPI=1`, default OFF,
-# OPEN: no A/B yet). The two dX fan-ins (S9 `bwd_add2_kernel`, S32
-# `bwd_add3_kernel`) joined in the GEMM's own final store where the GEMM
-# route has one (gemm/checks/gemm_epilogue.mojo; NVIDIA's packed body today).
-# The join is the follower kernel's expression on the same words in the same
-# operand order, so no bit moves; where the route declines, the same follower
-# kernels run, one launch per fan-in as today. Off under the two fan-in
-# sabotage arms, which exist to move those kernels' cells.
-# MOJOLEARN_GEMM_FAST_EPI in the transformer backward, A/B round 1 2026-11-19 (lane fx-verdicts3; NVIDIA L40S host bd9c355c19c0, wheel 0c68d6cd27 and its B set, base and arm
-# back to back in one pod job, tag nvc-ab-20261119T125554Z-6f7afc, one scored run per arm; digests and quality equal).
-# Base -> arm ms: lm-train-step 36.98 -> 36.38 (0.98; the row's bases in three other pairs of the job 36.22, 36.26,
-# 36.39, so the arm sits on the base), samba-train-step 49.15 -> 51.65 (1.05). VERDICT for this use (the S9 and S32
-# fan-in joins in the GEMM store): NOISE, a loser by its own owed row. NOT promoted. DELETION OWED for this use
-# (BWD_GEMM_EPI, _route_a_epi, _route_a_epi_takes, rules_transformer _dx_fanin_epi, the C_PLUS_CELL / CELL_PLUS_C
-# kinds and the fold-stack epilogue kernel): compile-checked, with the work-list deletion it interleaves with. The
-# same define's other use, the fused follower store of the sequence packed route (sequence/gemm_packed_route.mojo
-# SEQ_GEMM_PACKED_EPI), was never timed (it needs the packed route, the default only since 2026-11-19) and stays
-# owed on the mlp rows (owed row gemm-seq-packed-epi-mlp).
-comptime BWD_GEMM_EPI = (
-    is_defined["MOJOLEARN_GEMM_FAST_EPI"]()
-    and not SAB_B_FANIN_ZERO_SEED
-    and not SAB_B_FANIN_ORDER_QKV_REVERSED
-)
-
-
-def _route_a_epi_takes(op: Int, m: Int, n: Int, k: Int) raises -> Bool:
-    """Whether `_route_a_epi` fuses the join for the `dA` of a forward at
-    `(m, n, k)`: a size and plan question, asked before any launch."""
-    var call = gemm_backward_a_call(op, m, n, k)
-    return gemm_workspace_epi_takes(call[1], call[2], call[3])
-
-
-def _route_a_epi[EPI: Int](
-    ctx: DeviceContext,
-    mut workspace: GemmWorkspace,
-    mut out_buf: DeviceBuffer[DType.float32],
-    mut dc: DeviceBuffer[DType.float32],
-    mut other: DeviceBuffer[DType.float32],
-    op: Int,
-    m: Int,
-    n: Int,
-    k: Int,
-) raises:
-    """`_route_a` with the fan-in join in the product's store:
-    `out_buf = EPI(dA, out_buf)`, `EPI` 1 = `ftz(ftz(out_buf) + ftz(dA))`,
-    2 = `ftz(ftz(dA) + ftz(out_buf))`. Same call row and side flag as
-    `_route_a`. Only where `_route_a_epi_takes` is True."""
-    var call = gemm_backward_a_call(op, m, n, k)
-    if call[4] == BWD_DC_LEFT:
-        gemm_workspace_run_epi[EPI](
-            ctx, workspace, out_buf, dc, other, call[1], call[2], call[3], call[0]
-        )
-        return
-    gemm_workspace_run_epi[EPI](
-        ctx, workspace, out_buf, other, dc, call[1], call[2], call[3], call[0]
-    )
+# TOMBSTONE: MOJOLEARN_GEMM_FAST_EPI, its transformer-backward use (NOISE, A/B round 1 NVIDIA L40S, job nvc-ab-20261119T125554Z-6f7afc: lm-train-step 0.98 = the row's other bases, samba-train-step 1.05) BWD_GEMM_EPI, _route_a_epi_takes, _route_a_epi and LlamaBackwardStages.fanin_joined (the S9 and S32 dX fan-ins joined in the GEMM store) deleted 2026-11-19 by lane/fx-arm-cleanup; code recoverable at a7c89e7558. The define stays for the packed sequence route's fused follower store (owed row gemm-seq-packed-epi-mlp).
+# Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_EPI-transformer-backward.patch
 
 
 # TOMBSTONE: MOJOLEARN_GEMM_FAST_DX_CONCAT (NOISE, A/B round 1 NVIDIA L40S, job nvc-ab-20261119T125554Z-6f7afc: lm-train-step 1.00, samba-train-step 0.99) pack kernel, one-product launcher and switch deleted 2026-11-19 by lane/fx-verdicts3; code recoverable at 913fc44cfa.
@@ -2252,10 +2197,6 @@ struct LlamaBackwardStages(Movable):
     var attn_bwd_fused_off: Bool
     """DEVIATION 3110: this layer's fused BACKWARD refused once, so it is not
     launched again for the life of this struct."""
-    var fanin_joined: Bool
-    """lane fx-gemm-epi (BWD_GEMM_EPI only): within the q, k, v fan-in, k's
-    dX is already joined into d(norm1.out) by its GEMM's store, so v joins
-    there too; False means k is in `tmp1` and `bwd_add3_kernel` runs."""
     var head_c: DeviceBuffer[DType.float32]  # [L, s_max]
 
     def __init__(
@@ -2360,7 +2301,6 @@ struct LlamaBackwardStages(Movable):
         self.attn_repaired = 0
         self.attn_backward_status = -1
         self.attn_bwd_fused_off = False
-        self.fanin_joined = False
         self.head_c = _zeros[False](ctx, head_c_n)
 
         # All fill targets are fields of self and remain alive through this

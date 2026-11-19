@@ -3,17 +3,15 @@
 the packed GEMM plan: device words against host words.
 
 `transformer/checks/transformer_backward_check.mojo` compares the 37 stages
-at fixtures of d_model 32 to 48, far below the 128 x 128 packed tile, so on
-an arm build it exercises only the paths where the store epilogue arm
-(`-D MOJOLEARN_GEMM_FAST_EPI=1`) DECLINES. This check runs one layer at
-2,048 tokens and widths in the hundreds, where the weight gradients and the
-input gradients of the projections take the packed body, so the packed
-launches and the fused store are what computes the compared words. The host
+at fixtures of d_model 32 to 48, far below the 128 x 128 packed tile. This
+check runs one layer at 2,048 tokens and widths in the hundreds, where the
+weight gradients and the input gradients of the projections take the packed
+body, so the packed launches are what computes the compared words. The host
 side is the oracle every host caller runs
-(`transformer_block_backward_oracle`); EPI claims unchanged bits, so the
-oracle is the default one for it. (The concatenated fan-in arm
-MOJOLEARN_GEMM_FAST_DX_CONCAT and the work-list arm
-MOJOLEARN_GEMM_FAST_WORKLIST were deleted 2026-11-19, docs/TOMBSTONES.md.)
+(`transformer_block_backward_oracle`). (The concatenated fan-in arm
+MOJOLEARN_GEMM_FAST_DX_CONCAT, the work-list arm MOJOLEARN_GEMM_FAST_WORKLIST
+and the transformer-backward use of the store epilogue arm
+MOJOLEARN_GEMM_FAST_EPI were deleted 2026-11-19, docs/TOMBSTONES.md.)
 
 Cases (each: one host forward and backward, two device runs):
   0 q, k and v of one width (n_kv_heads = n_heads).
@@ -24,17 +22,12 @@ compares what a training step reads: the nine weight gradients and d(x).
 Device run B materializes the stages and also compares the two fan-in joins,
 d(norm2.out) (gate + up) and d(norm1.out) (q, k, v).
 
-NOT VACUOUS: the shape is chosen at run time, the first candidate for which
-the build's own plan function (`gemm_workspace_epi_takes`) says the arm's
-path is taken for the gate/up and k, v fan-in members. On an arm build with no such candidate the case FAILS as a fixture
-error that lists every product's answer: it never passes on the declined
-path. A default build has nothing to decline and runs the first candidate
-whose products take the 128 x 128 plan (else the first).
+The shape is chosen at run time: the first candidate whose main products
+take the 128 x 128 plan on the device in front of it (else the first).
 
-What a sabotage changes here: a fused store that joins in the wrong operand
-order or joins twice (d(norm2.out), d(norm1.out), and everything downstream
-to d(x)); any host/device difference in leaves or fold tree at these
-contraction lengths.
+What a sabotage changes here: a fan-in joined in the wrong operand order or
+twice (d(norm2.out), d(norm1.out), and everything downstream to d(x)); any
+host/device difference in leaves or fold tree at these contraction lengths.
 
 Every host-device transfer of this file goes through the kit.
 """
@@ -45,8 +38,6 @@ from gemm.checks.gemm_identical import (
     PLAN_TUNED_128_8X8,
     choose_gemm_plan,
 )
-from gemm.checks.gemm_epilogue import GEMM_EPI_FUSES
-from gemm.neural_dispatch import gemm_workspace_epi_takes
 from transformer.checks.transformer_fixture import (
     RMS_EPS,
     ROPE_THETA,
@@ -78,7 +69,9 @@ from transformer.impl.llama.modeling_llama import (
 # Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_DX_CONCAT.patch
 # TOMBSTONE: MOJOLEARN_GEMM_FAST_WORKLIST (NOISE, A/B round 1 NVIDIA L40S, job nvc-ab-20261119T125554Z-6f7afc: lm-train-step 1.00, transformer-decode 1.00, lm-forward 0.93 once = another base run of the row) its not-vacuous shape test (gemm_worklist_mode per product) deleted 2026-11-19 by lane/fx-arm-cleanup; code recoverable at a7c89e7558.
 # Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_WORKLIST.patch
-from autograd.kernels.transformer import BWD_GEMM_EPI, LlamaBackwardStages
+# TOMBSTONE: MOJOLEARN_GEMM_FAST_EPI, its transformer-backward use (NOISE, A/B round 1 NVIDIA L40S, job nvc-ab-20261119T125554Z-6f7afc: lm-train-step 0.98 = the row's other bases, samba-train-step 1.05) its not-vacuous shape test (_arm_reach, _ARM_GUARDED) deleted 2026-11-19 by lane/fx-arm-cleanup; code recoverable at a7c89e7558.
+# Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_EPI-transformer-backward.patch
+from autograd.kernels.transformer import LlamaBackwardStages
 from autograd.rules_transformer import llama_decoder_layer_backward
 
 from checks.native_tests.kit import download, same_words, upload
@@ -88,11 +81,6 @@ from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, 
 comptime TBP_CASES = 2
 comptime TBP_CANDIDATES = 4
 comptime TBP_L = 256
-#: Whether this build compiles an arm whose path a shape can decline (the
-#: fused store is NVIDIA's packed body only; elsewhere the define compiles to
-#: the default launches and there is nothing to decline).
-comptime _ARM_GUARDED = BWD_GEMM_EPI and GEMM_EPI_FUSES
-
 # Tensor ids of this file's fixture (transformer_fixture's are 1 to 11, the
 # backward check's d_out is 21).
 comptime _TID_X = 31
@@ -146,24 +134,6 @@ def _cand_dims(which: Int, gqa: Bool) raises -> TransformerDims:
     return dims^
 
 
-def _arm_reach(m: Int, dims: TransformerDims) raises -> String:
-    """Empty when every arm of this build takes its path at `(m, dims)`;
-    otherwise the products that decline. A forward projection `(m, n, k)`
-    has its dX at GEMM `(m, k, n)` and its dW at GEMM `(n, k, m)`
-    (gemm/checks/gemm_backward.mojo)."""
-    var dm = dims.d_model
-    var inter = dims.intermediate
-    var qw = dims.q_width()
-    var kw = dims.kv_width()
-    var miss = String("")
-    comptime if BWD_GEMM_EPI and GEMM_EPI_FUSES:
-        if not gemm_workspace_epi_takes(m, dm, inter):
-            miss += " [epilogue: dX gate (" + String(m) + ", " + String(dm) + ", " + String(inter) + ") declines]"
-        if not gemm_workspace_epi_takes(m, dm, kw):
-            miss += " [epilogue: dX k, v (" + String(m) + ", " + String(dm) + ", " + String(kw) + ") declines]"
-    return miss
-
-
 def _packed(m: Int, dims: TransformerDims) -> Bool:
     """Whether the default dispatch gives the main products the 128 x 128 plan."""
     var dm = dims.d_model
@@ -173,18 +143,13 @@ def _packed(m: Int, dims: TransformerDims) -> Bool:
 
 
 def _pick(gqa: Bool) raises -> Int:
-    """The candidate this build runs (module docstring, NOT VACUOUS)."""
-    var said = String("")
+    """The candidate this build runs (module docstring): the first whose
+    main products take the 128 x 128 plan, else the first."""
     for which in range(TBP_CANDIDATES):  # small-loop(4 candidate shapes): plan questions only
         var dims = _cand_dims(which, gqa)
         var m = _cand_batch(which) * TBP_L
-        var miss = _arm_reach(m, dims)
-        if miss == "" and (_ARM_GUARDED or _packed(m, dims)):
+        if _packed(m, dims):
             return which
-        said += " candidate " + String(which) + ":" + miss
-    if _ARM_GUARDED:
-        raise Error("transformer_backward_packed: FIXTURE ERROR, no candidate shape reaches this build's arm paths;"
-                    + " the check would compare only the declined path." + said)
     return 0
 
 
