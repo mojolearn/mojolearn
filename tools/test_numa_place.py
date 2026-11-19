@@ -36,6 +36,8 @@ def two_nodes(tmp_path, monkeypatch):
     monkeypatch.setattr(NP, "allocation_cores", lambda: 14)
     monkeypatch.delenv(NP.BIND_ENV, raising=False)
     monkeypatch.delenv(NP.MIN_FREE_ENV, raising=False)
+    monkeypatch.setenv(NP.PLAN_ENV, "")      # empty = no plan yet; restored after the test
+    monkeypatch.setattr(NP, "_PLAN", [])
     monkeypatch.setattr(NP.shutil, "which", lambda name: "/usr/bin/" + name)
     monkeypatch.setattr(NP, "_try_prefix", lambda how, timeout=20: None)     # every form starts
     return root
@@ -183,3 +185,82 @@ def test_v1_quota_binds_the_workers_to_the_gpu_node(tmp_path, monkeypatch):
                  {"cpu/cpu.cfs_quota_us": "1400000\n", "cpu/cpu.cfs_period_us": "100000\n"}, affinity=32)
     p = NP.plan()
     assert p["node"] == 1 and p["cpus"] == "16-31" and p["allocation_cores"] == 14
+
+
+def _new_process(monkeypatch):
+    """A child process of the conductor: an empty per-process memo, the conductor's environment inherited."""
+    monkeypatch.setattr(NP, "_PLAN", [])
+
+
+def _set_free_gb(root, node, gb):
+    f = root / ("node%d" % node) / "meminfo"
+    f.write_text("Node %d MemTotal: %d kB\nNode %d MemFree: %d kB\n" % (node, 400 * 1048576, node, int(gb * 1048576)))
+
+
+def test_membind_refused_cores_bound_and_probe_equals_worker(two_nodes, monkeypatch):
+    # lane fx-numa-bind-smoke (2026-11-19): nvc-tg-20261119T191651Z-c11a4c failed all 21 smokes "worker runtime
+    # settings changed or missing: ours": the probe's driver and the timed worker's driver each made a plan, and the
+    # placement in each worker's environment carried node_free_gb read at that moment (259.76 vs 266.39 GB)
+    monkeypatch.setenv(NP.GPU_NODE_ENV, "0")
+    monkeypatch.setattr(NP, "_try_prefix", lambda how, timeout=20: "set_mempolicy: Operation not permitted"
+                        if any(a.startswith(("--membind", "--preferred")) for a in how) else None)
+    conductor = NP.job_plan()
+    assert conductor["state"] == "cores" and conductor["node"] == 0 and conductor["threads"] == 14
+    assert conductor["how"] == ["/usr/bin/numactl", "--physcpubind=0-15"] and "set_mempolicy" in conductor["mem"]
+    assert json.loads(os.environ[NP.PLAN_ENV]) == conductor            # inherited by every child
+    _new_process(monkeypatch)
+    probe_env, worker_env = {}, {}
+    probe_cmd, _ = NP.wrap(["python", "probe.py"], probe_env)
+    _set_free_gb(two_nodes, 0, 266.39)                                  # free memory moves between the two drivers
+    _new_process(monkeypatch)
+    worker_cmd, rec = NP.wrap(["python", "w.py"], worker_env)
+    assert probe_env[NP.PLACEMENT_ENV] == worker_env[NP.PLACEMENT_ENV]
+    assert probe_cmd[:2] == worker_cmd[:2] == conductor["how"] and rec["state"] == "cores"
+    monkeypatch.setenv(NP.PLACEMENT_ENV, worker_env[NP.PLACEMENT_ENV])
+    monkeypatch.setattr(NP.os, "sched_getaffinity", lambda pid: set(range(16)), raising=False)
+    assert NP.worker_node()["bound"] is True
+    monkeypatch.setattr(NP.os, "sched_getaffinity", lambda pid: set(range(32)), raising=False)
+    assert NP.worker_node()["bound"] is False                          # asked, not applied: unbound
+
+
+def test_both_refused_is_unbound_and_numa_mixed_sees_it(two_nodes, monkeypatch):
+    monkeypatch.setenv(NP.GPU_NODE_ENV, "0")
+    monkeypatch.setattr(NP, "_try_prefix", lambda how, timeout=20: "sched_setaffinity: Operation not permitted")
+    p = NP.job_plan()
+    assert p["node"] is None and p["state"] == "unbound" and "no placement command starts" in p["why"]
+    env = {}
+    cmd, rec = NP.wrap(["python", "w.py"], env)
+    assert cmd == ["python", "w.py"] and json.loads(env[NP.PLACEMENT_ENV])["state"] == "unbound"
+    monkeypatch.setenv(NP.PLACEMENT_ENV, env[NP.PLACEMENT_ENV])
+    wn = NP.worker_node()
+    assert wn["bound"] is False
+    spec2 = importlib.util.spec_from_file_location("t_np_paper_compare", os.path.join(HERE, "paper_compare.py"))
+    pc = importlib.util.module_from_spec(spec2)
+    spec2.loader.exec_module(pc)
+    assert pc.unbound_node({"worker_numa": dict(wn, node_now=1)}) == 1
+    bound = {"placement": {"node": 0, "cpus": "0-15"}, "bound": True, "node_now": 0}
+    assert pc.unbound_node({"worker_numa": bound}) is None
+    assert pc.unbound_node({"worker_numa": dict(bound, bound=False)}) == 0
+
+
+def test_single_node_is_unbound_without_a_prefix(tmp_path, monkeypatch):
+    root = tmp_path / "one"
+    (root / "node0").mkdir(parents=True)
+    (root / "node0" / "cpulist").write_text("0-15\n")
+    monkeypatch.setattr(NP, "NODE_ROOT", str(root))
+    monkeypatch.delenv(NP.BIND_ENV, raising=False)
+    monkeypatch.setenv(NP.PLAN_ENV, "")      # empty = no plan yet; restored after the test
+    monkeypatch.setattr(NP, "_PLAN", [])
+    tried = []
+    monkeypatch.setattr(NP, "_try_prefix", lambda how, timeout=20: tried.append(how))
+    env = {}
+    cmd, rec = NP.wrap(["python", "w.py"], env)
+    assert cmd == ["python", "w.py"] and rec["why"] == "one NUMA node" and rec["state"] == "unbound"
+    assert tried == []                                                  # nothing is tried on a one-node host
+
+
+def test_worker_env_off_switch_is_honoured(two_nodes, monkeypatch):
+    monkeypatch.setenv(NP.GPU_NODE_ENV, "0")
+    env = {NP.BIND_ENV: "0"}
+    cmd, rec = NP.wrap(["python", "w.py"], env)
+    assert cmd == ["python", "w.py"] and rec["node"] is None and rec["state"] == "unbound"

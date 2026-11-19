@@ -31,6 +31,8 @@ import shutil
 import subprocess
 
 PLACEMENT_ENV = "MOJOLEARN_BENCH_NUMA_PLACEMENT"
+#: the job's plan (with the command prefix), made once by the first process that asks and inherited by every child
+PLAN_ENV = "MOJOLEARN_BENCH_NUMA_PLAN"
 GPU_NODE_ENV = "MOJOLEARN_BENCH_GPU_NUMA_NODE"
 BIND_ENV = "MOJOLEARN_BENCH_NUMA_BIND"
 MIN_FREE_ENV = "MOJOLEARN_BENCH_NUMA_MIN_FREE_GB"
@@ -292,7 +294,8 @@ def plan():
         err = _try_prefix(how)
         if err is None:
             return {"node": g, "cpus": cpulist(cpus), "n_cpus": len(cpus), "allocation_cores": need, "mem": m,
-                    "node_free_gb": free, "how": how, "why": "the GPU's node"}
+                    "threads": min(need, len(cpus)), "state": "bound", "node_free_gb": free, "how": how,
+                    "why": "the GPU's node"}
         refused = err
     why_mem = ("unbound (numactl memory policy refused: %s)" % refused) if refused else "unbound (numactl missing)"
     cores_only = []
@@ -304,8 +307,11 @@ def plan():
     for how in cores_only:
         err = _try_prefix(how)
         if err is None:
+            # cores bound by sched_setaffinity (numactl --physcpubind or taskset; a container that refuses
+            # set_mempolicy allows it): first touch then places the worker's memory on this node
             return {"node": g, "cpus": cpulist(cpus), "n_cpus": len(cpus), "allocation_cores": need,
-                    "mem": why_mem, "node_free_gb": free, "how": how, "why": "the GPU's node"}
+                    "threads": min(need, len(cpus)), "state": "cores", "mem": why_mem, "node_free_gb": free,
+                    "how": how, "why": "the GPU's node"}
         last = err
     if not numactl and not taskset:
         return {"node": None, "why": "neither numactl nor taskset on this host"}
@@ -327,15 +333,43 @@ def _try_prefix(how, timeout=20):
 _PLAN = []
 
 
-def wrap(cmd, env):
-    """(cmd, placement): the worker command prefixed by the placement, and the placement recorded in the worker's
-    environment (PLACEMENT_ENV) for its cell. The plan is made once per process."""
-    if not _PLAN:
+def job_plan():
+    """The placement of every race worker of this job. ONE PLAN PER JOB (lane fx-numa-bind-smoke, 2026-11-19): the
+    first job with binding live on the RunPod L40S pod (nvc-tg-20261119T191651Z-c11a4c, wheel a7c89e7558) failed all
+    21 smokes "incomplete worker evidence; ... worker runtime settings changed or missing: ours": the parameter probe
+    and the timed worker are started by two driver processes, each made its own plan, and the placement in each
+    worker's environment carried node_free_gb read at that moment (259.76 GB in the probe, 266.39 GB in the worker of
+    algos/bpe-train/enwik8), so tools/bench_board_evidence.py saw the runtime settings change between them. The plan
+    is now made once, kept in PLAN_ENV and inherited by every child (tools/bench_board.py child_env seeds it), so the
+    probe and the timed worker carry the same placement. Memoized per process as well."""
+    if _PLAN:
+        return _PLAN[0]
+    p = None
+    v = os.environ.get(PLAN_ENV)
+    if v:
         try:
-            _PLAN.append(plan())
+            p = json.loads(v)
+        except ValueError:
+            p = None
+    if not isinstance(p, dict):
+        try:
+            p = plan()
         except Exception as exc:  # noqa: BLE001 -- placement is never a reason for a race to fail
-            _PLAN.append({"node": None, "why": "placement failed: %s" % str(exc)[:200]})
-    p = _PLAN[0]
+            p = {"node": None, "why": "placement failed: %s" % str(exc)[:200]}
+        if p.get("node") is None:
+            p.setdefault("state", "unbound")
+        os.environ[PLAN_ENV] = json.dumps(p, sort_keys=True)
+    _PLAN.append(p)
+    return p
+
+
+def wrap(cmd, env):
+    """(cmd, placement): the worker command prefixed by the job's placement, and the placement recorded in the
+    worker's environment (PLACEMENT_ENV) for its cell. A worker environment that sets MOJOLEARN_BENCH_NUMA_BIND=0
+    is not bound."""
+    p = job_plan()
+    if (env.get(BIND_ENV) or "1").strip() == "0" and p.get("node") is not None:
+        p = {"node": None, "state": "unbound", "why": "off (%s=0)" % BIND_ENV}
     rec = {k: v for k, v in p.items() if k != "how"}
     env[PLACEMENT_ENV] = json.dumps(rec, sort_keys=True)
     if p.get("node") is None:
@@ -351,11 +385,21 @@ def worker_node():
     except ValueError:
         placement = None
     out = {"placement": placement}
+    aff = None
     try:
         aff = os.sched_getaffinity(0)
         out["cpu_nodes"] = sorted(n for n in nodes() if node_cpus(n) & aff)
     except (AttributeError, OSError):
         out["cpu_nodes"] = None
+    # whether the placement asked was applied: the worker's own affinity lies inside the planned cores. A bind that
+    # did not apply is recorded as unbound (tools/paper_compare.py unbound_node: NUMA-MIXED sees it)
+    want = parse_cpulist((placement or {}).get("cpus")) if isinstance(placement, dict) else set()
+    if not isinstance(placement, dict) or placement.get("node") is None:
+        out["bound"] = False
+    elif aff is not None and want:
+        out["bound"] = bool(aff) and set(aff) <= want
+    else:
+        out["bound"] = None
     ma = mems_allowed()
     out["mems_allowed"] = cpulist(ma) if ma is not None else None
     stat = _read("/proc/self/stat") or ""
