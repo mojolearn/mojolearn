@@ -666,21 +666,18 @@ def public_io(
 
 
 
-# Grad-norm clip (lane envgate-train-seq-mamba, 2026-11-15): clip in place
-# from the tensors' own memory is the default; `-D MOJOLEARN_CLIP_PACKED`
-# gathers and packs them (the A/B; same device buffer, offsets and clip, so
-# the same bits). Before, an environment read per clip call.
-# ROUTE-DEFAULT-SUSPECT, no A/B on record: B arm RUN OWED in
-# bench/results/paper_compare/owed-pre0867.json ("clip-packed").
-comptime CLIP_PACKED = is_defined["MOJOLEARN_CLIP_PACKED"]()
+# Grad-norm clip: several tensors on one optimizer device clip in place from
+# the tensors' own memory; several optimizer devices take the packed buffer.
+# TOMBSTONE: MOJOLEARN_CLIP_PACKED (opt-in arm, no A/B recorded in four weeks: the run-time switch since 2026-09-30, a build define since 2026-11-15) deleted 2026-11-19 by lane/fx-old-arms-triage; code recoverable at a7c89e7558.
+# Restore: git apply experiments/removed/MOJOLEARN_CLIP_PACKED.patch; record in docs/TOMBSTONES.md.
 
 def public_clip(ctx: DeviceContext, plan: DevicePlan, addrs: List[Int], nbytes: List[Int], max_norm: Float32) raises -> Tuple[Float32, Float32]:
     """`clip_grad_norm_`: the two-level global L2 norm of the tensors and the
     in-place scale (optimizer contract section 3). Several tensors go to the
     device straight from their own memory (`identical_clip_grad_norm_addrs`)
-    unless the build has `-D MOJOLEARN_CLIP_PACKED` or several optimizer devices ask for the
-    packed buffer (the A/B; the same device buffer, offsets and clip, so
-    the same bits). Returns (pre-clip total norm, clamped coefficient)."""
+    unless several optimizer devices ask for the packed buffer (the same
+    device buffer, offsets and clip, so the same bits). Returns (pre-clip
+    total norm, clamped coefficient)."""
     var j = len(addrs)
     var offsets = List[Int32](length=j + 1, fill=Int32(0))
     var op = offsets.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
@@ -693,7 +690,7 @@ def public_clip(ctx: DeviceContext, plan: DevicePlan, addrs: List[Int], nbytes: 
     # Several tensors, not packed, one optimizer device: clip straight from
     # the tensors' own memory. (Was named `multi` for "several tensors"; the
     # device test is the old `== "1"` on the plan's raw setting.)
-    var single_unpacked = (j > 1 and not CLIP_PACKED and _single_device(plan))
+    var single_unpacked = (j > 1 and _single_device(plan))
     if single_unpacked:
         _ = identical_clip_grad_norm_addrs_host(ctx, addrs, op, fp, j, max_norm)
     else:

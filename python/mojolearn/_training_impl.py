@@ -665,8 +665,7 @@ def clip_grad_norm_(grads, max_norm, norm_type=2.0, error_if_nonfinite=True,
     # error_if_nonfinite and max_norm refusals, the tensors read through the
     # buffer protocol, and the clip (training/optimizer_public.mojo
     # `public_clip`: the registry, the route -- the tensors straight from
-    # their own memory, or the packed buffer under MOJOLEARN_CLIP_PACKED=1 or
-    # several optimizer devices; the same device buffer, offsets and clip, so
+    # their own memory, or the packed buffer for several optimizer devices; the same device buffer, offsets and clip, so
     # the same bits -- and the in-place scale).
     return _OPT_NATIVE("clip", None, (grads, max_norm, norm_type, error_if_nonfinite, kwargs), numeric_mode, _OPT_CONTEXT)
 
