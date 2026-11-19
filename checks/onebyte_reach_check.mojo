@@ -90,7 +90,7 @@ R2  THE SABOTAGE. The same fixture's data, re-declared at four fold counts
 """
 
 from max.gpu.host import DeviceContext
-from max.gpu.host.device_attribute import DeviceAttribute
+from core.device_units import device_multiprocessor_count
 
 from gbdt.grid_creator.binarization import binarize
 from gbdt.gpu_data.compressed_index_builder import build_layout
@@ -204,7 +204,7 @@ def claim_counts(
     for _ in range(4):
         out.append(-1)
 
-    var sm_count = ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT)
+    var sm_count = device_multiprocessor_count(ctx)
 
     for b in range(len(blocks)):
         if blocks[b].policy != POLICY_ONE_BYTE:

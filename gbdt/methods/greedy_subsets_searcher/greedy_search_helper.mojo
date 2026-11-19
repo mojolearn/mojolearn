@@ -12,7 +12,7 @@ from std.atomic import Atomic
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from core.device_zero import enqueue_fill
-from max.gpu.host.device_attribute import DeviceAttribute
+from core.device_units import device_multiprocessor_count
 
 from checks.fixed_point import choose_scale
 # TOMBSTONE: MOJOLEARN_TREES_T21_STREAMS (DELETE-ARM, replica stream sweep, no A/B recorded, rule a; non-owner) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at efe2e38a94.
@@ -1458,7 +1458,7 @@ def run_tree(
     # THEIR formula (`hist_binary.cu:95`), and it is computed PER LAUNCH
     # because `numBlocks.y` is the leaf count and that changes every level.
     # `replicas_for` is deleted; it keyed on histogram width alone.
-    var sm_count = ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT)
+    var sm_count = device_multiprocessor_count(ctx)
 
     var part_stats = ctx.enqueue_create_buffer[DType.float32](
         max_leaves * stat_count
@@ -4070,9 +4070,7 @@ struct TTreeWorkspace(Movable):
                 widest_block = tf
         var block_cells = max_leaves * stat_count * widest_block
         var argmax_blocks = sym_argmax_blocks_for(hist_cells_per_leaf)
-        var sm_count = ctx.get_attribute(
-            DeviceAttribute.MULTIPROCESSOR_COUNT
-        )
+        var sm_count = device_multiprocessor_count(ctx)
         var stat_chunks = (n_rows + STATS_BLOCK - 1) // STATS_BLOCK
         var machine_chunks = partition_stats_chunks(sm_count, stat_count)
         if machine_chunks > stat_chunks:
@@ -4599,7 +4597,7 @@ def enqueue_fused_scan_sub_pstats(
     count."""
     var sm = sm_count
     if sm < 0:
-        sm = ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT)
+        sm = device_multiprocessor_count(ctx)
     var max_chunks = partition_stats_chunks(sm, stat_count)
     var scan_blocks = (n_features + FUSED_LEVEL_BLOCK - 1) // FUSED_LEVEL_BLOCK
     var grid = (scan_blocks + max_chunks, n_live, stat_count)
