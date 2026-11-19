@@ -417,6 +417,32 @@ FAMILIES = [
     ["GaussianNB", "cls", {}],
 ]
 
+#: The door family (core/mode_answer.mojo MODE_FAMILY_<name>) whose answer step each estimator's doors hold;
+#: "none" for a family with no answer step at all (always refused: maxabs, robust, kmeans, mixture, svm). The
+#: trial report (tools/ops/fast_trial.py) rolls the rows up by this name.
+ESTIMATOR_FAMILY = {
+    "RandomForestClassifier": "FOREST", "RandomForestRegressor": "FOREST", "ExtraTreesClassifier": "FOREST",
+    "GradientBoostingRegressor": "GBDT", "GradientBoostingClassifier": "GBDT", "IsolationForest": "IFOREST",
+    "StandardScaler": "SCALER", "MinMaxScaler": "SCALER", "MaxAbsScaler": "none", "RobustScaler": "none",
+    "PCA": "PCA", "IncrementalPCA": "IPCA", "TruncatedSVD": "TSVD", "KernelPCA": "KPCA", "NMF": "NMF",
+    "PLSRegression": "PLS", "LinearRegression": "LINEAR", "Ridge": "LINEAR", "LogisticRegression": "LINEAR",
+    "ElasticNet": "LINEAR", "SGDClassifier": "LINEAR", "GaussianNB": "LINEAR", "KernelRidge": "KERNEL",
+    "KNeighborsClassifier": "NEIGHBORS", "KNeighborsRegressor": "NEIGHBORS", "KMeans": "none",
+    "GaussianMixture": "none", "SVC": "none",
+}
+
+
+def selected_families():
+    """FAMILIES, or only the estimators named in MOJOLEARN_FAST_ESTIMATORS (comma separated; a switch of this
+    test, never of the package): tools/ops/fast_trial.py runs one estimator per process across the cores."""
+    names = [n.strip() for n in os.environ.get("MOJOLEARN_FAST_ESTIMATORS", "").split(",") if n.strip()]
+    if not names:
+        return FAMILIES
+    unknown = sorted(set(names) - {row[0] for row in FAMILIES})
+    if unknown:
+        raise ValueError(f"MOJOLEARN_FAST_ESTIMATORS names estimators not in FAMILIES: {unknown}")
+    return [row for row in FAMILIES if row[0] in names]
+
 
 class BuiltInstallFamilies(unittest.TestCase):
     """On a built install off Apple with no fast set, `Estimator(numeric_mode='fast')`
@@ -441,12 +467,15 @@ class BuiltInstallFamilies(unittest.TestCase):
         if sys.platform == "darwin":
             self.skipTest("Apple: `fast` names the fast set (unchanged); the answer under test is off Apple")
         every = os.environ.get("MOJOLEARN_FAST_ANSWER_TRIAL_FAMILIES", "compiled")
-        done = subprocess.run([sys.executable, "-c", _FAMILY_CHILD, json.dumps(FAMILIES), every],
+        chosen = selected_families()
+        done = subprocess.run([sys.executable, "-c", _FAMILY_CHILD, json.dumps(chosen), every],
                               env=dict(os.environ, MOJOLEARN_NUMERIC_MODE="identical"),
                               capture_output=True, text=True, timeout=1800)
         if done.returncode != 0:
             self.skipTest("no built mojolearn in this environment: " + done.stderr[-300:])
         report = json.loads(done.stdout.strip().splitlines()[-1])
+        for name, row in report["rows"].items():
+            row["family"] = ESTIMATOR_FAMILY.get(name, "?")
         ledger = os.environ.get("MOJOLEARN_FAST_LEDGER")
         if ledger:
             with open(ledger, "w") as out:
