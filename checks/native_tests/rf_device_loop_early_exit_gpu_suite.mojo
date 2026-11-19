@@ -6,8 +6,7 @@
         -D MOJOLEARN_IDN_RF_DEVICE_LOOP_EARLY_EXIT=1 -I . \
         checks/native_tests/rf_device_loop_early_exit_gpu.mojo
 
-`-D MOJOLEARN_IDN_RF_DEVICE_LOOP_EARLY_EXIT` (or the plain device loop,
-`-D MOJOLEARN_IDN_RF_DEVICE_LOOP`) must be set: without a device-loop form both
+`-D MOJOLEARN_IDN_RF_DEVICE_LOOP_EARLY_EXIT` must be set: without the device-loop form both
 fits take the host queue and the comparison proves nothing, so the suite
 refuses to run.
 
@@ -215,8 +214,7 @@ def run_checks() raises:
     comptime if not RF_DEVICE_QUEUE:
         raise Error(
             "rf_device_loop_early_exit: build with"
-            " -D MOJOLEARN_IDN_RF_DEVICE_LOOP_EARLY_EXIT=1 (or"
-            " -D MOJOLEARN_IDN_RF_DEVICE_LOOP=1); without a device-loop form"
+            " -D MOJOLEARN_IDN_RF_DEVICE_LOOP_EARLY_EXIT=1; without the device-loop form"
             " both fits take the host queue and nothing is compared"
         )
     var ctx = DeviceContext()

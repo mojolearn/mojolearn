@@ -3266,18 +3266,8 @@ def bwd_rms_norm[which: Int](
     _bwd_rms_norm_dw_tick[which](ctx, pc)
 
 
-comptime TRANSFORMER_NORM_DW_OWN_WS = is_defined["MOJOLEARN_TRANSFORMER_NORM_DW_OWN_WS"]()
-"""`-D MOJOLEARN_TRANSFORMER_NORM_DW_OWN_WS` restores `identical_gemm` (its
-own workspace, two waits) for the norm weight gradients: the B arm against
-the routed form below, the default (unchanged). It was a getenv per backward
-layer until lane envgate-neural-lm (2026-11-15). RUN OWED on NVIDIA
-(bench/results/paper_compare/owed-pre0867.json "transformer-norm-dw-own-ws";
-docs/apple-fast/EXPERIMENTS.md)."""
-
-
-def _norm_dw_own_workspace() -> Bool:
-    """See TRANSFORMER_NORM_DW_OWN_WS: a build constant."""
-    return TRANSFORMER_NORM_DW_OWN_WS
+# TOMBSTONE: MOJOLEARN_TRANSFORMER_NORM_DW_OWN_WS (old path beside the default, no A/B recorded in four weeks: the run-time switch since 2026-10-20, a build define since 2026-11-15) deleted 2026-11-19 by lane/fx-old-arms-triage; code recoverable at a7c89e7558.
+# Restore: git apply experiments/removed/MOJOLEARN_TRANSFORMER_NORM_DW_OWN_WS.patch; record in docs/TOMBSTONES.md.
 
 
 def bwd_rms_norm_routed[which: Int](
@@ -3325,10 +3315,7 @@ def bwd_rms_norm_routed[which: Int](
         ):
             _bwd_rms_norm_dw_tick[which](ctx, pc)
             return
-    if _norm_dw_own_workspace():
-        identical_gemm(ctx, dw_out, ones, dprod, 1, dm, m, OP_NN)
-    else:
-        workspace.run(ctx, dw_out, ones, dprod, 1, dm, m, OP_NN)
+    workspace.run(ctx, dw_out, ones, dprod, 1, dm, m, OP_NN)
     _bwd_rms_norm_dw_tick[which](ctx, pc)
 
 

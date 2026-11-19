@@ -17,7 +17,7 @@ baseline, and whether the output DIGEST equals the baseline's (`same` /
     python tools/neural_experiments.py --set nvidia          # the NVIDIA-shaped set
     python tools/neural_experiments.py --set amd
     python tools/neural_experiments.py --gemm-arms shipped,tuned128,half,quarter,kpack
-    python tools/neural_experiments.py --only speculative_attn,swiglu_fused
+    python tools/neural_experiments.py --only speculative_attn,no_layer_sync
     python tools/neural_experiments.py --json results.json
     python tools/neural_experiments.py ideas list             # versioned neural catalog
     python tools/neural_experiments.py ideas plan NI20 --arm A
@@ -53,10 +53,8 @@ EXPERIMENTS = {
     # MOJOLEARN_MAMBA3_RETAIN_WEIGHTS(_OFF) lost A/B ab3 and are deleted.
     "legacy_everything": {"MOJOLEARN_TRANSFORMER_LEGACY_SETUP": "1"},
     "speculative_attn": {"MOJOLEARN_ATTN_SPECULATIVE": "1"},
-    "swiglu_fused": {"MOJOLEARN_SWIGLU_FUSED": "1"},
     "no_layer_sync": {"MOJOLEARN_BYTE_LM_LAYER_SYNC": "0"},
     "mamba3_no_retain_stages": {"MOJOLEARN_MAMBA3_RETAIN_STAGES": "0"},
-    "norm_dw_own_ws": {"MOJOLEARN_TRANSFORMER_NORM_DW_OWN_WS": "1"},
     # the S16 q/k backward arms (lane/neural-net-experiment, the S16 pass):
     # the default is `regs` since lane/neural-pass4 (`regs2` before); each
     # arm is the same chains in the same order
@@ -72,11 +70,11 @@ EXPERIMENTS = {
     # the optimizer's moments on the host and the per-call optimizer_step
     # (lane/neural-pass4): the before arm of the resident moments
     "opt_host": {"MOJOLEARN_OPTIMIZER_RESIDENT": "0"},
-    "all_on": {"MOJOLEARN_ATTN_SPECULATIVE": "1", "MOJOLEARN_SWIGLU_FUSED": "1",
+    "all_on": {"MOJOLEARN_ATTN_SPECULATIVE": "1",
                "MOJOLEARN_BYTE_LM_LAYER_SYNC": "0"},
 }
 SETS = {
-    "priority": ["baseline", "mamba3_no_retain_stages", "norm_dw_own_ws"],
+    "priority": ["baseline", "mamba3_no_retain_stages"],
     # the S16 arms on the Mamba lanes (run with --lane mamba3-forward --lane
     # samba-train-step, or the timing tool for the per-kernel walls)
     "s16": ["baseline", "s16_naive", "s16_shared", "s16_regs2", "s16_smem48"],
@@ -87,11 +85,11 @@ SETS = {
     # samba-train-step --lane lm-train-step)
     "optimizer": ["baseline", "opt_host"],
     "default": ["baseline", "no_retain_weights", "speculative_attn",
-                "swiglu_fused", "no_layer_sync", "all_on"],
+                "no_layer_sync", "all_on"],
     "nvidia": ["baseline", "no_retain_weights", "legacy_fresh_entry",
-               "speculative_attn", "swiglu_fused", "no_layer_sync", "all_on"],
+               "speculative_attn", "no_layer_sync", "all_on"],
     "amd": ["baseline", "legacy_everything", "no_retain_weights",
-            "speculative_attn", "swiglu_fused", "no_layer_sync", "all_on"],
+            "speculative_attn", "no_layer_sync", "all_on"],
 }
 
 

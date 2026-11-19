@@ -73,8 +73,9 @@
   },
   "if-fit-own-x": {
    "define": "MOJOLEARN_IDN_IF_FIT_OWN_X",
-   "status": "define in code (bindings/trees_public_iforest_door.mojo _IF_FIT_OWN_X): B = the fit owns a parallel copy of a borrowed float32 X (0292b73ab3); A = a resident binary borrows X (0.8.55)",
-   "owed": "RUN"
+   "status": "deleted 2026-11-19 (lane fx-old-arms-triage): decided B arm: L40S fit istella 1.36, taxi 1.15 slower; was: define in code (bindings/trees_public_iforest_door.mojo _IF_FIT_OWN_X): B = the fit owns a parallel copy of a borrowed float32 X (0292b73ab3); A = a resident binary borrows X (0.8.55)",
+   "owed": "DECIDED",
+   "evidence": "ab4 2026-11-18, NVIDIA L40S, wheel d652a4b0a1, base and arm back to back, one run per arm (~/mojolearn-evidence/measure-candidate/build-ec1c4b5aff/fetched/nvc-ab-20261118T201200Z-d21ba0/x/SUMMARY-TG-nvidia.txt): fit istella 197 -> 267 ms (1.36), taxi 149 -> 171 (1.15), infer 1.00-1.02; LOSER, deleted by lane fx-old-arms-triage 2026-11-19 (docs/TOMBSTONES.md)"
   },
   "if-scores-f64-off": {
    "define": "MOJOLEARN_IDN_IF_SCORES_F64_OFF",
@@ -93,8 +94,9 @@
   },
   "rf-device-loop": {
    "define": "MOJOLEARN_IDN_RF_DEVICE_LOOP",
-   "status": "define in code (ensemble/decisiontree/batched_levelalgo/builder.mojo:1016 IDN_RF_DEVICE_LOOP): B = the device level loop (every sampling round enqueued per batch at proven bounds, 2026-10-04 to 2026-11-13 default); A = the host-queue level loop, K trees pipelined (0.8.25 route)",
-   "owed": "RUN"
+   "status": "deleted 2026-11-19 (lane fx-old-arms-triage): decided B arm: L40S rf fit istella 6.90, taxi 1.67 slower; was: define in code (ensemble/decisiontree/batched_levelalgo/builder.mojo:1016 IDN_RF_DEVICE_LOOP): B = the device level loop (every sampling round enqueued per batch at proven bounds, 2026-10-04 to 2026-11-13 default); A = the host-queue level loop, K trees pipelined (0.8.25 route)",
+   "owed": "DECIDED",
+   "evidence": "ab4 2026-11-18, NVIDIA L40S, wheel d652a4b0a1, base and arm back to back, one run per arm (~/mojolearn-evidence/measure-candidate/build-ec1c4b5aff/fetched/nvc-ab-20261118T201200Z-d21ba0/x/SUMMARY-TG-nvidia.txt): rf fit istella 4407 -> 30417 ms (6.90), taxi 5352 -> 8918 (1.67), infer 1.00; LOSER, define deleted by lane fx-old-arms-triage 2026-11-19 (docs/TOMBSTONES.md); the body stays for rf-device-loop-early-exit"
   },
   "et-device-loop": {
    "define": "MOJOLEARN_IDN_ET_DEVICE_LOOP",
@@ -389,8 +391,9 @@
   },
   "clip-packed": {
    "define": "MOJOLEARN_CLIP_PACKED",
-   "status": "define in code (training/optimizer_public.mojo CLIP_PACKED (public_clip)): B = gather into one packed buffer, clip, scatter (the former MOJOLEARN_CLIP_PACKED=1); same device buffer, offsets and clip; A = grad-norm clip in place from each tensor's own memory (the former default). A transport/route choice: digests must not move.",
-   "owed": "RUN"
+   "status": "deleted 2026-11-19 (lane fx-old-arms-triage): opt-in arm, no A/B recorded in four weeks; was: define in code (training/optimizer_public.mojo CLIP_PACKED (public_clip)): B = gather into one packed buffer, clip, scatter (the former MOJOLEARN_CLIP_PACKED=1); same device buffer, offsets and clip; A = grad-norm clip in place from each tensor's own memory (the former default). A transport/route choice: digests must not move.",
+   "owed": "DECIDED",
+   "evidence": "no A/B in four weeks: run-time switch since 2026-09-30, build define since 2026-11-15, never timed; deleted under AGENTS.md part 5 (docs/TOMBSTONES.md mojolearn_clip_packed-fx-old-arms-triage)"
   },
   "ivf-scan-grouped-off": {
    "define": "MOJOLEARN_IVF_SCAN_GROUPED_OFF",
@@ -415,13 +418,15 @@
   },
   "device-arena": {
    "define": "MOJOLEARN_DEVICE_ARENA",
-   "status": "define in code (core/device_arena.mojo DEVICE_ARENA_ON: B = sessions carve their buffers from one arena (the Apple column's default); A = one allocation per buffer (NVIDIA/AMD default, chosen by reasoning). No bit change)",
-   "owed": "RUN"
+   "status": "deleted 2026-11-19 (lane fx-old-arms-triage): NVIDIA/AMD opt-in arm, no A/B recorded in four weeks; was: define in code (core/device_arena.mojo DEVICE_ARENA_ON: B = sessions carve their buffers from one arena (the Apple column's default); A = one allocation per buffer (NVIDIA/AMD default, chosen by reasoning). No bit change)",
+   "owed": "DECIDED",
+   "evidence": "no A/B in four weeks: run-time switch since 2026-10-01, build define since 2026-11-15; built for ab4 (nvc-ab-20261118T201200Z-d21ba0) but that job ended after two arms; deleted under AGENTS.md part 5 (docs/TOMBSTONES.md mojolearn_device_arena-fx-old-arms-triage)"
   },
   "byte-lm-keep-context": {
    "define": "MOJOLEARN_BYTE_LM_KEEP_CONTEXT",
-   "status": "define in code (training/byte_lm_session_ops.mojo, byte_lm_stateless_run.mojo, byte_lm_stateless_logits.mojo BYTE_LM_KEEP_CONTEXT: B = the device context is kept across stateless calls (no per-call context build); A = a context per call. No bit change)",
-   "owed": "RUN"
+   "status": "deleted 2026-11-19 (lane fx-old-arms-triage): opt-in arm, no A/B recorded in four weeks; was: define in code (training/byte_lm_session_ops.mojo, byte_lm_stateless_run.mojo, byte_lm_stateless_logits.mojo BYTE_LM_KEEP_CONTEXT: B = the device context is kept across stateless calls (no per-call context build); A = a context per call. No bit change)",
+   "owed": "DECIDED",
+   "evidence": "no A/B in four weeks: run-time switch since 2026-10-21, build define since 2026-11-15; built for ab4 (nvc-ab-20261118T201200Z-d21ba0) but that job ended after two arms; deleted under AGENTS.md part 5 (docs/TOMBSTONES.md mojolearn_byte_lm_keep_context-fx-old-arms-triage)"
   },
   "mamba3-legacy-setup": {
    "define": "MOJOLEARN_MAMBA3_LEGACY_SETUP",
@@ -431,8 +436,9 @@
   },
   "swiglu-fused": {
    "define": "MOJOLEARN_SWIGLU_FUSED",
-   "status": "define in code (transformer/impl/llama/modeling_llama.mojo SWIGLU_FUSED: B = the forward-only fused SiLU*gate (one launch instead of two per layer); A = two launches. Same saved stages)",
-   "owed": "RUN"
+   "status": "deleted 2026-11-19 (lane fx-old-arms-triage): opt-in arm, no A/B recorded in four weeks; was: define in code (transformer/impl/llama/modeling_llama.mojo SWIGLU_FUSED: B = the forward-only fused SiLU*gate (one launch instead of two per layer); A = two launches. Same saved stages)",
+   "owed": "DECIDED",
+   "evidence": "no A/B in four weeks: run-time switch since 2026-09-30, build define since 2026-11-15; built for ab4 (nvc-ab-20261118T201200Z-d21ba0) but that job ended after two arms; deleted under AGENTS.md part 5 (docs/TOMBSTONES.md mojolearn_swiglu_fused-fx-old-arms-triage)"
   },
   "transformer-legacy-setup": {
    "define": "MOJOLEARN_TRANSFORMER_LEGACY_SETUP",
@@ -441,8 +447,9 @@
   },
   "transformer-norm-dw-own-ws": {
    "define": "MOJOLEARN_TRANSFORMER_NORM_DW_OWN_WS",
-   "status": "define in code (autograd/kernels/transformer.mojo TRANSFORMER_NORM_DW_OWN_WS: B = identical_gemm with its own workspace and two waits for the norm weight gradients; A = the routed form on the backward's workspace)",
-   "owed": "RUN"
+   "status": "deleted 2026-11-19 (lane fx-old-arms-triage): old path beside the default, no A/B recorded in four weeks; was: define in code (autograd/kernels/transformer.mojo TRANSFORMER_NORM_DW_OWN_WS: B = identical_gemm with its own workspace and two waits for the norm weight gradients; A = the routed form on the backward's workspace)",
+   "owed": "DECIDED",
+   "evidence": "no A/B in four weeks: run-time switch since 2026-10-20, build define since 2026-11-15, never timed; deleted under AGENTS.md part 5 (docs/TOMBSTONES.md mojolearn_transformer_norm_dw_own_ws-fx-old-arms-triage)"
   },
   "transformer-session-fresh-off": {
    "define": "MOJOLEARN_TRANSFORMER_SESSION_FRESH_OFF",

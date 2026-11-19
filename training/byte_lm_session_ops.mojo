@@ -35,19 +35,17 @@ from training.byte_lm_logits import (
     byte_logits_validate, byte_logits_resident_into, byte_next_bytes_resident_into,
 )
 from training.byte_lm_binding_impl import (
-    ByteLMSession, BYTE_LM_CONTEXT_KEEPER,
+    ByteLMSession,
     _read_f32, _btick, _bbytes, _validate_slot_table,
     _read_flags, _read_ids, _write_flags, _write_loss, _nonfinite,
     _require_open, _mark_if_lost, _admit_session_scalars, _stage_download,
 )
 
-# Lane envgate-neural-lm (2026-11-15): both were a getenv per session open /
-# step / export call; build constants with today's defaults. KEEP_CONTEXT is
-# ROUTE-DEFAULT-SUSPECT, default off: B arm -D MOJOLEARN_BYTE_LM_KEEP_CONTEXT
-# (RUN OWED, bench/results/paper_compare/owed-pre0867.json
-# "byte-lm-keep-context"; docs/apple-fast/EXPERIMENTS.md).
+# Lane envgate-neural-lm (2026-11-15): was a getenv per session open /
+# step / export call; a build constant with today's default.
 comptime _TRANSFORMER_TIMING = is_defined["MOJOLEARN_TRANSFORMER_TIMING"]()
-comptime BYTE_LM_KEEP_CONTEXT = is_defined["MOJOLEARN_BYTE_LM_KEEP_CONTEXT"]()
+# TOMBSTONE: MOJOLEARN_BYTE_LM_KEEP_CONTEXT (opt-in arm, no A/B recorded in four weeks: the run-time switch since 2026-10-21, a build define since 2026-11-15) deleted 2026-11-19 by lane/fx-old-arms-triage; code recoverable at a7c89e7558.
+# Restore: git apply experiments/removed/MOJOLEARN_BYTE_LM_KEEP_CONTEXT.patch; record in docs/TOMBSTONES.md.
 
 
 # One process-lifetime DeviceContext per binding and tier (core/neural_context.mojo).
@@ -79,7 +77,6 @@ def byte_session_open(mut session: ByteLMSession, addr: List[Int], completed: In
     if Bool(owner[].trainer) or Bool(owner[].ctx):
         raise Error("byte LM: session is already open; close it first")
     var ton = _TRANSFORMER_TIMING
-    var keep_context = BYTE_LM_KEEP_CONTEXT
     var tk = Int(perf_counter_ns())
     # No GPU work before all borrowed inputs become validated owned host lists.
     var initial_p = _read_f32(addr[0], n)
@@ -93,9 +90,6 @@ def byte_session_open(mut session: ByteLMSession, addr: List[Int], completed: In
     owner[].busy = True
     owner[].usable = False
     try:
-        if keep_context:
-            # DEVIATION 2513: the same keeper the per-call path uses.
-            BYTE_LM_CONTEXT_KEEPER.get_or_create_ptr()[].ensure()
         owner[].ctx = neural_ctx[BYTE_LM_NEURAL_CTX]()
         owner[].trainer = ByteTrainer(owner[].ctx.value(), initial_p, initial_m,
             initial_v, flags, completed, cfg, cfg_shape)

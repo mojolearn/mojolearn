@@ -658,6 +658,11 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_GBDT_PREBINNED_INFER_OLD.patch; record in docs/TOMBSTONES.md.
     comptime assert not is_defined["MOJOLEARN_IDN_GBDT_PREBINNED_INFER_OLD"](), "removed 2026-11-18 (lane/fx-verdicts2, A/B ab3 NVIDIA L40S, wheel d652a4b0a1, job nvc-ab-20261118T182558Z-cb6e02, one run per arm, digests equal): the per-call Depthwise/Lossguide resident pack was arm/base 1.034 geomean over 24 cells; the pack held from the first predict is the route; recoverable at 85c36e324f"
     # ---- end lane fx-verdicts2
+    # ---- lane fx-old-arms-triage (2026-11-19): measured losers of ab4 (NVIDIA L40S, wheel d652a4b0a1, job nvc-ab-20261118T201200Z-d21ba0)
+    # TOMBSTONE: MOJOLEARN_IDN_RF_DEVICE_LOOP (LOSER, A/B ab4 NVIDIA L40S, wheel d652a4b0a1, job nvc-ab-20261118T201200Z-d21ba0, one run per arm, digests equal) deleted 2026-11-19 by lane/fx-old-arms-triage; code recoverable at a7c89e7558.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_RF_DEVICE_LOOP.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_IDN_RF_DEVICE_LOOP"](), "removed 2026-11-19 (lane/fx-old-arms-triage, A/B ab4 NVIDIA L40S, wheel d652a4b0a1, job nvc-ab-20261118T201200Z-d21ba0, one run per arm): the RandomForest device level loop as the fit route was slower, fit istella 4407 -> 30417 ms (6.90), taxi 5352 -> 8918 (1.67); the host queue stays, the device loop body serves -D MOJOLEARN_IDN_RF_DEVICE_LOOP_EARLY_EXIT; code at a7c89e7558; restore: experiments/removed/MOJOLEARN_IDN_RF_DEVICE_LOOP.patch"
+    # ---- end lane fx-old-arms-triage
     return True
 
 

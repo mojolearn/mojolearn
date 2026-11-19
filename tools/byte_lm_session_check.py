@@ -27,9 +27,9 @@ DEVIATION 2514 at fixture A (B2/L7/DM24, 3 layers, V513):
       is now KEPT after an admission refusal, nothing was written).
 
 The stateless arm creates one context per call and the resident runs
-create one each, in one process: the DEVIATION 2494 shape. If the
-second-context hang is open on the box, run with
-MOJOLEARN_BYTE_LM_KEEP_CONTEXT=1 (DEVIATION 2513) and say so in the record.
+create one each, in one process: the DEVIATION 2494 shape. (The opt-in
+context keeper, MOJOLEARN_BYTE_LM_KEEP_CONTEXT, was deleted 2026-11-19; the
+neural context is process-lifetime.)
 """
 import argparse
 import hashlib

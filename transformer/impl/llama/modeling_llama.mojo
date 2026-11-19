@@ -3923,17 +3923,8 @@ def swiglu_training_fused_kernel(
     gated.unsafe_store(i, ftz(identical_mul(ftz(sil), ftz(up.unsafe_load(i)))))
 
 
-comptime SWIGLU_FUSED = is_defined["MOJOLEARN_SWIGLU_FUSED"]()
-"""`-D MOJOLEARN_SWIGLU_FUSED`: the forward-only fused SiLU*gate (one launch
-instead of two per layer). Default off, unchanged; it was a getenv per block
-call until lane envgate-neural-lm (2026-11-15). RUN OWED on NVIDIA
-(bench/results/paper_compare/owed-pre0867.json "swiglu-fused";
-docs/apple-fast/EXPERIMENTS.md)."""
-
-
-def swiglu_fused_enabled() -> Bool:
-    """`-D MOJOLEARN_SWIGLU_FUSED`; a build constant, default off."""
-    return SWIGLU_FUSED
+# TOMBSTONE: MOJOLEARN_SWIGLU_FUSED (opt-in arm, no A/B recorded in four weeks: the run-time switch since 2026-09-30, a build define since 2026-11-15) deleted 2026-11-19 by lane/fx-old-arms-triage; code recoverable at a7c89e7558. `swiglu_fused_kernel` stays: the Apple AFN block launches it.
+# Restore: git apply experiments/removed/MOJOLEARN_SWIGLU_FUSED.patch; record in docs/TOMBSTONES.md.
 
 
 def mlp_gated_kernel(
@@ -5750,7 +5741,6 @@ def llama_mlp_forward(
     m: Int,
     mut trace: IdentityTrace,
     prefix: String,
-    forward_only: Bool = False,
 ) raises:
     """`LlamaMLP.forward(x)` (:174-176).
 
@@ -5852,25 +5842,9 @@ def llama_mlp_forward(
     # ---- act_fn (:175). S20: SiLU at the default record, a GELU form
     #      otherwise, over the gate projection (gated) or the up
     #      projection (ungated).
-    # lane/neural-net-experiment: S20 + S21 in one launch when no backward
-    # follows, the trace is off, the record is the default SiLU gated MLP
-    # and the build is not the S20 sabotage spelling (`swiglu_fused_kernel`).
-    var swiglu_fused = False
-    comptime if not SAB_S20_SILU_MUL_SIGMOID:
-        swiglu_fused = (forward_only and gated and opts.act_is_silu()
-                        and not bias_silu_fused and not bias_gelu_fused
-                        and not trace.enabled and swiglu_fused_enabled())
-    if swiglu_fused:
-        step_count_launch()
-        ctx.enqueue_function[swiglu_fused_kernel](
-            stages.gated.unsafe_ptr(),
-            stages.gate_proj.unsafe_ptr(),
-            stages.up_proj.unsafe_ptr(),
-            Int32(m * it),
-            grid_dim=(_grid(m * it), 1, 1),
-            block_dim=(LLAMA_TPB, 1, 1),
-        )
-    elif bias_gelu_fused or bias_silu_fused:
+    # TOMBSTONE: MOJOLEARN_SWIGLU_FUSED (opt-in forward-only S20+S21 launch here) deleted 2026-11-19 by lane/fx-old-arms-triage; code recoverable at a7c89e7558.
+    # Restore: git apply experiments/removed/MOJOLEARN_SWIGLU_FUSED.patch; record in docs/TOMBSTONES.md.
+    if bias_gelu_fused or bias_silu_fused:
         pass
     elif opts.act_is_silu():
         step_count_launch()
@@ -5912,9 +5886,7 @@ def llama_mlp_forward(
     pc.tick(ctx, "fwd.silu")
 
     # ---- the gate product (:175). S21. Absent under an ungated MLP.
-    if swiglu_fused:
-        pass  # the selected fused kernel already wrote S21
-    elif gated:
+    if gated:
         step_count_launch()
         ctx.enqueue_function[mlp_gated_kernel](
             stages.gated.unsafe_ptr(),
@@ -6372,7 +6344,7 @@ def _afn_mlp_and_residual2(
             )
             mlp_done = True
     if not mlp_done:
-        llama_mlp_forward(ctx, stages, w, m, trace, prefix, forward_only=True)
+        llama_mlp_forward(ctx, stages, w, m, trace, prefix)
 
     # ---- residual2, and the next layer's norm1 when asked.
     var want_next = (
@@ -6811,7 +6783,7 @@ def llama_decoder_layer_forward_planted(
             ctx, stages, w, m, trace, prefix, plant_at, materialize, forward_only,
             next_norm_sumsq, next_norm_out, next_norm_weight, next_norm_eps,
         ):
-            llama_mlp_forward(ctx, stages, w, m, trace, prefix, forward_only=forward_only)
+            llama_mlp_forward(ctx, stages, w, m, trace, prefix)
             pc.mark(ctx)
             var fuse_next_norm = (
                 next_norm_sumsq and next_norm_out and next_norm_weight
@@ -6834,7 +6806,7 @@ def llama_decoder_layer_forward_planted(
                     grid_dim=(_grid(m * dm), 1, 1), block_dim=(LLAMA_TPB, 1, 1),
                 )
     else:
-        llama_mlp_forward(ctx, stages, w, m, trace, prefix, forward_only=forward_only)
+        llama_mlp_forward(ctx, stages, w, m, trace, prefix)
         pc.mark(ctx)
 
         # ---- residual + hidden_states (:323). S23, the same imported kernel.
@@ -6896,7 +6868,7 @@ def llama_decoder_layer_forward(
 
     `forward_only` (lane/neural-net-experiment): the caller promises no
     backward reads this call's stages, which admits the forward-only
-    fusions (`swiglu_fused_kernel` under `MOJOLEARN_SWIGLU_FUSED=1`).
+    fusions.
 
     Every argument is a scalar or a buffer or one of this file's own
     structs; nothing from `transformer/checks/` crosses this boundary,

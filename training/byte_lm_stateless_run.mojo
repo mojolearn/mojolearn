@@ -10,7 +10,7 @@ from core.neural_context import neural_ctx
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from checks.vendor import COMPILED_VENDOR
 from training.byte_lm_afn import BYTE_LM_FAST_APPLE
-from training.byte_lm_binding_impl import (ByteLMSession, BYTE_LM_CONTEXT_KEEPER,
+from training.byte_lm_binding_impl import (ByteLMSession,
     _validate_addresses, _read_f32, _require_inputs_unchanged, _write_f32,
     _btick, _bbytes, _require_same_bits, _write_flags_n, _write_loss)
 from training.byte_lm_session_ops import BYTE_LM_NEURAL_CTX
@@ -20,13 +20,11 @@ from training.checks.train_loop import download_f32
 from training.byte_lm import (ByteTrainer, byte_train_step, byte_eval_loss,
     byte_validate_state, byte_validate_device_state, byte_validate_optimizer, byte_validate_tokens)
 comptime _NEURAL_CTX = BYTE_LM_NEURAL_CTX
-# Lane envgate-neural-lm (2026-11-15): the three switches below were a getenv
+# Lane envgate-neural-lm (2026-11-15): the switches below were a getenv
 # each per stateless call; they are build constants with today's defaults.
 comptime _TRANSFORMER_TIMING = is_defined["MOJOLEARN_TRANSFORMER_TIMING"]()
-# ROUTE-DEFAULT-SUSPECT, default off: B arm -D MOJOLEARN_BYTE_LM_KEEP_CONTEXT
-# (RUN OWED, bench/results/paper_compare/owed-pre0867.json
-# "byte-lm-keep-context"; docs/apple-fast/EXPERIMENTS.md).
-comptime BYTE_LM_KEEP_CONTEXT = is_defined["MOJOLEARN_BYTE_LM_KEEP_CONTEXT"]()
+# TOMBSTONE: MOJOLEARN_BYTE_LM_KEEP_CONTEXT (opt-in arm, no A/B recorded in four weeks: the run-time switch since 2026-10-21, a build define since 2026-11-15) deleted 2026-11-19 by lane/fx-old-arms-triage; code recoverable at a7c89e7558.
+# Restore: git apply experiments/removed/MOJOLEARN_BYTE_LM_KEEP_CONTEXT.patch; record in docs/TOMBSTONES.md.
 # Diagnostic variant (DEVIATION 2518), default off.
 comptime BYTE_LM_SYNC_BEFORE_TEARDOWN = is_defined["MOJOLEARN_BYTE_LM_SYNC_BEFORE_TEARDOWN"]()
 
@@ -49,9 +47,6 @@ def byte_lm_run_native(addr: List[Int], action: Int, completed: Int, cfg: Optimi
     byte_validate_optimizer(cfg)
     _validate_addresses(addr, action, shape)
     var ton = _TRANSFORMER_TIMING
-    # DEVIATION 2513: the keeper is touched only on a call that creates a
-    # context, and only in a -D MOJOLEARN_BYTE_LM_KEEP_CONTEXT build.
-    var keep_context = BYTE_LM_KEEP_CONTEXT
     # DEVIATION 2518: two OPT-IN teardown variants for the stateless path
     # (retain=False) only, build defines, OFF by default, no
     # effect on the resident session or on any arithmetic. Each prints one
@@ -100,12 +95,6 @@ def byte_lm_run_native(addr: List[Int], action: Int, completed: Int, cfg: Optimi
     try:
         var reused = Bool(session.ctx)
         if not session.ctx:
-            if keep_context:
-                # DEVIATION 2513: a SEPARATE keeper context, created
-                # before the per-call one and never released. Idempotent
-                # after the first creating call. Off: this branch is
-                # not entered and nothing below changes.
-                BYTE_LM_CONTEXT_KEEPER.get_or_create_ptr()[].ensure()
             session.ctx = neural_ctx[_NEURAL_CTX]()
             session.trainer = ByteTrainer(session.ctx.value(), initial_p, initial_m,
                 initial_v, flags, completed, cfg, shape)

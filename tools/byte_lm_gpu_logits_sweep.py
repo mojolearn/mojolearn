@@ -26,8 +26,8 @@ different parameters to differ on the same ids, so a PASS cannot come from a
 comparison that compares nothing.
 
 The resident sessions and the stateless calls create device contexts in one
-process (the DEVIATION 2494 shape). If the second-context hang is open on
-the box, run with MOJOLEARN_BYTE_LM_KEEP_CONTEXT=1 and say so in the record.
+process (the DEVIATION 2494 shape). (The opt-in context keeper,
+MOJOLEARN_BYTE_LM_KEEP_CONTEXT, was deleted 2026-11-19.)
 
 Exits 0 when every comparison is equal, 1 on any difference, and 2 when the
 sweep could not run.

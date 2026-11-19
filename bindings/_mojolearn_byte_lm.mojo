@@ -42,7 +42,7 @@ from std.python.bindings import PythonModuleBuilder
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from core.byte_lm_teardown_switch import byte_lm_teardown_with_gil
 from training.byte_lm_binding_impl import (
-    ByteLMSession, BYTE_LM_CONTEXT_KEEPER,
+    ByteLMSession,
     _span_cells, _validate_addresses, _require_inputs_unchanged, _write_f32,
     _btick, _bbytes, _require_same_bits,
     _require_binding_profile, _validate_slot_table,
