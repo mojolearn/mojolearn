@@ -408,6 +408,7 @@ DEBT = {
     'bindings/py2mojo_cluster_est_pack.mojo': {'native_loaded_module': 1},
     'bindings/py_attr.mojo': {'cpython': 1},
     'bindings/py_balanced.mojo': {'cpython': 9, 'native_loaded_module': 1},
+    'bindings/py_keys.mojo': {'cpython': 1, 'native_loaded_module': 1},
     'bindings/py_lists.mojo': {'cpython': 8},
     'bindings/py_slice_native.mojo': {'cpython': 1},
     'bindings/py_typed_call.mojo': {'cpython': 3, 'native_loaded_module': 1},
