@@ -2934,16 +2934,8 @@
    "b_arms": [
     "dbscan-brute-edge-free"
    ],
-   "decides": "lighter A/B (Andrew, 2026-11-17): the B arm only, against the stored A time of the same code (994 s taxi / 596 s istella), each B round capped at that time (a B run that reaches it is not faster than base); promote B (the edge-free brute route) unless it is slower than A (the byte adjacency / CSR / weak_cc brute route) at equal quality on the NVIDIA L40S; labels must not move (same accumulation and compare per bit, union-find = weak_cc fixed point)",
-   "stored_base": {
-    "source": "the d95f805cce full board on the NVIDIA L40S (job board-all, 2026-11-16; ~/mojolearn-evidence/measure-candidate/build-d95f805cce/full/board-all/board.json), the same DBSCAN brute code as the A arm",
-    "version": "wheel d95f805cce",
-    "host_id": "26ee0a3b0f86/GPU-8bc3da1b-3c66-b8ff-4a7b-2ea4d725241c",
-    "cap": true,
-    "cells": {
-     "classical/dbscan/taxi/rows=full fit ours": 994212.672
-    }
-   }
+   "decides": "A/B with base and arm back to back in the same job (lane fx-same-pod-prior, 2026-11-19; it was the B arm only against an A time stored from host 26ee0a3b0f86, 994 s taxi / 596 s istella, which another host's base exceeds), each B round capped at the time this job's base took for the race (a B run that reaches it is not faster than base); promote B (the edge-free brute route) unless it is slower than A (the byte adjacency / CSR / weak_cc brute route) at equal quality on the NVIDIA L40S; labels must not move (same accumulation and compare per bit, union-find = weak_cc fixed point)",
+   "cap_base": true
   },
   {
    "id": "dbscan-brute-edge-free-istella",
@@ -2956,16 +2948,8 @@
    "b_arms": [
     "dbscan-brute-edge-free"
    ],
-   "decides": "lighter A/B (Andrew, 2026-11-17): the B arm only, against the stored A time of the same code (994 s taxi / 596 s istella), each B round capped at that time (a B run that reaches it is not faster than base); promote B (the edge-free brute route) unless it is slower than A (the byte adjacency / CSR / weak_cc brute route) at equal quality on the NVIDIA L40S; labels must not move (same accumulation and compare per bit, union-find = weak_cc fixed point)",
-   "stored_base": {
-    "source": "the d95f805cce full board on the NVIDIA L40S (job board-all, 2026-11-16; ~/mojolearn-evidence/measure-candidate/build-d95f805cce/full/board-all/board.json), the same DBSCAN brute code as the A arm",
-    "version": "wheel d95f805cce",
-    "host_id": "26ee0a3b0f86/GPU-8bc3da1b-3c66-b8ff-4a7b-2ea4d725241c",
-    "cap": true,
-    "cells": {
-     "classical/dbscan/istella/rows=full fit ours": 595778.761
-    }
-   }
+   "decides": "A/B with base and arm back to back in the same job (lane fx-same-pod-prior, 2026-11-19; it was the B arm only against an A time stored from host 26ee0a3b0f86, 994 s taxi / 596 s istella, which another host's base exceeds), each B round capped at the time this job's base took for the race (a B run that reaches it is not faster than base); promote B (the edge-free brute route) unless it is slower than A (the byte adjacency / CSR / weak_cc brute route) at equal quality on the NVIDIA L40S; labels must not move (same accumulation and compare per bit, union-find = weak_cc fixed point)",
+   "cap_base": true
   },
   {
    "id": "dbscan-brute-edge-free-taxi-250k",
