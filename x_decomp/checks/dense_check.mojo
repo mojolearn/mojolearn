@@ -2,14 +2,17 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Seams DEVIATION 5307-5309 and 5320 of the decomp lane: the LU pivot and
 its tie (5307), the right-looking substitution folds of lu_solve and the Cholesky's (5308),
-the two-pass modified Gram-Schmidt (5309), and the Householder QR that keeps
-its reflectors with its explicit Q (geqrf + orgqr, 5320).
+the two-pass orthonormalisation (5309: `orth_diag` in every mode) and the one
+blocked TSQR pass that IDENTICAL `orth` has been since 2026-10-10
+(RSVD_IDN_TSQR_ORTHO), and the Householder QR that keeps its reflectors with
+its explicit Q (geqrf + orgqr, 5320).
 
     tools/with_identical_mode.sh pixi run mojo run -I . x_decomp/checks/dense_check.mojo
 """
 from core.identity_trace import IdentityTrace
 from x_decomp.checks.xd_oracles import (
-    oracle_chol, oracle_geqrf, oracle_lu, oracle_lu_solve, oracle_lu_solve_t, oracle_orgqr, oracle_orth,
+    oracle_chol, oracle_geqrf, oracle_lu, oracle_lu_solve, oracle_lu_solve_t, oracle_orgqr, oracle_orth_diag,
+    oracle_orth_tsqr,
 )
 from x_decomp.checks.seam_util import (
     count_diff_f32,
@@ -182,16 +185,66 @@ def run_checks() raises:
         # DEVIATION 5318: column 4 = 2 * column 3 + a perturbation 2^-20 of
         # column 5, numerically dependent at the 2^-16 guard
         q[t * l + 4] = Float32(2) * q[t * l + 3] + Float32(9.5367431640625e-07) * q[t * l + 5]
-    var wq = oracle_orth(q, mm, l)
-    require_separates("5309 orth passes (two vs one)", count_diff_f32(wq, oracle_orth(q, mm, l, 1)))
-    require_separates("5318 orth rank guard", count_diff_f32(wq, oracle_orth(q, mm, l, 2)))
+    # The two-pass route (qr_factor's R, the rank guard, trsm_row; twice):
+    # `orth_diag` in every mode (linalg.svd's U), and `orth` itself in FAST
+    # and for the shapes the TSQR does not take.
+    var want2 = oracle_orth_diag(q, mm, l)
+    require_separates("5309 orth passes (two vs one)", count_diff_f32(want2[0], oracle_orth_diag(q, mm, l, 1)[0]))
+    require_separates("5318 orth rank guard", count_diff_f32(want2[0], oracle_orth_diag(q, mm, l, 2)[0]))
+    var qd2 = q.copy()
+    var dd2 = zeros(l)
+    DevExec.orth_diag(ptr(qd2), mm, l, ptr(dd2))
+    same("5309 orth_diag device", count_diff_f32(qd2, want2[0]))
+    same("5309 orth_diag device R diagonals", count_diff_f32(dd2, want2[1]))
+    var qh2 = q.copy()
+    var dh2 = zeros(l)
+    HostExec.orth_diag(ptr(qh2), mm, l, ptr(dh2))
+    same("5309 orth_diag host", count_diff_f32(qh2, want2[0]))
+    same("5309 orth_diag host R diagonals", count_diff_f32(dh2, want2[1]))
+    # `orth`: under IDENTICAL one blocked TSQR pass with the rank-guarded
+    # selection (x_decomp/tsqr_core.mojo RSVD_IDN_TSQR_ORTHO, the default
+    # since 06865c6d84, 2026-10-10) on both columns. Until 2026-11-19 this
+    # case held `orth` to the two-pass oracle above, which the promotion left
+    # behind; it sat behind an earlier stale case and had never run. FAST
+    # keeps the two passes and `same` makes no claim there.
+    var wq = oracle_orth_tsqr(q, mm, l)
+    require_separates("5309 orth TSQR chains (16 vs one)", count_diff_f32(wq, oracle_orth_tsqr(q, mm, l, 1)))
+    require_separates("5318 orth TSQR rank guard", count_diff_f32(wq, oracle_orth_tsqr(q, mm, l, 2)))
+    require_separates("5309 orth route (TSQR vs two passes)", count_diff_f32(wq, want2[0]))
     var qd = q.copy()
     DevExec.orth(ptr(qd), mm, l)
-    same("5309 orth device", count_diff_f32(qd, wq))
     var qh = q.copy()
     HostExec.orth(ptr(qh), mm, l)
+    # the two columns against each other first, so a failure of the lines
+    # after it is the oracle's restatement and not a column
+    same("5309 orth device vs host replay", count_diff_f32(qd, qh))
+    same("5309 orth device", count_diff_f32(qd, wq))
     same("5309 orth host", count_diff_f32(qh, wq))
     tr.record_list_f32("x_decomp.orth", qd)
+    # The TSQR orth beyond what the oracle restates (three leaf blocks, the
+    # combine tree, three panels in two pairs): the device against its host
+    # replay, with a dependent and a zero column.
+    var tm = 3 * 2048 + 37
+    var tl = 40
+    var tq = List[Float32](capacity=tm * tl)
+    var tst = UInt64(5309) * UInt64(2654435761) + UInt64(1)
+    for _ in range(tm * tl):
+        tq.append(lcg_unit(tst) * Float32(4) - Float32(2))
+    for t in range(tm):
+        tq[t * tl + 7] = Float32(2) * tq[t * tl + 3]
+        tq[t * tl + 21] = Float32(0)
+    var tqh = tq.copy()
+    HostExec.orth(ptr(tqh), tm, tl)
+    var tqd = tq.copy()
+    DevExec.orth(ptr(tqd), tm, tl)
+    same("5309 orth device vs host replay " + String(tm) + " x " + String(tl), count_diff_f32(tqd, tqh))
+    var tzero = 0
+    for t in range(tm):
+        if tqh[t * tl + 7] != Float32(0) or tqh[t * tl + 21] != Float32(0):
+            tzero += 1
+    if tzero != 0:
+        raise Error("SEAM 5318 orth TSQR: a dependent column is not exactly zero in " + String(tzero) + " rows")
+    print("  5318 orth TSQR dependent columns: exactly zero")
     # ---- 5320 geqrf + orgqr, a tall, a wide and a rank-deficient matrix,
     # and (lane hr-qr) a tall one of several slices (x_decomp/qr_sliced.mojo)
     for shape in range(4):
@@ -253,10 +306,13 @@ def run_checks() raises:
         var s_h = zeros(bn)
         var v_h = zeros(bn * bn)
         HostExec.svd(ptr(bh), bm, bn, ptr(s_h), ptr(v_h))
+        # the input list's last named use was the pointer above: held to here
+        _ = bh^
         var bd = ba.copy()
         var s_d = zeros(bn)
         var v_d = zeros(bn * bn)
         DevExec.svd(ptr(bd), bm, bn, ptr(s_d), ptr(v_d))
+        _ = bd^
         var tag = String(bm) + " x " + String(bn)
         same("bounded device svd values " + tag, count_diff_f32(s_d, s_h))
         same("bounded device svd vectors " + tag, count_diff_f32(v_d, v_h))
@@ -264,6 +320,7 @@ def run_checks() raises:
         var s_c = zeros(bn)
         var v_c = zeros(bn * bn)
         DevExec.svd_cells(ptr(bc), bm, bn, ptr(s_c), ptr(v_c), 4096)
+        _ = bc^
         same("bounded device svd values cut small " + tag, count_diff_f32(s_c, s_h))
         same("bounded device svd vectors cut small " + tag, count_diff_f32(v_c, v_h))
         tr.record_list_f32("x_decomp.svd_bounded", v_d)
