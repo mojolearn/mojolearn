@@ -30,6 +30,7 @@ from ivf.impl.neighbors.ivf_flat.ivf_flat_build import IvfFlatBuildDevice, ivf_t
 from ivf.impl.neighbors.ivf_flat.ivf_flat_index import ivf_explicit_train_rows, ivf_explicit_train_stride
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_mul_add, identical_sqrt
 from x_ann.io import upload_f32, upload_i32, download_f32, download_i32, enqueue_query_status
+from x_ann.io import upload_f32_ptr, upload_i32_ptr, download_f32_into, download_i32_into
 from x_ann.refine_core import refine_cell
 from x_ann.ivf_rabitq_core import rq_encode_cell, rq_pow2, rq_scale
 from x_ann.ivf_sq_core import sq_encode_cell, sq_hi_takes, sq_lo_takes, sq_range_finish
@@ -843,21 +844,59 @@ def refine_device(
     x: List[Float32], n: Int, d: Int, queries: List[Float32], m: Int, cand: List[Int32], k0: Int, k: Int,
     mut out_d: List[Float32], mut out_i: List[Int32], root: Bool = False, status_addr: Int = 0,
 ) raises:
+    """The list form (the checks'): `refine_device_ptr` on the lists' own
+    words, the results in two new lists."""
+    if len(x) < n * d or len(queries) < m * d or len(cand) < m * k0:
+        raise Error("refine: an input list is shorter than its shape")
+    var rd = List[Float32](unsafe_uninit_length=m * k)
+    var ri = List[Int32](unsafe_uninit_length=m * k)
+    refine_device_ptr(
+        MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(x.unsafe_ptr())), n, d,
+        MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(queries.unsafe_ptr())), m,
+        MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(cand.unsafe_ptr())), k0, k,
+        MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(rd.unsafe_ptr())),
+        MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(ri.unsafe_ptr())),
+        root, status_addr,
+    )
+    # the inputs are named here, after the drains inside the call above
+    _ = len(x)
+    _ = len(queries)
+    _ = len(cand)
+    out_d = rd^
+    out_i = ri^
+
+
+def refine_device_ptr(
+    xp: MutPointer[Float32, MutUntrackedOrigin], n: Int, d: Int,
+    qp: MutPointer[Float32, MutUntrackedOrigin], m: Int,
+    candp: MutPointer[Int32, MutUntrackedOrigin], k0: Int, k: Int,
+    out_dp: MutPointer[Float32, MutUntrackedOrigin], out_ip: MutPointer[Int32, MutUntrackedOrigin],
+    root: Bool, status_addr: Int,
+) raises:
+    """`refine` on the CALLER's arrays (lane fx-board-modelsel-metrics,
+    2026-11-19): the dataset (n x d), the queries (m x d) and the candidate
+    ids (m x k0) are uploaded from where they are, and the m x k distances
+    and ids are written where the caller wants them. Before, the binding
+    copied all three inputs into new lists first (the whole dataset: 880 MB
+    of first-touch pages for 1,000,000 x 220, two thirds of the call's wall
+    as system time) and the results into lists and out again. The same
+    words go to the same kernel; the caller keeps every array alive for the
+    whole call (each copy is drained before the return)."""
     var ctx = x_ann_ctx()
-    var dx = upload_f32(ctx, x)
-    var dq = upload_f32(ctx, queries)
+    var dx = upload_f32_ptr(ctx, xp, n * d)
+    var dq = upload_f32_ptr(ctx, qp, m * d)
     # Lane a8b-device-x-neighbors-rest: the dataset's and the queries'
     # finite status behind their uploads, read back by the downloads below.
     var dst = enqueue_query_status(ctx, dx, n * d, dq, m * d, status_addr)
-    var dcand = upload_i32(ctx, cand)
+    var dcand = upload_i32_ptr(ctx, candp, m * k0)
     var dd = ctx.enqueue_create_buffer[DType.float32](m * k)
     var di = ctx.enqueue_create_buffer[DType.int32](m * k)
     ctx.enqueue_function[refine_kernel](Int32(m), dx.unsafe_ptr(), Int32(n), Int32(d), dq.unsafe_ptr(),
                                         dcand.unsafe_ptr(), Int32(k0), Int32(k), dd.unsafe_ptr(), di.unsafe_ptr(),
                                         Int32(1) if root else Int32(0), grid_dim=_grid(m), block_dim=TPB)
     ctx.synchronize()
-    out_d = download_f32(ctx, dd, m * k)
-    out_i = download_i32(ctx, di, m * k)
+    download_f32_into(ctx, dd, m * k, out_dp)
+    download_i32_into(ctx, di, m * k, out_ip)
     _ = di^
     _ = dd^
     _ = dcand^
