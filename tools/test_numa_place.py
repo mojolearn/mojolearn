@@ -164,9 +164,8 @@ def test_allocation_reads_v2_root_own_path_and_no_quota(tmp_path, monkeypatch):
     assert NP.allocation_cores() == 16                      # never above the affinity
 
 
-def test_v1_quota_binds_the_workers_to_the_gpu_node(two_nodes, tmp_path, monkeypatch):
+def test_v1_quota_binds_the_workers_to_the_gpu_node(tmp_path, monkeypatch):
     # the pod of the pair job: 14 quota cores, the GPU's node holds 16 of the 32 visible: bound, no core lost
-    monkeypatch.undo()
     root = tmp_path / "node2"
     for n, cpus in ((0, "0-15"), (1, "16-31")):
         d = root / ("node%d" % n)
