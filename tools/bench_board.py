@@ -1466,6 +1466,10 @@ def child_env(ctx, extra=None):
     env["MOJOLEARN_REPO_COMMIT"] = ctx.get("commit") or "unknown"
     env["PYTHONUNBUFFERED"] = "1"
     env["MOJOLEARN_BOARD_VENDOR"] = ctx["vendor"]     # tools/bench_board_probe.py
+    # one NUMA plan per job (lane fx-numa-bind-smoke, 2026-11-19; tools/numa_place.py job_plan): made once here and
+    # inherited by every driver, so a race's parameter probe and its timed worker carry the same placement
+    numa = _numa_place()
+    env[numa.PLAN_ENV] = json.dumps(numa.job_plan(), sort_keys=True)
     if ctx["vendor"] == "amd":
         # FAIRNESS FIX (2026-10-13 audit): setup set this only in its own
         # process. A later smoke/timing worker could not import HIP CuPy, so

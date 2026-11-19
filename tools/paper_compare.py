@@ -1177,7 +1177,11 @@ def unbound_node(cell):
     """The NUMA node an UNBOUND worker of CELL was on when it recorded itself, else None (no record, bound by the
     conductor, or node unknown)."""
     wn = (cell or {}).get("worker_numa")
-    if not isinstance(wn, dict) or (wn.get("placement") or {}).get("node") is not None:
+    if not isinstance(wn, dict):
+        return None
+    # a placement asked but not applied (the worker's affinity outside the planned cores; tools/numa_place.py
+    # worker_node "bound": False, lane fx-numa-bind-smoke 2026-11-19) is unbound too
+    if (wn.get("placement") or {}).get("node") is not None and wn.get("bound") is not False:
         return None
     node = wn.get("node_now")
     return node if isinstance(node, int) and not isinstance(node, bool) else None
