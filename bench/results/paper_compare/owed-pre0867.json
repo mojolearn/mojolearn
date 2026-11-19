@@ -684,14 +684,15 @@
   },
   "gemm-loadahead-2": {
    "define": "MOJOLEARN_GEMM_FAST_LOADAHEAD",
-   "status": "define in code (gemm/checks/gemm_identical.mojo GEMM_KPACK_LOADAHEAD, read by identical_gemm_kpack_kernel's accumulate; IDENTICAL, every vendor column compiles the same loop): B = the admitted and the exact window of the packed GEMM kernel read the operands of 2 consecutive steps with one shared load per operand, then run their FMAs, steps ascending per cell; A = the default: the two loads of each step issued immediately before its FMAs. Same words, same step function, same per-cell order: digests must not move. Build every binding that imports gemm/checks/gemm_identical.mojo with the define. Report ptxas registers and spill bytes of the kpack kernel for A and B",
+   "status": "DELETED 2026-11-19 (lane fx-verdicts4) with depth 4: NOISE at depth 2, LOSS at depth 4; both defines are refused (core/experiment_guards_neural.mojo); code recoverable at 8f3f639b13, experiments/removed/MOJOLEARN_GEMM_FAST_LOADAHEAD.patch.",
    "owed": "DECIDED",
    "evidence": "A/B round 1 2026-11-19, NVIDIA L40S host bd9c355c19c0 (14-core cgroup), wheel 0c68d6cd27 and its B set, base and arm back to back in one pod job (nvc1-0006, tag nvc-ab-20261119T125554Z-6f7afc; ~/mojolearn-evidence/measure-candidate/build-0c68d6cd27/ab1/x/, tables ~/mojolearn-evidence/briefs-20261118/fx-verdicts3/tab-<arm>.txt), one scored run per arm: digests equal; arm/base gemm 4096^3 0.97, lm-train-step 1.00, lm-forward 1.06: NOISE at depth 2, not promoted; the code is shared with gemm-loadahead-4 (not timed), which decides promote-at-4 or delete-whole (lane fx-verdicts3)"
   },
   "gemm-loadahead-4": {
    "define": "MOJOLEARN_GEMM_FAST_LOADAHEAD,MOJOLEARN_GEMM_FAST_LOADAHEAD_STEPS=4",
-   "status": "define in code (gemm/checks/gemm_identical.mojo GEMM_KPACK_LOADAHEAD, read by identical_gemm_kpack_kernel's accumulate; IDENTICAL, every vendor column compiles the same loop): B = the admitted and the exact window of the packed GEMM kernel read the operands of 4 consecutive steps with one shared load per operand, then run their FMAs, steps ascending per cell; A = the default: the two loads of each step issued immediately before its FMAs. Same words, same step function, same per-cell order: digests must not move. Build every binding that imports gemm/checks/gemm_identical.mojo with the define. Report ptxas registers and spill bytes of the kpack kernel for A and B",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-19 (lane fx-verdicts4): LOSS at depth 4 (depth 2 was NOISE); both defines are refused (core/experiment_guards_neural.mojo); code recoverable at 8f3f639b13, experiments/removed/MOJOLEARN_GEMM_FAST_LOADAHEAD.patch.",
+   "owed": "DECIDED",
+   "evidence": "A/B round 2 2026-11-19, NVIDIA L40S host bd9c355c19c0, wheel 0c68d6cd27 and its B set, base and arm in one pod job (nvc1-0008, tag nvc-ab-20261119T154232Z-0642a5; ~/mojolearn-evidence/measure-candidate/build-0c68d6cd27/ab2/x/, tables ~/mojolearn-evidence/briefs-20261118/fx-verdicts4/tab-<arm>.txt), one scored run per arm: depth 4: gemm 4096^3 62.30 -> 62.24 ms (1.00), lm-train-step 36.70 -> 37.66 (1.03), lm-forward 21.35 -> 29.85 (1.40; the row's three bases in the job 21.35-21.96), matmul 512 x 4096 x 4096 8.18 -> 9.69 (1.18), 3000 x 700 x 900 2.86 -> 3.46 (1.21); digests and quality equal. LOSS: deleted with depth 2."
   },
   "gemm-leaf512": {
    "define": "MOJOLEARN_GEMM_FAST_LEAF512",
