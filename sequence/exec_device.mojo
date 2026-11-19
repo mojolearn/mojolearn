@@ -66,6 +66,10 @@ from sequence.gemm_split import GEMM_SPLITK, OP_GK_SPLIT, gemm_split_args, gemm_
 # lane fx-gemm-seq-packed: -D MOJOLEARN_GEMM_FAST_SEQ_PACKED (default off), the large products on the neural packed body
 from sequence.gemm_packed_route import SEQ_GEMM_PACKED, SP_NONE, GR_PROF_PACKED, seq_gemm_packed_on, seq_gemm_packed_launch
 from sequence.gemm_packed_route import SEQ_GEMM_PACKED_EPI, seq_gemm_packed_epi_kind, seq_gemm_packed_epi_launch
+# lane fx-fast-matrix-units (2026-11-19): the matrix-units relaxation of an NVIDIA `fast` build (default OFF).
+from sequence.gemm_matrix_units_route import (
+    SEQ_GEMM_MATRIX_UNITS, SMU_NONE, seq_gemm_matrix_units_on, seq_gemm_matrix_units_launch,
+)
 from sequence.ops import OP_GEMM_EPI_TAIL
 from sequence.ops import OP_GEMM_EPI
 from autograd.ops import OP_AGK_GEMM_EPI, agk_colsum_args
@@ -1348,6 +1352,23 @@ struct DeviceExec(Exec, Movable):
                     block_dim=(TPB, 1, 1),
                 )
                 self.execution_profile.kernel()
+                return
+        # lane fx-fast-matrix-units (-D MOJOLEARN_GEMM_FAST_MATRIX_UNITS=1, default OFF, A/B owed with quality; legal
+        # only in an NVIDIA `fast` build): a large plain dense product with row-major operands runs the TF32
+        # tensor-core product, FP32 accumulation (sequence/gemm_matrix_units_route.mojo: the rule, what is not
+        # routed, the error bound). An epilogue opcode then runs its follower in FP32 as OP_GEMM_EPI_TAIL on the
+        # stored words, the launch pair of the packed route below. After the split-K and coop tests above, which
+        # keep their products; ahead of the packed rule, whose body is the FP32 chain. Per call under the arm:
+        # seven integer tests, one launch, and one more for an epilogue; no lookup, allocation or wait.
+        comptime if SEQ_GEMM_MATRIX_UNITS and (
+                OP == OP_GEMM or OP == OP_AGK_GEMM_EPI or OP == OP_GEMM_EPI):
+            var units_form = seq_gemm_matrix_units_on[OP](a)
+            if units_form != SMU_NONE:
+                seq_gemm_matrix_units_launch(self.ctx, a, units_form)
+                self.execution_profile.kernel()
+                comptime if OP != OP_GEMM:
+                    if seq_gemm_epi_kind(a.i9, a.i10) != GK_PLAIN:
+                        self._launch[OP_GEMM_EPI_TAIL](a, a.i0 * a.i1)
                 return
         # lane fx-gemm-seq-packed (-D MOJOLEARN_GEMM_FAST_SEQ_PACKED, default OFF, A/B owed): a large
         # plain dense product (the size rule and the order argument are sequence/gemm_packed_route.mojo's
