@@ -350,6 +350,19 @@ def host_parse_jobs(view):
     return [j for j in view.get("jobs") or () if j["name"].startswith(("host-parse", "device-parse"))]
 
 
+def parse_group_jobs(jobs):
+    """The last attempt of each parse group (lane fx-trees-device-parse, 2026-11-19): native-checks retries a device
+    group once, as `device-parse retry <key> sm_89`, when its first runner was lost or its parse was killed at the
+    limit, so a group passes when its retry passed. A retry that has not finished yet is its last attempt."""
+    last = {}
+    for j in jobs:
+        retry = j["name"].startswith("device-parse retry ")
+        key = j["name"].replace("device-parse retry ", "device-parse ", 1)
+        if retry or key not in last:
+            last[key] = j
+    return list(last.values())
+
+
 def run_host_parse(commit, ref, workdir, timeout):
     """The `host-parse` part. Reuse a passed run of COMMIT, wait for one in progress, or dispatch one on REF."""
     title = f"native-checks {commit} "
@@ -360,7 +373,7 @@ def run_host_parse(commit, ref, workdir, timeout):
         if r["status"] != "completed":
             chosen = chosen or r["databaseId"]
             continue
-        jobs = host_parse_jobs(gh_json("run", "view", str(r["databaseId"]), "--json", "jobs"))
+        jobs = parse_group_jobs(host_parse_jobs(gh_json("run", "view", str(r["databaseId"]), "--json", "jobs")))
         # a run from before device-parse parsed no GPU unit: it is not reused
         if (jobs and all(j["conclusion"] == "success" for j in jobs)
                 and any(j["name"].startswith("device-parse") for j in jobs)):
@@ -378,7 +391,7 @@ def run_host_parse(commit, ref, workdir, timeout):
     else:
         print(f"HOST-PARSE waiting for run {chosen} already in progress for {commit[:12]}")
     view = wait_run(chosen, timeout, "host-parse")
-    jobs = host_parse_jobs(view)
+    jobs = parse_group_jobs(host_parse_jobs(view))
     bad = [j for j in jobs if j["conclusion"] != "success"]
     for j in jobs:
         print(f"HOST-PARSE {j['conclusion'] or j['status']} {j['name']}")
