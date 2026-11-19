@@ -193,6 +193,7 @@ from checks.native_tests.training_neural_rng_slices import register as register_
 from checks.native_tests.training_primitives import register as register_training_primitives
 from checks.native_tests.training_residual_dropout_mask import register as register_training_residual_dropout_mask
 from checks.native_tests.training_small_mlp import register as register_training_small_mlp
+from checks.native_tests.transformer_backward_packed import register as register_transformer_backward_packed
 from checks.native_tests.transformer_block_session import register as register_transformer_block_session
 from checks.native_tests.transformer_decode_door import register as register_transformer_decode_door
 from checks.native_tests.transformer_host_block import register as register_transformer_host_block
@@ -627,6 +628,7 @@ def all_checks() -> List[Check]:
     checks.append(register_training_primitives())
     checks.append(register_training_residual_dropout_mask())
     checks.append(register_training_small_mlp())
+    checks.append(register_transformer_backward_packed())
     checks.append(register_transformer_block_session())
     checks.append(register_transformer_decode_door())
     checks.append(register_transformer_host_block())
