@@ -6,10 +6,15 @@ from bindings.py_balanced import py_call, py_type, py_setitem, py_contains
 from bindings.sequential_admission_door import _one_of
 from providers.python.autoarima_lifecycle_pyapi_door import _fields, _integer
 from providers.python.forecast_owner_pyapi_unpack import forecast_commit
+from bindings.forecast_keys_unpack import forecast_keys
+from bindings.py_balanced import py_item
 
 
 def _scalar(value: PythonObject, context: PythonObject) raises:
     var cls = py_type(value)
-    if value is None or cls is py_type(PythonObject("")) or cls is py_type(PythonObject(True)) or cls is py_type(PythonObject(0)) or cls is py_type(PythonObject(0.0)) or _one_of(cls, context["scalar_types"]):
+    if value is None or cls is py_type(PythonObject("")) or cls is py_type(PythonObject(True)) or cls is py_type(PythonObject(0)) or cls is py_type(PythonObject(0.0)):
+        return
+    var nk = forecast_keys()  # after the plain-scalar return: that path reads no key
+    if _one_of(cls, py_item(context, nk[].k_scalar_types)):
         return
     raise Error("TypeError: forecast constructor settings require native scalar values")
