@@ -196,16 +196,20 @@ def case_mamba_backward(row, arm_cases):
           "A_log": np.log(np.tile(np.arange(1, 17, dtype=np.float32), (di, 1))), "D": np.ones((di,), np.float32),
           "out_proj.weight": w(dm, di)}
     block1 = ml.Mamba1Block(m1, numeric_mode="identical")
-    ms, why = timed(lambda: block1.backward(x, dy))
-    out.append(("Mamba1Block.backward b=%d l=%d d_model=%d" % (b, l, dm), ms, why))
+    # the median of 20 consecutive calls after one warm-up, with the spread (lane fx-verdicts4, 2026-11-19: A/B round
+    # 2 timed one call an arm and read 0.95 / 0.99, against the n = 20 record on file of 1.05 / 1.01)
+    ms, why, spread = _median_of_calls(lambda: block1.backward(x, dy), 20)
+    out.append(("Mamba1Block.backward b=%d l=%d d_model=%d" % (b, l, dm), ms, why, spread))
     nh, cd = di // 64, di + 256
     m2 = {"block_norm.weight": np.ones((dm,), np.float32), "in_proj.weight": w(2 * di + 256 + nh, dm),
           "conv1d.weight": w(cd, 1, 4), "conv1d.bias": w(cd), "dt_bias": w(nh),
           "A_log": np.log(np.arange(1, nh + 1, dtype=np.float32)), "D": np.ones((nh,), np.float32),
           "norm.weight": np.ones((di,), np.float32), "out_proj.weight": w(dm, di)}
     block2 = ml.Mamba2Block(m2, numeric_mode="identical")
-    ms, why = timed(lambda: block2.backward(x, dy))
-    out.append(("Mamba2Block.backward b=%d l=%d d_model=%d" % (b, l, dm), ms, why))
+    # the median of 20 consecutive calls after one warm-up, with the spread (lane fx-verdicts4, 2026-11-19: A/B round
+    # 2 timed one call an arm and read 0.95 / 0.99, against the n = 20 record on file of 1.05 / 1.01)
+    ms, why, spread = _median_of_calls(lambda: block2.backward(x, dy), 20)
+    out.append(("Mamba2Block.backward b=%d l=%d d_model=%d" % (b, l, dm), ms, why, spread))
     return out
 
 
