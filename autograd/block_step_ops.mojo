@@ -101,6 +101,7 @@ from mamba.impl.modules.mamba3 import (
 from transformer.impl.llama.modeling_llama import (
     LlamaDims, LlamaDeviceWeights, LlamaKVCache, LlamaRopeTable, LlamaDeviceStages, llama_decoder_layer_forward,
     residual_next_norm_fusion_enabled, LLAMA_FAST_REFUSE_WATERMARK, llama_kv_cache_rewind,
+    LLAMA_FAST_STAGE_KEEP,
 )
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_APPLE
 from transformer.block_options import BlockOptions, BLOCK_OPTION_PARAMS
@@ -999,6 +1000,31 @@ struct BlockStepScratch(Movable):
     def count(self) -> Int:
         return len(self.m1) + len(self.m2) + len(self.m3) + len(self.attn)
 
+    def park_arenas_m1(mut self, i: Int):
+        """Entry `i` is about to be dropped: its arena moves to
+        `parked_arena`, which `release_parked` frees after every parked view.
+        fx-leftovers-product (2026-11-19): dropping the entry freed the arena
+        while a parked run's views of it (and, under
+        MAMBA_FAST_DECODE_STAGE_ARENA, every parked decode token's stages)
+        were still parked: storage freed before its views, and before the
+        stream that reads them drained."""
+        if self.m1[i].held_arena:
+            self.parked_arena.append(self.m1[i].held_arena.take())
+
+    def park_arenas_m2(mut self, i: Int):
+        """`park_arenas_m1` for a Mamba-2 entry (held and decode arenas)."""
+        if self.m2[i].held_arena:
+            self.parked_arena.append(self.m2[i].held_arena.take())
+        if self.m2[i].dec_arena:
+            self.parked_arena.append(self.m2[i].dec_arena.take())
+
+    def park_arenas_m3(mut self, i: Int):
+        """`park_arenas_m1` for a Mamba-3 entry (held and decode arenas)."""
+        if self.m3[i].held_arena:
+            self.parked_arena.append(self.m3[i].held_arena.take())
+        if self.m3[i].dec_arena:
+            self.parked_arena.append(self.m3[i].dec_arena.take())
+
     def forget(mut self, addr: Int):
         """Drop every entry built over the session buffer at `addr` (its
         weights or its state were written from outside a step, or freed)."""
@@ -1009,16 +1035,19 @@ struct BlockStepScratch(Movable):
         var i = len(self.m1) - 1
         while i >= 0:  # driver-loop: over resident Mamba-1 blocks
             if self.m1[i].w_addr == addr or self.m1[i].s_addr == addr:
+                self.park_arenas_m1(i)
                 _ = self.m1.pop(i)
             i -= 1
         i = len(self.m2) - 1
         while i >= 0:  # driver-loop: over resident Mamba-2 blocks
             if self.m2[i].w_addr == addr or self.m2[i].s_addr == addr or self.m2[i].q_addr == addr:
+                self.park_arenas_m2(i)
                 _ = self.m2.pop(i)
             i -= 1
         i = len(self.m3) - 1
         while i >= 0:  # driver-loop: over resident Mamba-3 blocks
             if self.m3[i].w_addr == addr or self.m3[i].s_addr == addr or self.m3[i].q_addr == addr:
+                self.park_arenas_m3(i)
                 _ = self.m3.pop(i)
             i -= 1
         i = len(self.attn) - 1
@@ -1028,6 +1057,13 @@ struct BlockStepScratch(Movable):
             i -= 1
 
     def clear(mut self):
+        # the arenas outlive the parked views of them (`park_arenas_m1`)
+        for i in range(len(self.m1)):  # driver-loop: over resident Mamba-1 blocks
+            self.park_arenas_m1(i)
+        for i in range(len(self.m2)):  # driver-loop: over resident Mamba-2 blocks
+            self.park_arenas_m2(i)
+        for i in range(len(self.m3)):  # driver-loop: over resident Mamba-3 blocks
+            self.park_arenas_m3(i)
         self.m1.clear()
         self.m2.clear()
         self.m3.clear()
@@ -1662,7 +1698,14 @@ struct AttnPrefill(Movable):
         self.ahead_used = False
 
     def prepare(mut self, ctx: DeviceContext, b: Int, l: Int, smax: Int, dims: LlamaDims, window: Int,
-                lean: Bool) raises:
+                lean: Bool, keep_bytes: Bool = False) raises:
+        """`keep_bytes` (lane fx-transformer-forward, read only on a build with
+        -D MOJOLEARN_LLAMA_FAST_STAGE_KEEP): the caller's promise that the run
+        it prepares is forward-only, so reused stages of the same shape get
+        their host flags back (`LlamaDeviceStages.reset_flags`) and keep
+        their bytes; the forward writes each stage whole before reading it
+        (modeling_llama `LLAMA_FAST_STAGE_KEEP`). Default build, or False:
+        the constructor's zeros again (`reset`: thirty fills and a wait)."""
         var reused = False
         self.ahead_used = False
         if self.stages:
@@ -1676,8 +1719,14 @@ struct AttnPrefill(Movable):
             # norm1 into them behind the reset (same stream).
             self.ahead_used = True
         elif reused:
-            # Every constructor zero and route flag back before the next run.
-            self.stages.value().reset(ctx)
+            var kept_bytes = False
+            comptime if LLAMA_FAST_STAGE_KEEP:
+                if keep_bytes:
+                    self.stages.value().reset_flags()
+                    kept_bytes = True
+            if not kept_bytes:
+                # Every constructor zero and route flag back before the next run.
+                self.stages.value().reset(ctx)
             self.stages.value().int15_on = False
         else:
             # Drop an incompatible owner before allocating its replacement.
@@ -1917,7 +1966,9 @@ def _run_attn_on(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], c
         # `_session_forward_run`: L-shaped stages, the caller's (kept) or
         # this run's own.
         var dims = _attn_dims(ints)
-        pre.prepare(ctx, b, l, ints[6], dims, ints[7], blk.lean)
+        # `forward_only`: no backward reads this run's stages, so a build with
+        # MOJOLEARN_LLAMA_FAST_STAGE_KEEP keeps their bytes (`prepare`).
+        pre.prepare(ctx, b, l, ints[6], dims, ints[7], blk.lean, forward_only)
         _d2d(ctx, pre.dx.value(), x, n)
         var n1r = norm1_ready and pre.ahead_used
         pre.ahead_used = False
@@ -2154,7 +2205,9 @@ def attn_step_fresh_prefill(
         var dims = _attn_dims(ints)
         # The L-shaped stages (0.8.66: the session workspace's), reset to the
         # constructor's zeros when reused, as `_stage_reset_on()` did by default.
-        pre.prepare(ctx, b, l, ints[6], dims, ints[7], blk.lean)
+        # This run is forward-only (below): a build with
+        # MOJOLEARN_LLAMA_FAST_STAGE_KEEP keeps the stage bytes (`prepare`).
+        pre.prepare(ctx, b, l, ints[6], dims, ints[7], blk.lean, True)
         # The bytes a fresh `LlamaKVCache` holds, on the device, no upload.
         # TOMBSTONE: MOJOLEARN_IDN_TF_SESSION_LEAN (loser: transformer-forward 1.350) deleted 2026-10-11 by 68d9654bb; code recoverable at 68d9654bb^.
         # Restore: git apply experiments/removed/MOJOLEARN_IDN_TF_SESSION_LEAN.patch

@@ -1196,6 +1196,21 @@ def attach_cell_marks(row, new_races, base_races):
     return row
 
 
+def opponent_rescore_rows(races):
+    """H2 of the 2026-11-18 generality review (lane fx-harness-honest): every race of the new boards whose own cell
+    carries a harness_clock that changed every arm's clock or settings key (tools/race_fairness.py
+    opponent_rescore_owed). Its stored opponent cells are BROKEN against it until the opponent job re-scores them
+    (Andrew set opponents aside: nothing here runs one); the compare lists them once so the gap is not lost.
+    Our arm's time and the HARNESS-CLOCK mark of these rows are shown as for any row. -> [{race_id, harness_clock}]"""
+    out = {}
+    for rid, race in sorted((races or {}).items()):
+        for c in (race.get("cells") or []) + (race.get("infer_cells") or []):
+            hc = RF.opponent_rescore_owed(c)
+            if hc:
+                out.setdefault(rid, hc)
+    return [{"race_id": rid, "harness_clock": hc} for rid, hc in sorted(out.items())]
+
+
 def marked_rows(res, flag):
     """Every recipe, extra and internal row carrying FLAG."""
     return [r for k in ("rows", "extra_rows", "internal_rows") for r in res.get(k) or [] if flag in r["flags"]]
@@ -1336,6 +1351,7 @@ def compare(doc, boards, not_run_why=None, prior_boards=None, reference=None, re
             "best_ever_label": be_label, "best_ever_source": (best_ever or {}).get("mined_at_head"),
             "extra_rows": extra, "extra_flag_counts": extra_counts,
             "internal_label": RF.CALL_OVERHEAD, "internal_rows": internal, "internal_flag_counts": internal_counts,
+            "opponent_rescore_owed": opponent_rescore_rows(races),
             "progress": [dict(board_progress(boards), arm="candidate")]
                         + [dict(board_progress([pb]), arm=v) for v, pb in prior_boards or []]}
 
@@ -1583,6 +1599,9 @@ def render_md(res):
                                                          " ".join(r["flags"]), note.replace("|", "/")))
         lines.append("")
     lines += render_internal_md(res)
+    rl = rescore_lines(res)
+    if rl:
+        lines += ["## Waiting for an opponent re-score", ""] + [rl[0], ""] + ["- `%s`" % l.strip() for l in rl[1:]] + [""]
     return "\n".join(lines)
 
 
@@ -1612,6 +1631,17 @@ def best_ever_cells(r):
     when = ", ".join(str(x) for x in (r.get("best_ever_date"), r.get("best_ever_release")) if x) or "-"
     return "%s | %s | %s | " % (fmt_ms(r.get("best_ever_ms")), when.replace("|", "/"),
                                 fmt_ratio(r.get("ratio_vs_best_ever")))
+
+
+def rescore_lines(res):
+    """The one list of races waiting for an opponent re-score (opponent_rescore_rows), for the summary and the md."""
+    owed = res.get("opponent_rescore_owed") or []
+    if not owed:
+        return []
+    return (["waiting for an opponent re-score (%d races: the harness clock or settings key changed on all arms; "
+             "their stored opponent cells are BROKEN until the opponent job scores them again; our times are shown "
+             "above):" % len(owed)]
+            + ["  %s (%s)" % (o["race_id"], o["harness_clock"]) for o in owed])
 
 
 def render_summary(res, top=8):
@@ -1713,6 +1743,7 @@ def render_summary(res, top=8):
         if hit:
             out.append("%s (%d): %s%s" % (flag, len(hit), ", ".join(r["key"] for r in hit[:6]),
                                           " ..." if len(hit) > 6 else ""))
+    out += rescore_lines(res)
     internal = res.get("internal_rows") or []
     if internal:
         out.append("internal checks (%s; not a race, our prior on this box only): %d; flags: %s" % (

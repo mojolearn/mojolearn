@@ -46,6 +46,12 @@ The host column runs the same blocks through the x_cnn host twins
 GPU module imports host threads); those split their element and GEMM work
 across cores.
 
+Waits (lane fx-rnn-cnn-fit, 2026-11-19): the four device calls below pass
+`may_defer` (x_cnn/device.mojo entry_end). A session's arguments are its own
+device buffers and it reads nothing on the host before its own wait, so
+under `-D MOJOLEARN_CNN_FAST_OP_NOWAIT` (default off, A/B owed) an op returns
+after its last launch; without the define every entry waits as before.
+
 A/B: `-D MOJOLEARN_CNN_GENERIC_OPS` captures tonight's generic chain
 (OPS_CONV2D, OPS_RELU, OPS_MAXPOOL2D, OPS_TRANSPOSE + OPS_LINEAR) instead;
 RUN OWED on NVIDIA and AMD (board rows algos/cnn-clf fit and predict).
@@ -147,7 +153,7 @@ def cnn_block_forward_device(
     conv_block_forward_into[True] call) over session device buffers; a save
     address of 0 is not saved."""
     conv_block_forward_into[True](
-        cnn_xp(x), cnn_xp(w), cnn_xp(b), cprm, pprm, pool, cnn_xp(dst), cnn_xi(idx), save_cols, save_y,
+        cnn_xp(x), cnn_xp(w), cnn_xp(b), cprm, pprm, pool, cnn_xp(dst), cnn_xi(idx), save_cols, save_y, True,
     )
 
 
@@ -159,18 +165,19 @@ def cnn_block_backward_device(
     (without dx the entry is handed the bias gradient there, never written)."""
     conv_block_backward_into[True](
         cnn_xp(x), cnn_xp(w), cnn_xp(b), cnn_xp(g), cnn_xi(idx), cprm, pprm, pool, need_dx,
-        cnn_xp(gx) if need_dx else cnn_xp(gb), cnn_xp(gw), cnn_xp(gb), save_cols, save_y,
+        cnn_xp(gx) if need_dx else cnn_xp(gb), cnn_xp(gw), cnn_xp(gb), save_cols, save_y, True,
     )
 
 
 def cnn_linear_forward_device(x: FP, w: FP, b: FP, n: Int, d_in: Int, d_out: Int, dst: FP) raises:
     """The hand epoch's head (`linear_forward_into[True]`: the CNN's pinned
     NT GEMM and its bias kernel)."""
-    linear_forward_into[True](cnn_xp(x), cnn_xp(w), cnn_xp(b), n, d_in, d_out, cnn_xp(dst))
+    linear_forward_into[True](cnn_xp(x), cnn_xp(w), cnn_xp(b), n, d_in, d_out, cnn_xp(dst), True)
 
 
 def cnn_linear_backward_device(
     x: FP, w: FP, g: FP, n: Int, d_in: Int, d_out: Int, gx: FP, gw: FP, gb: FP,
 ) raises:
     """`CnnRules._head`'s linear_backward_into[True] call, verbatim."""
-    linear_backward_into[True](cnn_xp(x), cnn_xp(w), cnn_xp(g), n, d_in, d_out, cnn_xp(gx), cnn_xp(gw), cnn_xp(gb))
+    linear_backward_into[True](cnn_xp(x), cnn_xp(w), cnn_xp(g), n, d_in, d_out, cnn_xp(gx), cnn_xp(gw), cnn_xp(gb),
+                               True)

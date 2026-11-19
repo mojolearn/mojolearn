@@ -23,7 +23,7 @@ from gbdt.host.gbdt_host_entries_impl import (
     gbdt_host_binary_row_weights,
     gbdt_host_eval_const,
     gbdt_host_group_sizes,
-    gbdt_host_has_nan_f32,
+    gbdt_host_read_f32_nan,
     gbdt_host_has_nan_ptr,
     gbdt_host_load_sources,
     gbdt_host_load_u32,
@@ -448,9 +448,10 @@ def _gbdt_fit_pointwise_arm(
     var test_losses = List[Float64]()
     var best_iteration = 0
     var stopped_early = False
-    var x = read_f32(x_address, n_rows * n_features)
-    var ex = read_f32(ex_address, n_eval_rows * n_features)
-    has_nan = gbdt_host_has_nan_f32(x) or gbdt_host_has_nan_f32(ex)
+    # One pass each: the NaN test rides the copy (it was a memcpy, then a
+    # second walk of the copy).
+    var x = gbdt_host_read_f32_nan(x_address, n_rows * n_features, has_nan)
+    var ex = gbdt_host_read_f32_nan(ex_address, n_eval_rows * n_features, has_nan)
     if not has_nan:
         var y = read_f32(y_address, n_rows)
         var w = read_f32(w_address, n_rows)

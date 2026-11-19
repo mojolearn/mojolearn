@@ -32,6 +32,10 @@ next case runs. Drivers (the row's "driver" field):
                 arm may be a B wheel set the row names
   gemm_shapes   linalg.matmul(a, b) (fp32, A [m, k] @ B [k, n], seeded standard normal) at each (m, n, k) case the
                 row names: the neighbouring and non-board shapes of a GEMM kernel arm; an arm may be a B wheel set
+  rnn_shapes    LSTMRegressor / GRURegressor / RNNRegressor .fit on a seeded synthetic series, X (rows, window,
+                features), at each case the row names (cell, rows, window, features, hidden_size, num_layers,
+                batch_size, max_epochs): the neighbouring shapes and the non-board model of a recurrent trainer
+                arm; each line carries the fit's last loss_curve_ value beside its time; an arm may be a B wheel set
 
 Runs nothing at import; standard library + numpy + pandas + mojolearn in the arm's venv only (it never imports the
 repo's tools). Serial by nature: the cases are timed calls on one GPU and must not share it.
@@ -237,6 +241,117 @@ def case_samba_train_step(row, arm_cases):
     return out
 
 
+def _median_of_calls(call, n):
+    """(median ms of n consecutive calls after one warm-up, None, spread dict), or (None, 'REFUSED: ...', {}).
+    For a call of a few milliseconds one timed call is first-touch and allocator noise (AGENTS.md, small rows)."""
+    try:
+        call()
+        walls = []
+        for _ in range(n):  # serial by nature: consecutive timed calls on one GPU
+            t0 = time.perf_counter()
+            call()
+            walls.append((time.perf_counter() - t0) * 1000.0)
+        walls.sort()
+        mid = walls[n // 2] if n % 2 else 0.5 * (walls[n // 2 - 1] + walls[n // 2])
+        return mid, None, {"calls": n, "min_ms": walls[0], "max_ms": walls[-1]}
+    except Exception as exc:  # noqa: BLE001 -- a refusal is a result
+        return None, "REFUSED: %s: %s" % (type(exc).__name__, str(exc)[:400]), {}
+
+
+def case_transformer_forward(row, arm_cases):
+    """TransformerBlock.forward(x) (no state: the stateless full-attention prefill) at each case of the row's
+    shape: {"name", "batch", "length", "d_model", "n_heads", "head_dim", "intermediate"; optional "n_kv"
+    (n_heads)}. Weights from default_rng(7) uniform(-0.035, 0.035), +1 on the two norms; x uniform(-0.9, 0.9).
+    The time is the median of 20 consecutive calls after one warm-up; the digest is the last output's, so two
+    arms that must return the same bytes show it beside the time."""
+    import hashlib
+    import numpy as np
+    ml = _ml()
+    out = []
+    for spec in row["shape"]["cases"]:  # serial by nature: timed calls on one GPU
+        b, l, dm = int(spec["batch"]), int(spec["length"]), int(spec["d_model"])
+        nh, hd, it = int(spec["n_heads"]), int(spec["head_dim"]), int(spec["intermediate"])
+        nkv = int(spec.get("n_kv", nh))
+        label = "TransformerBlock.forward %s b=%d l=%d d_model=%d heads=%d head_dim=%d ff=%d" % (
+            spec["name"], b, l, dm, nh, hd, it)
+        seen = {}
+        try:
+            rng = np.random.default_rng(7)
+            f = lambda *shape: rng.uniform(-0.035, 0.035, shape).astype(np.float32)  # noqa: E731
+            weights = {"input_layernorm.weight": f(dm) + np.float32(1.0), "q_proj.weight": f(nh * hd, dm),
+                       "k_proj.weight": f(nkv * hd, dm), "v_proj.weight": f(nkv * hd, dm),
+                       "o_proj.weight": f(dm, nh * hd), "post_attention_layernorm.weight": f(dm) + np.float32(1.0),
+                       "gate_proj.weight": f(it, dm), "up_proj.weight": f(it, dm), "down_proj.weight": f(dm, it)}
+            x = rng.uniform(-0.9, 0.9, (b, l, dm)).astype(np.float32)
+            block = ml.TransformerBlock(weights, n_heads=nh, n_kv_heads=nkv, head_dim=hd)
+        except Exception as exc:  # noqa: BLE001 -- a refusal is a result
+            out.append((label, None, "REFUSED: %s: %s" % (type(exc).__name__, str(exc)[:400])))
+            continue
+
+        def call(block=block, x=x, seen=seen):
+            seen["y"] = block.forward(x)
+        ms, why, spread = _median_of_calls(call, 20)
+        if seen.get("y") is not None:
+            y = np.ascontiguousarray(np.asarray(seen["y"], dtype=np.float32))
+            spread["output_sha256_16"] = hashlib.sha256(y.tobytes()).hexdigest()[:16]
+        out.append((label, ms, why, spread))
+    return out
+
+
+def case_lm_logits(row, arm_cases):
+    """LanguageModelTrainer(resident=True).logits(ids) at each case of the row's shape: {"name", "batch",
+    "length", "d_model", "n_heads", "n_kv", "head_dim", "intermediate", "n_layers", "vocab_size"} (the board's
+    LM_FIELDS). Parameters from default_rng(7).normal(0, .02), +1 on the norms (the board's rule), ids from
+    default_rng(0). Two times per case: "fresh" is the second call while the first call's result is still held
+    (the output store is new memory, as for a caller that keeps its results), "pooled" the median of 5 further
+    calls that drop the previous result first (the store is reused). The digest is the last output's."""
+    import hashlib
+    import numpy as np
+    ml = _ml()
+    out = []
+    fields = ("batch", "length", "d_model", "n_heads", "n_kv", "head_dim", "intermediate", "n_layers", "vocab_size")
+    for spec in row["shape"]["cases"]:  # serial by nature: timed calls on one GPU
+        dims = [int(spec[k]) for k in fields]
+        label = "LanguageModelTrainer.logits %s b=%d l=%d d_model=%d layers=%d vocab=%d" % (
+            spec["name"], dims[0], dims[1], dims[2], dims[7], dims[8])
+        try:
+            cfg = ml.LanguageModelConfig(*dims)
+            shapes = [(e["name"], tuple(e["shape"])) for e in ml.LanguageModelTrainer.parameter_registry(cfg)]
+            rng = np.random.default_rng(7)
+            flat = rng.normal(0, .02, sum(int(np.prod(sh)) for _, sh in shapes)).astype(np.float32)
+            off = 0
+            for name, sh in shapes:
+                size = int(np.prod(sh))
+                if "norm" in name:
+                    flat[off:off + size] += np.float32(1)
+                off += size
+            trainer = ml.LanguageModelTrainer(
+                flat, shape=cfg, resident=True, step_result="lean",
+                data_schedule={"fixture": "tools/measure_owed_driver.py", "seed": 7, "batches": "none (logits only)"})
+            ids = np.random.default_rng(0).integers(0, min(dims[8], 256), (dims[0], dims[1])).astype(np.int32)
+            held = trainer.logits(ids)                 # warm-up; its result stays held
+            t0 = time.perf_counter()
+            fresh_out = trainer.logits(ids)            # a new output store: the first result is still alive
+            fresh = (time.perf_counter() - t0) * 1000.0
+            del held
+            walls = []
+            last = fresh_out
+            for _ in range(5):  # serial by nature: consecutive timed calls on one GPU
+                last = None                            # the previous store goes back to the pool before the call
+                t0 = time.perf_counter()
+                last = trainer.logits(ids)
+                walls.append((time.perf_counter() - t0) * 1000.0)
+            walls.sort()
+            y = np.ascontiguousarray(np.asarray(last, dtype=np.float32))
+            extra = {"pooled_median_ms": walls[2], "pooled_min_ms": walls[0], "pooled_max_ms": walls[-1],
+                     "logits_mib": y.nbytes / float(1 << 20),
+                     "output_sha256_16": hashlib.sha256(y.tobytes()).hexdigest()[:16]}
+            out.append((label + " [fresh store]", fresh, None, extra))
+        except Exception as exc:  # noqa: BLE001 -- a refusal is a result
+            out.append((label, None, "REFUSED: %s: %s" % (type(exc).__name__, str(exc)[:400])))
+    return out
+
+
 def case_cnn_widths(row, arm_cases):
     """CNNClassifier.fit on synthetic (C, H, W) images at each conv_channels tuple the row names (the NI12 fill
     rule's neighbouring, non-board channel widths: x_cnn/device.mojo `ni12_implicit_layer`)."""
@@ -327,10 +442,54 @@ def case_gemm_shapes(row, arm_cases):
     return out
 
 
-DRIVERS = {"gemm_shapes": case_gemm_shapes, "f16_widen": case_f16_widen, "while_loop": case_while_loop, "pandas_input": case_pandas_input, "mlp_fit": case_mlp_fit,
+def case_rnn_shapes(row, arm_cases):
+    """A recurrent regressor's fit at each case of the row's shape.cases: {"cell" ("lstm", "gru" or "rnn"; default
+    "lstm"), "rows", "window", "features", "hidden_size", "num_layers", "batch_size", "max_epochs"} and an optional
+    "note". The series is seeded (default_rng(0)): X standard normal (rows, window, features), y the mean of each
+    window's last step plus a little noise, so the loss is a real regression loss. Adam at the board lanes' explicit
+    settings (lr 1e-3, betas (0.9, 0.999), eps 1e-8, no weight decay), shuffle on, random_state 7. The label
+    carries the last loss_curve_ value of the timed fit (loss_curve_), so two arms' rows show their quality side by side."""
+    import numpy as np
+    ml = _ml()
+    out = []
+    for c in row["shape"]["cases"]:  # serial by nature: timed calls on one GPU
+        cell = str(c.get("cell", "lstm")).lower()
+        n, t, d = int(c["rows"]), int(c["window"]), int(c["features"])
+        hidden, layers = int(c["hidden_size"]), int(c["num_layers"])
+        batch, epochs = int(c["batch_size"]), int(c["max_epochs"])
+        label = "%s.fit rows=%d window=%d features=%d hidden=%d layers=%d batch=%d epochs=%d" % (
+            cell, n, t, d, hidden, layers, batch, epochs)
+        names = {"lstm": "LSTMRegressor", "gru": "GRURegressor", "rnn": "RNNRegressor"}
+        if cell not in names:
+            out.append((label, None, "REFUSED: ValueError: cell must be lstm, gru or rnn"))
+            continue
+        rng = np.random.default_rng(0)
+        X = rng.standard_normal((n, t, d)).astype(np.float32)
+        y = (X[:, -1, :].mean(axis=1) + 0.1 * rng.standard_normal(n)).astype(np.float32)
+        kept = {}
+
+        def fit():
+            kept["est"] = getattr(ml, names[cell])(
+                hidden_size=hidden, num_layers=layers, optimizer="adam", learning_rate=1e-3,
+                optimizer_options=dict(betas=(0.9, 0.999), eps=1e-8, weight_decay=0.0),
+                batch_size=batch, max_epochs=epochs, shuffle=True, random_state=7).fit(X, y)
+
+        ms, why = timed(fit)
+        if why is None:
+            try:
+                losses = np.asarray(getattr(kept["est"], "loss_curve_"), dtype=np.float64).ravel()
+                label += " last_loss=%.6g" % float(losses[-1])
+            except Exception as exc:  # noqa: BLE001 -- the time stands; the loss is reported as unread
+                label += " last_loss=unread(%s)" % type(exc).__name__
+        out.append((label, ms, why))
+    return out
+
+
+DRIVERS = {"rnn_shapes": case_rnn_shapes, "gemm_shapes": case_gemm_shapes, "f16_widen": case_f16_widen, "while_loop": case_while_loop, "pandas_input": case_pandas_input, "mlp_fit": case_mlp_fit,
            "kde_widths": case_kde_widths, "mamba_backward": case_mamba_backward, "cnn_widths": case_cnn_widths,
            "samba_train_step": case_samba_train_step,
-           "samba_step": case_samba_step}
+           "samba_step": case_samba_step,
+           "transformer_forward": case_transformer_forward, "lm_logits": case_lm_logits}
 
 
 def arm_cases(row, arm):

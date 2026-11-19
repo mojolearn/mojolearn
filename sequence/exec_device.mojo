@@ -65,6 +65,7 @@ from sequence.gemm_tiled import (
 from sequence.gemm_split import GEMM_SPLITK, OP_GK_SPLIT, gemm_split_args, gemm_split_on
 # lane fx-gemm-seq-packed: -D MOJOLEARN_GEMM_FAST_SEQ_PACKED (default off), the large products on the neural packed body
 from sequence.gemm_packed_route import SEQ_GEMM_PACKED, SP_NONE, GR_PROF_PACKED, seq_gemm_packed_on, seq_gemm_packed_launch
+from sequence.gemm_packed_route import SEQ_GEMM_PACKED_EPI, seq_gemm_packed_epi_kind, seq_gemm_packed_epi_launch
 from sequence.ops import OP_GEMM_EPI_TAIL
 from sequence.ops import OP_GEMM_EPI
 from autograd.ops import OP_AGK_GEMM_EPI, agk_colsum_args
@@ -1361,6 +1362,15 @@ struct DeviceExec(Exec, Movable):
                 OP == OP_GEMM or OP == OP_AGK_GEMM_EPI or OP == OP_GEMM_EPI):
             var packed_geom = seq_gemm_packed_on[OP](a)
             if packed_geom != SP_NONE:
+                # lane fx-leftovers-product (with -D MOJOLEARN_GEMM_FAST_EPI=1, default OFF, A/B owed): a bias,
+                # bias + activation or activation-derivative follower runs in the packed store, so the pair
+                # below is one launch. Per call under both arms: two integer tests more, one launch fewer.
+                comptime if SEQ_GEMM_PACKED_EPI and OP != OP_GEMM:
+                    var fused_kind = seq_gemm_packed_epi_kind(a.i9, a.i10)
+                    if fused_kind != 0:
+                        seq_gemm_packed_epi_launch(self.ctx, a, packed_geom, fused_kind)
+                        self.execution_profile.kernel()
+                        return
                 seq_gemm_packed_launch(self.ctx, a, packed_geom)
                 self.execution_profile.kernel()
                 comptime if OP != OP_GEMM:
