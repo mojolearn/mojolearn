@@ -8895,6 +8895,12 @@ def _kpack_gather[
 #: takes one step function per step with `c` ascending. Only WHEN a word is
 #: read moves. `gemm_step_arms_check` compares the device words of every
 #: kpack geometry with the host words and catches a slip.
+# MOJOLEARN_GEMM_FAST_LOADAHEAD at depth 2, A/B round 1 2026-11-19 (lane fx-verdicts3; NVIDIA L40S host bd9c355c19c0, wheel 0c68d6cd27 and its B set, base and arm
+# back to back in one pod job, tag nvc-ab-20261119T125554Z-6f7afc, one scored run per arm; digests and quality equal).
+# Base -> arm ms: gemm 4096^3 63.64 -> 61.54 (0.97), lm-train-step 36.26 -> 36.41 (1.00), lm-forward 21.27 -> 22.59
+# (1.06). VERDICT at depth 2: NOISE (the two rows it must win are 0.97 and 1.00). NOT promoted. The code stays only
+# because depth 4 (`MOJOLEARN_GEMM_FAST_LOADAHEAD_STEPS=4`, owed arm gemm-loadahead-4) shares it and has not been
+# timed; when depth 4 is timed the mechanism is promoted at 4 or deleted whole with the four tombstone parts.
 comptime GEMM_KPACK_LOADAHEAD = (
     get_defined_int["MOJOLEARN_GEMM_FAST_LOADAHEAD_STEPS", 2]()
     if is_defined["MOJOLEARN_GEMM_FAST_LOADAHEAD"]() else 1
@@ -9841,6 +9847,14 @@ def identical_gemm_kpack_epi_ptr_kernel[
 # so the same error with the same wording is raised for that product. The one
 # new refusal is the list's own: a product whose output overlaps another
 # listed product's operands or output is not independent and is refused.
+# MOJOLEARN_GEMM_FAST_WORKLIST, A/B round 1 2026-11-19 (lane fx-verdicts3; NVIDIA L40S host bd9c355c19c0, wheel 0c68d6cd27 and its B set, base and arm
+# back to back in one pod job, tag nvc-ab-20261119T125554Z-6f7afc, one scored run per arm; digests and quality equal).
+# Base -> arm ms: lm-train-step 36.22 -> 36.39 (1.00; the row it was written for), lm-forward 23.25 -> 21.54 (0.93; the
+# same row's base in another pair of the job 21.27, so the arm sits on the base), transformer-decode 1117.6 -> 1121.9
+# (1.00, the control). VERDICT: NOISE, a loser by its own owed row. NOT promoted. DELETION OWED: the list reaches the
+# default path's structure (the single-product kernel as a wrapper of the shared body, GemmWorkspace.list_*, the LIST
+# parameter of _route_a / _route_b, the llama forward's q,k,v and gate,up lists), so it is one compile-checked change,
+# not done blind by the verdict lane (~/mojolearn-evidence/briefs-20261118/fx-verdicts3-RESULT.md lists the sites).
 comptime GEMM_FAST_WORKLIST = (
     is_defined["MOJOLEARN_GEMM_FAST_WORKLIST"]()
     and GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL

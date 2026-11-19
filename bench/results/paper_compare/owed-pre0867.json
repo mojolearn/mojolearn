@@ -662,7 +662,8 @@
   "gemm-worklist": {
    "define": "MOJOLEARN_GEMM_FAST_WORKLIST",
    "status": "define in code (gemm/checks/gemm_identical.mojo GEMM_FAST_WORKLIST and gemm/neural_dispatch.mojo NEURAL_GEMM_WORKLIST; compiled on the NVIDIA column only, where the shipped body is the packed kernel; every other column compiles the arm to the per-product launches): B = independent GEMMs whose inputs are ready together go out as ONE launch of the packed body per mode (q,k,v and gate,up of the Llama layer forward; dW + dX of each TF_LINEAR backward node, the fan-in members' together: four products for gate,up, six for q,k,v), each product on the blocks, body and arguments of its own launch, a device table row per product, grouped products keeping their own fold launch; A = the default: one group or all-leaves launch per product. Same blocks, same operands, same order: digests must not move. Build every binding that imports gemm/checks/gemm_identical.mojo with the define. Report the launch counters (MOJOLEARN_STEP_PHASE_TIMERS) of A and B beside the times",
-   "owed": "RUN"
+   "owed": "DECIDED",
+   "evidence": "A/B round 1 2026-11-19, NVIDIA L40S host bd9c355c19c0 (14-core cgroup), wheel 0c68d6cd27 and its B set, base and arm back to back in one pod job (nvc1-0006, tag nvc-ab-20261119T125554Z-6f7afc; ~/mojolearn-evidence/measure-candidate/build-0c68d6cd27/ab1/x/, tables ~/mojolearn-evidence/briefs-20261118/fx-verdicts3/tab-<arm>.txt), one scored run per arm: digests and quality equal; arm/base lm-train-step 1.00, lm-forward 0.93 (the row's base in another pair 21.27 against the arm's 21.54), transformer-decode 1.00: NOISE, not promoted; DELETION OWED, code still in the tree default off (lane fx-verdicts3; sites in ~/mojolearn-evidence/briefs-20261118/fx-verdicts3-RESULT.md)"
   },
   "samba-step-scratch-held": {
    "define": "MOJOLEARN_SAMBA_FAST_STEP_SCRATCH_HELD",
@@ -677,7 +678,8 @@
   "gemm-loadahead-2": {
    "define": "MOJOLEARN_GEMM_FAST_LOADAHEAD",
    "status": "define in code (gemm/checks/gemm_identical.mojo GEMM_KPACK_LOADAHEAD, read by identical_gemm_kpack_kernel's accumulate; IDENTICAL, every vendor column compiles the same loop): B = the admitted and the exact window of the packed GEMM kernel read the operands of 2 consecutive steps with one shared load per operand, then run their FMAs, steps ascending per cell; A = the default: the two loads of each step issued immediately before its FMAs. Same words, same step function, same per-cell order: digests must not move. Build every binding that imports gemm/checks/gemm_identical.mojo with the define. Report ptxas registers and spill bytes of the kpack kernel for A and B",
-   "owed": "RUN"
+   "owed": "DECIDED",
+   "evidence": "A/B round 1 2026-11-19, NVIDIA L40S host bd9c355c19c0 (14-core cgroup), wheel 0c68d6cd27 and its B set, base and arm back to back in one pod job (nvc1-0006, tag nvc-ab-20261119T125554Z-6f7afc; ~/mojolearn-evidence/measure-candidate/build-0c68d6cd27/ab1/x/, tables ~/mojolearn-evidence/briefs-20261118/fx-verdicts3/tab-<arm>.txt), one scored run per arm: digests equal; arm/base gemm 4096^3 0.97, lm-train-step 1.00, lm-forward 1.06: NOISE at depth 2, not promoted; the code is shared with gemm-loadahead-4 (not timed), which decides promote-at-4 or delete-whole (lane fx-verdicts3)"
   },
   "gemm-loadahead-4": {
    "define": "MOJOLEARN_GEMM_FAST_LOADAHEAD,MOJOLEARN_GEMM_FAST_LOADAHEAD_STEPS=4",
@@ -698,7 +700,8 @@
   "gemm-epi": {
    "define": "MOJOLEARN_GEMM_FAST_EPI",
    "status": "define in code (gemm/checks/gemm_epilogue.mojo GEMM_FAST_EPI / GEMM_EPI_FUSES; autograd/kernels/transformer.mojo BWD_GEMM_EPI; IDENTICAL, no poison build): B = a product whose output is joined to the value already in its destination stores the join in its own final store (the packed kernel's all-leaves store, or the fold-stack kernel after the unchanged group launch), so the transformer backward's two dX fan-ins (S9 bwd_add2_kernel, S32 bwd_add3_kernel) issue no follower launch: 2 launches a layer fewer (S9's add2 and S32's add3), 16 a step at 8 layers, and tmp0/tmp1/tmp2 are not written; A = the default: each dX into a tmp buffer, then one add kernel per fan-in. The join is the follower's expression on the same words in the same operand order (ftz(ftz(x) + ftz(y)), both addends flush results, nothing to contract): digests must not move. Fuses only where the shipped dispatch runs the packed body (NVIDIA today); AMD, Apple and declined sizes run the same follower kernels, same launch count as A",
-   "owed": "RUN"
+   "owed": "RUN",
+   "evidence": "A/B round 1 2026-11-19, NVIDIA L40S host bd9c355c19c0 (14-core cgroup), wheel 0c68d6cd27 and its B set, base and arm back to back in one pod job (nvc1-0006, tag nvc-ab-20261119T125554Z-6f7afc; ~/mojolearn-evidence/measure-candidate/build-0c68d6cd27/ab1/x/, tables ~/mojolearn-evidence/briefs-20261118/fx-verdicts3/tab-<arm>.txt), one scored run per arm: the transformer backward use (S9 and S32 joins in the GEMM store): arm/base lm-train-step 0.98 (36.98 -> 36.38; other bases of the row 36.22-36.39), samba-train-step 1.05, digests and quality equal: NOISE, not promoted, deletion of that use owed. The arm stays RUN only for the use this A/B did not time: the fused follower store of the sequence packed route on the mlp rows (row gemm-seq-packed-epi-mlp; the packed route is the default since 2026-11-19) (lane fx-verdicts3)"
   },
   "gemm-dx-concat": {
    "define": "MOJOLEARN_GEMM_FAST_DX_CONCAT",
@@ -5025,6 +5028,22 @@
     "xprep-arena-hugepage"
    ],
    "decides": "B becomes the default if it is faster at equal quality on the NVIDIA L40S, base and arm timed in the SAME pod job; digests must not move; time also a 500,000 x 100 neighbour and a 1,000,000 x 220 random non-board set before a flip (no dimension targeting)"
+  },
+  {
+   "id": "gemm-seq-packed-epi-mlp",
+   "source": "lane fx-leftovers-product (2026-11-19; docs/apple-fast/EXPERIMENTS.md row `MOJOLEARN_GEMM_FAST_EPI` with `MOJOLEARN_GEMM_FAST_SEQ_PACKED`) named this row as owed and did not add it; added by lane fx-verdicts3 (2026-11-19) when the packed route became the default",
+   "kind": "ab",
+   "lane": [
+    "mlp-clf",
+    "mlp-reg"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "gemm-epi"
+   ],
+   "decides": "promote the fused follower store (B = MOJOLEARN_GEMM_FAST_EPI on the default packed route: a bias, bias + activation or activation-derivative follower stored by the packed body, one launch where the default runs the product and OP_GEMM_EPI_TAIL) only if the mlp-clf and mlp-reg fits and infers (istella, taxi) are faster on the NVIDIA L40S, base and arm back to back in one job, with every digest equal (the arm changes no arithmetic). The transformer backward use of the same define was noise on 2026-11-19 (lm-train-step 0.98, samba-train-step 1.05) and its deletion is owed: read only the mlp rows here. Time also the neighbouring shape 4096 x 256 x 128 and the non-board 2048 x 512 x 512 before a flip (no dimension targeting). A loser is deleted with the four tombstone parts"
   }
  ]
 }

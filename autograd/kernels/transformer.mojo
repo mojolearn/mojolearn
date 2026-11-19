@@ -2133,6 +2133,16 @@ def _afn_wgrad(
 # operand order, so no bit moves; where the route declines, the same follower
 # kernels run, one launch per fan-in as today. Off under the two fan-in
 # sabotage arms, which exist to move those kernels' cells.
+# MOJOLEARN_GEMM_FAST_EPI in the transformer backward, A/B round 1 2026-11-19 (lane fx-verdicts3; NVIDIA L40S host bd9c355c19c0, wheel 0c68d6cd27 and its B set, base and arm
+# back to back in one pod job, tag nvc-ab-20261119T125554Z-6f7afc, one scored run per arm; digests and quality equal).
+# Base -> arm ms: lm-train-step 36.98 -> 36.38 (0.98; the row's bases in three other pairs of the job 36.22, 36.26,
+# 36.39, so the arm sits on the base), samba-train-step 49.15 -> 51.65 (1.05). VERDICT for this use (the S9 and S32
+# fan-in joins in the GEMM store): NOISE, a loser by its own owed row. NOT promoted. DELETION OWED for this use
+# (BWD_GEMM_EPI, _route_a_epi, _route_a_epi_takes, rules_transformer _dx_fanin_epi, the C_PLUS_CELL / CELL_PLUS_C
+# kinds and the fold-stack epilogue kernel): compile-checked, with the work-list deletion it interleaves with. The
+# same define's other use, the fused follower store of the sequence packed route (sequence/gemm_packed_route.mojo
+# SEQ_GEMM_PACKED_EPI), was never timed (it needs the packed route, the default only since 2026-11-19) and stays
+# owed on the mlp rows (owed row gemm-seq-packed-epi-mlp).
 comptime BWD_GEMM_EPI = (
     is_defined["MOJOLEARN_GEMM_FAST_EPI"]()
     and not SAB_B_FANIN_ZERO_SEED
