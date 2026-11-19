@@ -1205,6 +1205,17 @@ def quality(lane, D, outs, A):
     t = s["task"]
     q = {arm: {} for arm in outs}
     ref = outs.get("ours")
+    if "ours" in q:
+        # the mode policy mask of the wheel our arm ran on, recorded only when a row is relaxed, so
+        # tools/board_quality.py widens exactly the bounds that row moves (tools/mode_policy_bounds.py)
+        import sys
+        here = os.path.dirname(os.path.abspath(__file__))
+        if here not in sys.path:
+            sys.path.insert(0, here)
+        import mode_policy_bounds
+        mask = mode_policy_bounds.wheel_policy_mask()
+        if mask:
+            q["ours"]["mode_policy_mask"] = mask
     for arm, o in outs.items():
         e = q[arm]
         try:
