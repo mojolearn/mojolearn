@@ -409,8 +409,10 @@ def case_samba_step(row, arm_cases):
         except Exception as exc:  # noqa: BLE001 -- a refusal is a result
             out.append(("SambaStack " + tag, None, "REFUSED: %s: %s" % (type(exc).__name__, str(exc)[:400])))
             continue
-        ms, why = timed(lambda: stack.train_step(x, y))
-        out.append(("SambaStack.train_step " + tag, ms, why))
+        # the median of 20 consecutive steps after one warm-up step, with the spread (lane fx-verdicts4, 2026-11-19:
+        # A/B round 2 timed ONE step a case and one case of one arm read 1.26 with nothing to judge it against)
+        ms, why, spread = _median_of_calls(lambda: stack.train_step(x, y), 20)
+        out.append(("SambaStack.train_step " + tag, ms, why, spread))
         # the FIRST forward after a step is the case (whether the step left the device registry current): one
         # warm-up forward, one more untimed step, then the one timed forward
         try:

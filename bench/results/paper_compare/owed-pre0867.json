@@ -674,13 +674,15 @@
   },
   "samba-step-scratch-held": {
    "define": "MOJOLEARN_SAMBA_FAST_STEP_SCRATCH_HELD",
-   "status": "define in code (autograd/rules_mamba3.mojo M3_SCRATCH_HELD, read by training/samba_resident.mojo SAMBA_STEP_SCRATCH_HELD; IDENTICAL, no poison build): B = the Samba resident session holds, per Mamba-3 layer, one arena for the backward (4 node gradients + 82 scratch buffers + 2 suffix sums as views; ONE zero fill a step, no allocation, no free, no per-block wait) and one arena for the forward state and 33 stages (ONE fill a call instead of 43); A = the default: 88 create + 88 fill + 88 free and one wait per Mamba-3 block backward, 43 fills per Mamba-3 block forward. Same kernels, operands, order and zeros: digests must not move",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-19 (lane fx-verdicts4): NOISE; the define is refused (core/experiment_guards_neural.mojo); code recoverable at 8f3f639b13, experiments/removed/MOJOLEARN_SAMBA_FAST_STEP_SCRATCH_HELD.patch.",
+   "owed": "DECIDED",
+   "evidence": "A/B round 2 2026-11-19, NVIDIA L40S host bd9c355c19c0, wheel 0c68d6cd27 and its B set, base and arm in one pod job (nvc1-0008, tag nvc-ab-20261119T154232Z-0642a5; ~/mojolearn-evidence/measure-candidate/build-0c68d6cd27/ab2/x/, tables ~/mojolearn-evidence/briefs-20261118/fx-verdicts4/tab-<arm>.txt, driver rows x/logs/drivers.log), one scored run per arm, small rows the median of 20 calls: samba-train-step 48.73 -> 48.57 ms (1.00), lm-train-step 36.52 -> 36.45 (1.00), samba-forward 4.611 -> 4.705 (1.02, median of 20); driver SambaStack.train_step 41.60 -> 42.69 (1.03), 56.33 -> 56.24 (1.00), 22.38 -> 20.96 (0.94); digests and quality equal. NOISE: deleted."
   },
   "samba-step-registry-resident": {
    "define": "MOJOLEARN_SAMBA_FAST_STEP_REGISTRY_RESIDENT",
    "status": "define in code (core/weight_epoch.mojo SAMBA_STEP_REGISTRY_RESIDENT, read by training/samba_resident.mojo _step_registry_in / _step_registry_out and providers/python/samba_resident_pyapi_door.mojo: BOTH must be built with it, i.e. the whole wheel set): B = a Samba resident train step uploads and scans the registry only when the session's weight key is not current, scans the weights it wrote at its own closing wait, stamps the registry itself and keeps the key (the next step and the next forward skip the ~22 MB upload and the scan's wait); A = the default: registry host -> device and one scan with its own wait every step, the door stamps after the step. Same bytes in param, same kernels: digests must not move; read the stack's _samba_resident_uploads to prove which arm ran (B: it stops growing after the first step)",
-   "owed": "RUN"
+   "owed": "RUN",
+   "evidence": "A/B round 2 2026-11-19, NVIDIA L40S host bd9c355c19c0, wheel 0c68d6cd27 and its B set, base and arm in one pod job (nvc1-0008, tag nvc-ab-20261119T154232Z-0642a5; ~/mojolearn-evidence/measure-candidate/build-0c68d6cd27/ab2/x/, tables ~/mojolearn-evidence/briefs-20261118/fx-verdicts4/tab-<arm>.txt, driver rows x/logs/drivers.log), one scored run per arm, small rows the median of 20 calls: samba-train-step 49.61 -> 47.24 ms (0.952; the row's other base in the job 48.73), lm-train-step 1.00 (control), samba-forward 0.99; driver SambaStack.train_step 41.60 -> 40.74 (0.98), 56.33 -> 55.52 (0.99), 2 x 192 d128 m/m 22.38 -> 28.14 (1.26, one call); first forward after a step 6.29 -> 5.04 (0.80), 6.30 -> 5.26 (0.84), 2.55 -> 2.46 (0.96); digests and quality equal. NOT DECIDED: the board row is the predicted size, but the row's rule lets one slower driver case block the promotion and the 2 x 192 d128 m/m case was 1.26 on one call with no spread (the same case on the scratch-held wheel in the job: 20.96 ms). Stays RUN: re-time fx-samba-step-shapes with the median of 20 steps a case, then promote or delete."
   },
   "gemm-loadahead-2": {
    "define": "MOJOLEARN_GEMM_FAST_LOADAHEAD",
@@ -724,8 +726,9 @@
   },
   "llama-stage-keep": {
    "define": "MOJOLEARN_LLAMA_FAST_STAGE_KEEP",
-   "status": "define in code (transformer/impl/llama/modeling_llama.mojo LLAMA_FAST_STAGE_KEEP, LlamaDeviceStages.reset_flags; autograd/block_step_ops.mojo AttnPrefill.prepare keep_bytes, attn_step_fresh_prefill, _run_attn_on): B = a forward-only attention step run of L > 1 tokens on kept stages of the same shape (the stateless TransformerBlock.forward, a forward with the caller's caches, an inference-only stack layer) restores the stages' host flags and does not zero-fill the stage buffers again; A = the default, LlamaDeviceStages.reset before every such call (thirty zero fills and a wait; on NVIDIA the fills include the kept exp stash, B x n_heads x L x S floats). A run a backward may read, the CausalLM layer run and every L = 1 step are A in both arms. No float is produced differently",
-   "owed": "RUN"
+   "status": "PROMOTED 2026-11-19 (lane fx-verdicts4) for the stateless block forward (transformer/impl/llama/modeling_llama.mojo LLAMA_FAST_STAGE_KEEP = not MOJOLEARN_LLAMA_FAST_STAGE_KEEP_OFF; the old name is refused); its stack-layer use (autograd/block_step_ops.mojo _run_attn_on) DELETED, experiments/removed/MOJOLEARN_LLAMA_FAST_STAGE_KEEP-stack-layer.patch.",
+   "owed": "DECIDED",
+   "evidence": "A/B round 2 2026-11-19, NVIDIA L40S host bd9c355c19c0, wheel 0c68d6cd27 and its B set, base and arm in one pod job (nvc1-0008, tag nvc-ab-20261119T154232Z-0642a5; ~/mojolearn-evidence/measure-candidate/build-0c68d6cd27/ab2/x/, tables ~/mojolearn-evidence/briefs-20261118/fx-verdicts4/tab-<arm>.txt, driver rows x/logs/drivers.log), one scored run per arm, small rows the median of 20 calls: transformer-forward 2.869 -> 2.734 ms (0.953, median of 20; the row's other base 2.883); driver TransformerBlock.forward median of 20: 1 x 4096 d384 6.007 -> 5.805 (0.97), 1 x 2048 d512 4.052 -> 3.506 (0.87), non-board 3 x 700 d320 2.390 -> 2.199 (0.92), 4 x 128 d384 1.570 -> 1.398 (0.89); samba-forward 4.609 -> 4.751 (1.031; the row's three bases 4.609-4.635); controls lm-forward 21.42 -> 21.02 (0.98), lm-train-step 1.01, transformer-decode 1123.2 -> 1153.5 (1.03); every digest equal. Split by call site: the stateless forward WIN (promoted), the stack-layer run LOSS (deleted)."
   },
   "byte-lm-logits-hugepage": {
    "define": "MOJOLEARN_BYTE_LM_FAST_LOGITS_HUGEPAGE",
@@ -841,6 +844,11 @@
   "fast-fold-free": {
    "define": "MOJOLEARN_MODE_FAST_FOLD_FREE -D MOJOLEARN_MODE_FAST_TILE_FREE (with MOJOLEARN_MODE_FAST_ROWS)",
    "status": "defines in code (checks/mode_policy.mojo ROW_FOLD_FREE, ROW_TILE_FREE; core/pinned_reduce.mojo pinned_block_sum, checks/kernel_matrix.mojo lib_block_size_for): B takes the library fold at the hardware width and the column's own block size; A = the zero-row fast set",
+   "owed": "RUN"
+  },
+  "llama-stage-keep-off": {
+   "define": "MOJOLEARN_LLAMA_FAST_STAGE_KEEP_OFF",
+   "status": "define in code (transformer/impl/llama/modeling_llama.mojo LLAMA_FAST_STAGE_KEEP): B = LlamaDeviceStages.reset (thirty zero fills and a wait) before every stateless forward-only block run on kept stages (the default before 2026-11-19); A = the stage flags restored and the bytes kept, default since 2026-11-19 (lane fx-verdicts4). No float is produced differently on either arm. Owed to re-time the promotion (0.953 on the board row, 0.87-0.97 on four driver shapes) and to settle the deletion of the reset path for this caller",
    "owed": "RUN"
   }
  },
@@ -4146,11 +4154,9 @@
    },
    "arms": [
     "candidate",
-    "samba-step-scratch-held",
     "samba-step-registry-resident"
    ],
    "b_arms": [
-    "samba-step-scratch-held",
     "samba-step-registry-resident"
    ],
    "decides": "each B arm at least as fast as the candidate on SambaStack.train_step at every case (L = 300: a partial last chunk; a 6-layer stack; a small Mamba-3-only stack), and samba-step-registry-resident faster on the first forward after a step (no registry upload); a case that is slower blocks the promotion decided on the board rows"
@@ -4445,9 +4451,9 @@
    "rows": "full",
    "vendor": "nvidia",
    "b_arms": [
-    "llama-stage-keep"
+    "llama-stage-keep-off"
    ],
-   "decides": "keep A (the default: every stage zero-filled before the call) unless B is faster on transformer-forward on the NVIDIA L40S, base and arm back to back in one job, with every output digest and the host-reference check equal to A's (the arm produces no float differently: a moved digest is a defect in the arm, not a bits change) and samba-forward not slower; then B becomes the default with a _OFF define and LlamaDeviceStages.reset keeps only its other callers. lm-forward, lm-train-step and transformer-decode are controls (their stages are never reset in either arm, or are L = 1). Expected from the arithmetic: transformer-forward -0.5 to -1.0 ms of 2.5 (medium confidence: the fill rate of the L40S and the cost of a queued fill are assumed, not measured). Before a flip the native transformer checks run with the define on, including a forward of one shape after a forward of another and a forward after a backward on the same block; and the cases of llama-stage-keep-shapes are timed (no dimension targeting)"
+   "decides": "after the promotion of 2026-11-19 (lane fx-verdicts4; transformer-forward 0.953, four driver shapes 0.87-0.97, digests equal): keep the kept stages (the candidate) unless the reset before every stateless forward (B, MOJOLEARN_LLAMA_FAST_STAGE_KEEP_OFF) is faster on transformer-forward at equal digests on the NVIDIA L40S, base and arm in one job. samba-forward, lm-forward, lm-train-step and transformer-decode are controls now (the stack-layer use is deleted). B not faster: delete the _OFF switch"
   },
   {
    "id": "llama-stage-keep-shapes",
@@ -4497,10 +4503,10 @@
    },
    "arms": [
     "candidate",
-    "llama-stage-keep"
+    "llama-stage-keep-off"
    ],
    "b_arms": [
-    "llama-stage-keep"
+    "llama-stage-keep-off"
    ],
    "decides": "TransformerBlock.forward (stateless) at a longer sequence, at the block of a 12-layer d_model 512 model, at a non-board size and at a short sequence, candidate (A) against the B wheel set, median of 20 calls, each line with its output digest: B must not be slower at any case and every digest must equal A's. Expected: the gain grows with L (the kept exp stash is B x n_heads x L x S floats) and is about thirty queued fills at the short case"
   },
