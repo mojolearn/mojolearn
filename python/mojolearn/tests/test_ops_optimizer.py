@@ -144,8 +144,13 @@ def test_step_refusals():
             s.optimizer("sgd", nesterov=True)   # Nesterov without momentum
         with pytest.raises(Exception):
             s.optimizer("adam", lr=0.0)
+        # Lion, Adamax and NAdam are Session optimizers (OP_OPT kinds 7-9,
+        # autograd/optimizer_requests.mojo ops_optimizer_codes); an unknown
+        # kind is still refused with ValueError.
+        for kind in ("lion", "adamax", "nadam"):
+            s.optimizer(kind)
         with pytest.raises(ValueError):
-            s.optimizer("lion")
+            s.optimizer("not_an_optimizer")
         s.step(opt, w)
         assert s.optimizer_state(opt, w)["step"] == 1
     with ops.Session() as s:
