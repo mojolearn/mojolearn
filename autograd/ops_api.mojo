@@ -62,7 +62,10 @@ address. The eager words are the caller-array form's: the same int32 words
 reach the same Tape.embedding and rankn_take kernels."""
 from std.memory import bitcast
 from sequence.exec_trait import Exec
-from sequence.ops import FP, Args, OP_FILL, OP_COPY, OPT_SGD, OPT_ADAM, OPT_ADAMW
+from sequence.ops import (
+    FP, Args, OP_FILL, OP_COPY, OPT_SGD, OPT_ADAM, OPT_ADAMW, OPT_LION, OPT_ADAMAX, OPT_NADAM, OPT_RMSPROP,
+    OPT_ADAGRAD,
+)
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, identical_div
 from autograd.tape import Tape, Tensor, IdsHandle
 from autograd.ops import RELU, SIGMOID, TANH, SOFTMAX, ADD, SUBTRACT, MULTIPLY, DIVIDE, AXIS_ALL, AXIS_ROWS, AXIS_COLS
@@ -81,7 +84,11 @@ from autograd.program import (
 from autograd.program_tools import ProgramTrace, program_op_name
 from autograd.program_inference_metadata import PreparedInferenceReplay
 from std.time import perf_counter_ns
-from autograd.optim import OptimizerConfig, OptimizerState, optimizer_config_packed, optimizer_slots, step_lr
+from autograd.optim import (
+    OptimizerConfig, OptimizerState, optimizer_config_packed, optimizer_slots, step_lr, optimizer_clips,
+    clip_norm_accumulate, step_lr_clipped,
+)
+from autograd.optimizer_requests import OpsOptimizerExtras, ops_optimizer_extras_default
 from autograd.optimizer_requests import (
     OPS_OPT_INTS, OPS_OPT_FLOATS, OpsOptimizerRequest, OpsOptimizerStateValue, OpsOptimizerRestoreRequest,
     ops_optimizer_request, ops_optimizer_restore_request,
@@ -121,6 +128,7 @@ from autograd.block_step_ops import (
     block_part_floats, BLOCK_PART_WEIGHTS, BLOCK_PART_STATE, BLOCK_PART_WORDS, attn_append_restore,
 )
 from autograd.rules_step_ops import StepOpRules
+from autograd.rules_recurrent import OPS_RNN_SCAN, rnn_scan_op
 # Generation ops (lane x45c): the language model's token pick and the decode
 # loop's condition, session codes 85, 86 (autograd/generation_ops.mojo).
 from autograd.lm_head_v2_op import OPS_LM_HEAD_V2, LM_HEAD_V2_TAG, lm_head_v2_check, lm_head_v2_forward_device
@@ -694,6 +702,12 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
 
     def upload_block(mut self, code: Int, ints: List[Int], part: Int, srcs: List[CastIn],
                      words: List[Int]) raises -> Int:
+        """`upload_block_grad` without a gradient: what every model program
+        packs its blocks with."""
+        return self.upload_block_grad(code, ints, part, srcs, words, False)
+
+    def upload_block_grad(mut self, code: Int, ints: List[Int], part: Int, srcs: List[CastIn],
+                          words: List[Int], requires_grad: Bool) raises -> Int:
         """One session tensor holding `part` of a block for step op `code`
         (autograd/block_step_ops.mojo): BLOCK_PART_WEIGHTS packs the
         weights `srcs` (one array per piece, `block_weight_sizes` order, an
@@ -701,7 +715,18 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         (1, n) upload; BLOCK_PART_STATE packs the float state pieces the
         same way and declares the tensor state; BLOCK_PART_WORDS makes the
         (1, k) int32-word state from `words`. Each piece is cast into its
-        slot on the executor (upload_cast); the gaps between slots are zero."""
+        slot on the executor (upload_cast); the gaps between slots are zero.
+        `requires_grad` (lane fx-ops-session-blocks, 2026-11-18: weights
+        only, a recording session only) makes the packed weights a trainable
+        leaf: a recorded step op (`_block_step`) is a custom node over
+        [x, weights], so `backward` leaves the block's weight gradients in
+        this tensor's gradient at the same `block_offsets` slots (the gaps
+        zero) and `step` updates the packed weights in place."""
+        if requires_grad:
+            if part != BLOCK_PART_WEIGHTS:
+                raise Error("ValueError: ops: upload_block: only a block's weights take a gradient")
+            if not self.tape.is_recording():
+                raise Error("ops: requires_grad needs a recording session (Session(record=True))")
         if part == BLOCK_PART_WORDS:
             var k = block_int_words(code)
             if k < 1 or len(words) != k:
@@ -745,8 +770,8 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         except err:
             self.ex.free(buf)
             raise err
-        var t = self.tape.variable(self.ex, buf, 1, total, False)
-        var h = self._add(t, Int(buf), False, 0)
+        var t = self.tape.variable(self.ex, buf, 1, total, requires_grad)
+        var h = self._add(t, Int(buf), requires_grad, 0)
         if part == BLOCK_PART_STATE:
             self.buffer_kind[Int(buf)] = OPS_BUFFER_STATE
         return h
@@ -1140,20 +1165,45 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
     def optimizer(mut self, ints: List[Int], fs: List[Float32]) raises -> Int:
         """A new optimizer; returns its id (>= 1).
 
-        ints = [kind (OPT_SGD, OPT_ADAM or OPT_ADAMW), nesterov, schedule
+        ints = [kind (OPT_SGD, OPT_ADAM, OPT_ADAMW, OPT_LION, OPT_ADAMAX or
+        OPT_NADAM), nesterov, schedule
         (autograd/model.mojo SCHED_*), step size]; fs = [lr, momentum,
         beta1, beta2, eps, weight_decay, gamma] and optionally an eighth,
         SGD's dampening (torch.optim.SGD; 0 when absent). The configuration
         is packed as Sequential.compile packs it (sgd: f1 momentum, f2 0,
         f7 dampening; adam and adamw: f1 beta1, f2 beta2; f7 0), so the
-        update's arguments are model_fit's words."""
+        update's arguments are model_fit's words. Lion, Adamax and NAdam
+        pack as adam does (f1 beta1, f2 beta2); NAdam's f7 is torch's
+        default momentum_decay 0.004 with coupled weight decay."""
         return self.optimizer(ops_optimizer_request(ints, fs))
 
     def optimizer(mut self, request: OpsOptimizerRequest) raises -> Int:
         """Create an optimizer from one typed native configuration snapshot."""
+        return self.optimizer_with(request, ops_optimizer_extras_default())
+
+    def optimizer_with(mut self, request: OpsOptimizerRequest, extras: OpsOptimizerExtras) raises -> Int:
+        """`optimizer` with the settings the request does not carry
+        (autograd/optimizer_requests.mojo OpsOptimizerExtras): RMSprop
+        (`request.momentum` is its momentum) and Adagrad, and the gradient
+        clips applied inside `step`."""
         var kind = request.kind
-        if kind != OPT_SGD and kind != OPT_ADAM and kind != OPT_ADAMW:
-            raise Error("ops: the optimizer must be sgd, adam or adamw")
+        # Lane fx-ops-session-blocks (2026-11-18): Lion, Adamax and NAdam are
+        # OP_OPT kinds (sequence/ops.mojo op_opt) whose whole configuration
+        # is this request's fields; `step_lr`, `optimizer_slots` and the
+        # state records below already serve every kind.
+        if (kind != OPT_SGD and kind != OPT_ADAM and kind != OPT_ADAMW and kind != OPT_LION
+                and kind != OPT_ADAMAX and kind != OPT_NADAM and kind != OPT_RMSPROP and kind != OPT_ADAGRAD):
+            raise Error("ops: the optimizer must be sgd, adam, adamw, rmsprop, adagrad, lion, adamax or nadam")
+        if not (extras.alpha >= Float32(0) and extras.alpha < Float32(1)):
+            raise Error("ops: alpha must be in [0, 1)")
+        if not (extras.lr_decay >= Float32(0)):
+            raise Error("ops: lr_decay must be >= 0")
+        if not (extras.initial_accumulator_value >= Float32(0)):
+            raise Error("ops: initial_accumulator_value must be >= 0")
+        if not (extras.clip_grad_norm >= Float32(0)) or not (extras.clip_grad_value >= Float32(0)):
+            raise Error("ops: clip_grad_norm and clip_grad_value must be positive (or absent)")
+        if extras.centered and kind != OPT_RMSPROP:
+            raise Error("ops: centered applies to rmsprop")
         var lr = request.lr
         var momentum = request.momentum
         var beta1 = request.beta1
@@ -1190,7 +1240,28 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         var f1 = momentum if kind == OPT_SGD else beta1
         var f2 = Float32(0) if kind == OPT_SGD else beta2
         var flags = 1 if nesterov else 0
-        var cfg = optimizer_config_packed(kind, flags, f1, f2, eps, wd, dampening, lr)
+        if kind == OPT_RMSPROP:
+            # optimizer_config_packed: f2 alpha, f7 momentum, flag bit centered
+            f1 = Float32(0)
+            f2 = extras.alpha
+            flags = 1 if extras.centered else 0
+        elif kind == OPT_ADAGRAD:
+            # f1 lr_decay; the accumulator's start is the state's fill
+            f1 = extras.lr_decay
+        # f7: SGD's dampening; NAdam's momentum_decay, torch's default
+        # (0.004 as a Float32 word, optimizer_config's own default); nothing
+        # else reads it.
+        var f7 = Float32(0.004) if kind == OPT_NADAM else dampening
+        if kind == OPT_RMSPROP:
+            f7 = momentum
+        var cfg = optimizer_config_packed(kind, flags, f1, f2, eps, wd, f7, lr)
+        cfg.init_acc = extras.initial_accumulator_value if kind == OPT_ADAGRAD else Float32(0)
+        # The clips of `step`: the norm over all the step's tensors (the
+        # state's partials are sized by cfg.clip) and the elementwise bound.
+        if extras.clip_grad_norm > Float32(0):
+            cfg.clip = extras.clip_grad_norm
+            cfg.clip_global = True
+        cfg.clip_value = extras.clip_grad_value
         var sched_step = request.step_size if sched == SCHED_STEP else 1
         self.opts.append(_OpsOptimizer(cfg, sched, sched_step, gamma, 0))
         # Failed control-checkpoint restore pops opts before its caller retires
@@ -1232,7 +1303,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         if h in self.opt_state_indices[oi]:
             return self.opt_state_indices[oi][h]
         var cfg = self.opts[oi].cfg
-        var st = OptimizerState(self.ex, cfg, n)
+        var st = OptimizerState(self.ex, cfg, n, cfg.init_acc)
         self.opt_states.append(_OpsOptState(
             oi, h, st.s1, st.s2, st.s3, st.parts, st.cell, st.n, st.block, st.nparts, 0,
             st.pw1, st.pw2, st.mu_prod,
@@ -1305,6 +1376,33 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             grads.append(self.tape.gradient(self.tensors[slot]))
         var cfg = self.opts[oi].cfg
         var lr = self.learning_rate(o)
+        if optimizer_clips(cfg):
+            # Lane fx-ops-session-blocks: clip_grad_norm over ALL the listed
+            # tensors (autograd/optim.mojo, the fold above op_ago_norm_acc:
+            # two launches a tensor, the total and the coefficient in the
+            # first tensor's cell, no read-back) and clip_grad_value, then
+            # one update launch a tensor.
+            var sis = List[Int](capacity=len(slots))
+            for i in range(len(slots)):  # driver-loop: over the step's parameters
+                sis.append(self._state_of(oi, hs[i], self.rows[slots[i]] * self.cols[slots[i]]))
+            var cell = self.opt_states[sis[0]].cell
+            if cfg.clip_global:
+                for i in range(len(slots)):  # driver-loop: over the step's parameters (the norm's fold order)
+                    var sv = self._state_view(sis[i])
+                    clip_norm_accumulate(self.ex, cfg, sv, grads[i], self.rows[slots[i]] * self.cols[slots[i]],
+                                         cell, i == 0, i == len(slots) - 1)
+            for i in range(len(slots)):  # driver-loop: over the step's parameters
+                var cslot = slots[i]
+                var ct = self.opt_states[sis[i]].t + 1
+                var cst = self._state_view(sis[i])
+                step_lr_clipped(self.ex, cfg, cst, FP(unsafe_from_address=self.owned[cslot]), grads[i],
+                                self.rows[cslot] * self.cols[cslot], ct, lr, cell)
+                self.steps_forget(self.owned[cslot])  # the weights moved: a step op re-checks them
+                self.opt_states[sis[i]].t = ct
+                self.opt_states[sis[i]].pw1 = cst.pw1
+                self.opt_states[sis[i]].pw2 = cst.pw2
+                self.opt_states[sis[i]].mu_prod = cst.mu_prod
+            return
         for i in range(len(slots)):  # driver-loop: over the step's parameters
             var slot = slots[i]
             var n = self.rows[slot] * self.cols[slot]
@@ -1485,6 +1583,10 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             return self._cnn_conv_block(hs, ints, fs, x)
         if code == OPS_CNN_LINEAR:
             return self._cnn_linear(hs, ints, fs, x)
+        if code == OPS_RNN_SCAN:
+            # Lane fx-ops-session-blocks: one recurrent layer over a sequence,
+            # the recurrent trainer's own records (autograd/rules_recurrent.mojo).
+            return self._rnn_scan(hs, ints, fs, x)
         if code == OPS_LM_EMBEDDING:
             # Lane r1-restore-measured-winners: the byte LM trainer's tuned
             # embedding backward, one custom node (autograd/lm_embedding_op.mojo).
@@ -2083,6 +2185,8 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             cols = self.tape.reserve(self.ex, sz[0])
             yconv = self.tape.reserve(self.ex, sz[1])
         comptime if Self.E.IS_DEVICE:
+            if self.steps.cnn_other_queue:
+                self.ex.sync()  # a public session: its queue is not the x_cnn entries' (BlockStepScratch)
             cnn_block_forward_device(
                 xp, wp, bp, cprm, pprm, pool, dst, idx, Int(cols) if keep else 0, Int(yconv) if keep else 0
             )
@@ -2147,6 +2251,8 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         var bp = self.tape.value_of(self.ex, x[2])
         var dst = self.tape.reserve(self.ex, n * d_out)
         comptime if Self.E.IS_DEVICE:
+            if self.steps.cnn_other_queue:
+                self.ex.sync()  # a public session: its queue is not the x_cnn entries' (BlockStepScratch)
             cnn_linear_forward_device(hp, wp, bp, n, d_in, d_out, dst)
         else:
             var hb: List[FP] = [hp, wp, bp, dst]
@@ -2164,6 +2270,20 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         rx.append(x[1])
         rx.append(x[2])
         var rt = self.tape.custom(self.ex, rx, dst, n, d_out, CNN_LINEAR_TAG, saved)
+        return self._add(rt, 0, self.tape.requires_grad(rt), 0)
+
+    def _rnn_scan(mut self, hs: List[Int], ints: List[Int], fs: List[Float32], x: List[Tensor]) raises -> Int:
+        """OPS_RNN_SCAN: [x (steps * batch rows of inputs, time-major),
+        weight_ih (G H, inputs), weight_hh (G H, H), bias_ih (G H values),
+        bias_hh (G H values)], ints [cell, steps, batch] -> h_1..h_T as a
+        (steps * batch, H) tensor, from a zero initial state. The trainer's
+        layer (`rnn_scan_op`); recorded as its two custom nodes, which
+        StepOpRules hands to RecurrentRules."""
+        _need("rnn_scan", len(x), 5, 3, len(ints), 0, len(fs))
+        for i in range(5):  # small-loop(five operands): operand kinds, no data
+            if self.int_words[self._slot(hs[i])]:
+                raise Error("ValueError: ops: a recurrent layer takes floating-point tensors")
+        var rt = rnn_scan_op(self.tape, self.ex, x[0], x[1], x[2], x[3], x[4], ints[0], ints[1], ints[2])
         return self._add(rt, 0, self.tape.requires_grad(rt), 0)
 
     def _lm_embedding(mut self, hs: List[Int], ints: List[Int], fs: List[Float32], x: List[Tensor]) raises -> Int:

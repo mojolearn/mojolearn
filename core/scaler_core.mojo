@@ -216,7 +216,7 @@ def scaler_minmax_keep_extrema[C: ScalerCalls](calls: C, stats: F32P, colnan: In
     _run(calls, arena, program)
     if bitcast[DType.int32](arena[12 * d]) != 0:
         raise Error("MinMaxScaler fitted statistics overflowed or scale is not positive in Float32")
-    var rows = List[Float32](length=5 * d, fill=0)
+    var rows = List[Float32](unsafe_uninit_length=5 * d)
     unsafe_memcpy(dest=rows.unsafe_ptr(), src=ap + 6 * d, count=5 * d)
     _ = arena^
     return rows^

@@ -46,7 +46,7 @@ and the card use.
 
 # DEVIATION 2486: bulk host staging; stream/lifetime boundaries unchanged.
 from std.sys.compile import is_defined
-from core.transfer import transfer_upload_list
+from core.transfer import transfer_download_f32_list, transfer_upload_list
 from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE as _CTX_MODE, NUMERIC_IDENTICAL as _CTX_IDENTICAL
@@ -250,9 +250,10 @@ def _rbf_idn_fused_launch(
 
 # ===========================================================================
 # Buffer plumbing. `_upload` is core/transfer.mojo's in-place upload (lane
-# fx-transfer-helpers, 2026-11-18); `_download` keeps its own staged form
-# (`KM_IDN_BULK_DOWNLOAD`), including the `_ = h^` that keeps the host buffer
-# alive past its `.unsafe_ptr()` (`[[mojo-buffer-freed-at-last-use]]`).
+# fx-transfer-helpers, 2026-11-18) and, under `KM_IDN_BULK_DOWNLOAD`,
+# `_download` is its download (lane fx-dup-next, 2026-11-19). The other tier
+# keeps its own form, including the `_ = h^` that keeps the host buffer alive
+# past its `.unsafe_ptr()` (`[[mojo-buffer-freed-at-last-use]]`).
 # ===========================================================================
 
 
@@ -294,6 +295,8 @@ comptime KM_FAST_PTR_IN = KM_IDN_PTR_IN or (_CTX_MODE == _NUMERIC_FAST and TARGE
 # TOMBSTONE: MOJOLEARN_IDN_KM_BULK_DOWNLOAD_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at 1a2458c687.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_KM_BULK_DOWNLOAD_OFF.patch; record in docs/TOMBSTONES.md.
 comptime KM_IDN_BULK_DOWNLOAD = _CTX_MODE == _CTX_IDENTICAL
+#: The pinned download stages of this module and tier (core/transfer.mojo).
+comptime _KM_XFER_POOL = "MojolearnKernelMethodsTransferStagesIdenticalV1" if _CTX_MODE == _CTX_IDENTICAL else "MojolearnKernelMethodsTransferStagesOtherV1"
 
 
 def _upload_checked(ctx: DeviceContext, xaddr: Int, n_rows: Int, n_cols: Int, what: String) raises -> DeviceBuffer[
@@ -335,23 +338,16 @@ def _download_into[out_origin: MutOrigin, //](
 def _download(
     ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], n: Int
 ) raises -> List[Float32]:
+    comptime if KM_IDN_BULK_DOWNLOAD:
+        # core/transfer.mojo (lane fx-dup-next, 2026-11-19): the copy engine
+        # writes the list's own words; from DOWNLOAD_STAGE_MIN floats (an
+        # n x n kernel matrix or factor from n = 1024) through the two pooled
+        # pinned stages. Gone: a pinned host buffer of the whole result per
+        # call and a second pass over it on one host thread.
+        return transfer_download_f32_list[_KM_XFER_POOL](ctx, buf, n)
     var h = ctx.enqueue_create_host_buffer[DType.float32](n)
     ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=buf)
     ctx.synchronize()
-    comptime if KM_IDN_BULK_DOWNLOAD:
-        var packed = List[Float32](unsafe_uninit_length=n)
-        var pdst = packed.unsafe_ptr()
-        var psrc = h.unsafe_ptr()
-        var pi = 0
-        var pbody = n - n % 8
-        while pi < pbody:
-            pdst.unsafe_store[width=8](pi, psrc.unsafe_load[width=8](pi))
-            pi += 8
-        while pi < n:
-            pdst.unsafe_store(pi, psrc.unsafe_load(pi))
-            pi += 1
-        _ = h^
-        return packed^
     var out = List[Float32]()
     for i in range(n):
         out.append(h.unsafe_ptr().unsafe_load(i))

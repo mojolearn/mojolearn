@@ -317,38 +317,22 @@ def ivf_trainset_rows(n_rows: Int, n_train: Int, seed: UInt64) -> List[Int]:
 def upload_f32(
     ctx: DeviceContext, values: List[Float32]
 ) raises -> DeviceBuffer[DType.float32]:
-    """Host list to device buffer, through a runtime host buffer.
-
-    The second hop is `neighbors/estimator.mojo`'s: `archive/plans/UNWIRED.md:31` records
-    that an arbitrary host pointer is not interchangeable with one from
-    `enqueue_create_host_buffer` on this stack, and that the failure is
-    SILENT.
-    """
+    """Host list to device buffer: one copy that reads the caller's list in
+    place, drained before the return."""
     var n = len(values)
     if n == 0:
         raise Error("upload_f32: refusing to upload an empty list")
     var buf = ctx.enqueue_create_buffer[DType.float32](n)
-    comptime if ANN3_HOST_PASSES:
-        # Every column (lane neural-pass35, 2026-10-01; Apple only since
-        # lane ann-apple3): the copy reads the caller's list and is drained
-        # before the return. The pinned hop below pinned a buffer the size
-        # of the dataset per upload and copied into it first: on the L40S
-        # the build's 352 MB upload read 752 ms (0.47 GB/s) that way
-        # (bench/results/ivf-stages-l40s-20261001.log). The raw host-pointer
-        # upload is the one the resident optimizer step and the x_decomp
-        # kit use on all three vendors with the same words.
-        # lane ann-apple3, Apple only, behind `ANN3_HOST_PASSES`: the copy
-        # reads the caller's list (the same words, one host pass fewer;
-        # `x_ann/io.mojo` has uploaded this way since lane ann-apple2). The
-        # copy is drained before the return, while the list is alive.
-        ctx.enqueue_copy(dst_buf=buf, src_ptr=values.unsafe_ptr())
-        ctx.synchronize()
-    else:
-        var host = ctx.enqueue_create_host_buffer[DType.float32](n)
-        copy_f32(values.unsafe_ptr(), host.unsafe_ptr(), n)
-        ctx.enqueue_copy(dst_buf=buf, src_ptr=host.unsafe_ptr())
-        ctx.synchronize()
-        _ = host^
+    # Every column (lane neural-pass35, 2026-10-01): the copy reads the
+    # caller's list and is drained before the return, while the list is
+    # alive. The pinned hop that stood in the else of ANN3_HOST_PASSES (a
+    # constant True, so never compiled) pinned a buffer the size of the
+    # dataset per upload and copied into it first: on the L40S the build's
+    # 352 MB upload read 752 ms (0.47 GB/s) that way
+    # (bench/results/ivf-stages-l40s-20261001.log). Deleted with its arm
+    # (lane fx-dup-next, 2026-11-19).
+    ctx.enqueue_copy(dst_buf=buf, src_ptr=values.unsafe_ptr())
+    ctx.synchronize()
     return buf^
 
 

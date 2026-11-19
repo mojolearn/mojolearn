@@ -143,6 +143,29 @@ comptime _SOP_LOG_LOSS = 131
 comptime _SOP_ROC_AUC = 132
 # lane x1: an uploaded tensor declared carried state (OpsSession.declare_state)
 comptime _SOP_STATE = 133
+# lane fx-ops-session-blocks (2026-11-18): the block ops' public names. The
+# two block makers pack a block's weights, zero state and state words
+# (OpsSession.upload_block_grad); the two steps run OPS_M{1,2,3}_STEP 81-83 /
+# OPS_ATTN_STEP 84; small_mlp is OPS_SMALL_MLP 88, lm_head_loss OPS_LM_HEAD_V2 87.
+comptime _SOP_MAMBA_BLOCK = 134
+comptime _SOP_ATTENTION_BLOCK = 135
+comptime _SOP_MAMBA_STEP = 136
+comptime _SOP_ATTENTION_STEP = 137
+comptime _SOP_SMALL_MLP = 138
+comptime _SOP_LM_HEAD_LOSS = 139
+# 2026-11-19: the generation ops (85, 86) with their rows state, and the LM
+# trainer's embedding (93)
+comptime _SOP_LM_ROWS = 140
+comptime _SOP_LM_PICK = 141
+comptime _SOP_LM_ALIVE = 142
+comptime _SOP_LM_EMBEDDING = 143
+# the fused CNN block and head (90, 91)
+comptime _SOP_CONV_BLOCK = 144
+comptime _SOP_CONV_LINEAR = 145
+# one recurrent layer over a sequence (94)
+comptime _SOP_LSTM = 146
+comptime _SOP_GRU = 147
+comptime _SOP_RNN = 148
 
 
 struct _SessionOpCodes(Defaultable, Movable):
@@ -283,10 +306,25 @@ struct _SessionOpCodes(Defaultable, Movable):
         self.codes["log_loss"] = _SOP_LOG_LOSS
         self.codes["roc_auc"] = _SOP_ROC_AUC
         self.codes["state"] = _SOP_STATE
+        self.codes["mamba_block"] = _SOP_MAMBA_BLOCK
+        self.codes["attention_block"] = _SOP_ATTENTION_BLOCK
+        self.codes["mamba_step"] = _SOP_MAMBA_STEP
+        self.codes["attention_step"] = _SOP_ATTENTION_STEP
+        self.codes["small_mlp"] = _SOP_SMALL_MLP
+        self.codes["lm_head_loss"] = _SOP_LM_HEAD_LOSS
+        self.codes["lm_rows"] = _SOP_LM_ROWS
+        self.codes["lm_pick"] = _SOP_LM_PICK
+        self.codes["lm_alive"] = _SOP_LM_ALIVE
+        self.codes["lm_embedding"] = _SOP_LM_EMBEDDING
+        self.codes["conv_block"] = _SOP_CONV_BLOCK
+        self.codes["conv_linear"] = _SOP_CONV_LINEAR
+        self.codes["lstm"] = _SOP_LSTM
+        self.codes["gru"] = _SOP_GRU
+        self.codes["rnn"] = _SOP_RNN
 
 
 # One table per process (identical contents in every extension that links this file).
-comptime _SESSION_OP_CODES = SharedSlot[_SessionOpCodes, "MojolearnSessionOpCodesV2"]
+comptime _SESSION_OP_CODES = SharedSlot[_SessionOpCodes, "MojolearnSessionOpCodesV4"]
 
 
 def _session_op_code(name: String) raises -> Int:

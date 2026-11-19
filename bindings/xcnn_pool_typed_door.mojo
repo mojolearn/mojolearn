@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Typed boundary tables for the CNN average pools: the pilot of design A
+"""Typed boundary tables for the CNN pools: the pilot of design A
 (`~/mojolearn-evidence/briefs-20261118/ideas-boundary-RESULT.md`), an opt-in
 arm, `-D MOJOLEARN_XCNN_FAST_TYPED_DOOR`, default off (lane fx-typed-pilot,
 2026-11-18). With the define off nothing here is called and the door
@@ -54,14 +54,32 @@ A hit writes nothing into the layer: the door's writes of an unchanged
 holds equal values. A call with another input shape misses.
 
 COVERED (the rest takes the door unchanged): `forward` and `backward` of
-AvgPool2d and AdaptiveAvgPool2d (an output size that divides the input) and
-`forward` of AvgPool1d, for a `DeviceTensor` resident on the layer's
-binding. Max pools (resident winners table), Dropout2d, host arrays, the
-adaptive kernel for a non-dividing size and the 1-D backward (its result is
-a reshape view) are not in the pilot.
+AvgPool2d, MaxPool2d, AdaptiveAvgPool2d and AdaptiveMaxPool2d (any output
+size: the pooling kernel when it divides the input, the adaptive kernel
+otherwise) and `forward` of AvgPool1d and MaxPool1d, for a `DeviceTensor`
+resident on the layer's binding. Dropout2d, host arrays and the 1-D backward
+(its result is a reshape view) stay on the door.
 
-Bits: none move. The same entry (`XC_AVGPOOL2D_FORWARD_M` /
-`XC_AVGPOOL2D_BACKWARD_M`), residency word 3 and launch words as the door.
+MAX POOLS (lane fx-maxpool, 2026-11-19). The pilot left them on the door
+because the door writes the winners' state on every forward. That state is a
+function of the input shape only: `_xshape`, `_idx_shape`, `_idx_host = None`
+and `_idx_dev`, the handle of the layer's resident winners array, which stays
+the same array while its size is unchanged. So a hit writes nothing for a max
+pool either: the record proves the dictionary already holds exactly those
+values, and the record adds the winners' handle with the watch epochs of the
+two dictionaries that name it (the instance dictionary of the layer's
+resident-array owner `_dev`, and that owner's handle table). The winners are
+stored by the same entry into the same array as on the door, so a backward
+(typed or through the door) and `indices_` after a typed forward read what
+they read today. Reading `indices_` caches the host copy in `_idx_host`: that
+write moves the layer's epoch, the next forward takes the door (which clears
+it) and the record is filled again. (Dropout's call count and batch norm's
+running statistics do change per call; those layers are not covered.)
+
+Bits: none move. The same entries (`XC_AVGPOOL2D_FORWARD_M` /
+`XC_AVGPOOL2D_BACKWARD_M` with residency word 3, `XC_MAXPOOL2D_FORWARD_M` /
+`XC_MAXPOOL2D_BACKWARD_M` with 7, `XC_ADAPTIVE_POOL_M` with 3 or 7) and
+launch words as the door.
 
 Records are small and are dropped together when their count passes
 `_TYPED_RECORD_CAP` (a process that builds layers in a loop), then refilled
@@ -73,6 +91,7 @@ from core.shared_slot import SharedSlot
 from core.entry_table import EntryRef, entry_ref_unresolved
 from core.xcnn_entry_table import (
     XC_RES_ALLOC, XC_RES_ALLOC_NOFILL, XC_AVGPOOL2D_FORWARD_M, XC_AVGPOOL2D_BACKWARD_M,
+    XC_MAXPOOL2D_FORWARD_M, XC_MAXPOOL2D_BACKWARD_M, XC_ADAPTIVE_POOL_M,
 )
 from bindings.py_cpython_table import CPythonTable, cpython_table
 from bindings.py_balanced import py_call, py_type, py_get, py_contains
@@ -89,7 +108,7 @@ from bindings.xcnn_pool_native_door import _is, _adaptive_max
 from x_cnn.door_run import XCNN_F_RESIDENT, XCNN_F2_ALL_OFF, xcnn_run_call, xcnn_run_fixed, xcnn_size
 from x_cnn.pool_run import (
     PoolSettings, pool_run_words, pool_run_out_words, pool_run_m, pool_run_check_output,
-    pool_run_adaptive_divides, pool_run_adaptive_kernel, pool_run_cache_matches,
+    pool_run_adaptive_divides, pool_run_adaptive_kernel, pool_run_cache_matches, pool_run_adaptive_words,
 )
 
 # The typed operations (index into `XcnnTyped.ops`).
@@ -103,6 +122,13 @@ comptime _OP_COUNT = 4
 comptime _KIND_AVG_2D = 0
 comptime _KIND_AVG_1D = 1
 comptime _KIND_ADAPTIVE_AVG = 2
+# fx-maxpool (2026-11-19): the max pools, and the adaptive kernel (an output
+# size that does not divide the input: `_K`).
+comptime _KIND_MAX_2D = 3
+comptime _KIND_MAX_1D = 4
+comptime _KIND_ADAPTIVE_MAX = 5
+comptime _KIND_ADAPTIVE_AVG_K = 6
+comptime _KIND_ADAPTIVE_MAX_K = 7
 
 # `XcnnTyped.held` positions: the connected objects of the typed context.
 comptime _H_CONTEXT = 0
@@ -114,6 +140,9 @@ comptime _H_DEFAULT = 5
 comptime _H_TUPLE = 6
 comptime _H_INT = 7
 comptime _H_NONE = 8
+comptime _H_MAXPOOL = 9
+comptime _H_DEV = 10
+comptime _H_LAST = 10
 
 # `XcnnTyped.names` positions: str objects made once per process.
 comptime _N_B = 0
@@ -145,7 +174,7 @@ struct XcnnTypedBinding(Copyable, Movable):
 
 @fieldwise_init
 struct XcnnPoolRecord(Copyable, Movable):
-    """One average-pool layer's typed parameters and saved state."""
+    """One pool layer's typed parameters and saved state."""
     # the layer's instance dictionary (the key) and its watch epoch
     var fields: Int
     var stamp: Int
@@ -168,8 +197,11 @@ struct XcnnPoolRecord(Copyable, Movable):
     var x_dims: List[Int]
     var saved: List[Int]
     var out_dims: List[Int]
-    # the `_m` integers of both launches: residency word 3, then the words
+    # the `_m` integers of the forward launch (the residency word, then the
+    # words) and of the backward launch (the same words for the pooling
+    # kernels; the adaptive kernel's differ in their mode word)
     var ints: List[Int]
+    var ints_back: List[Int]
     var out_count: Int
     var in_count: Int
     # adaptive pool: the inner AvgPool2d (`_layer`), its instance dictionary
@@ -177,6 +209,15 @@ struct XcnnPoolRecord(Copyable, Movable):
     var inner_layer: Int
     var inner_fields: Int
     var inner_stamp: Int
+    # max pools: the resident winners array's handle word (0: none), the
+    # resident-array owner (`_dev`) that names it, that owner's instance
+    # dictionary and its watch epoch, the owner's handle table and its epoch
+    var win_handle: Int
+    var owner: Int
+    var owner_fields: Int
+    var owner_stamp: Int
+    var table: Int
+    var table_stamp: Int
 
 
 struct XcnnTyped(Defaultable, Movable):
@@ -216,7 +257,7 @@ struct XcnnTyped(Defaultable, Movable):
 
 # Shared by every extension module that holds this door: bump the name's
 # version with any field change of the three structs above.
-comptime XCNN_TYPED = SharedSlot[XcnnTyped, "MojolearnXcnnTypedDoorV1"]
+comptime XCNN_TYPED = SharedSlot[XcnnTyped, "MojolearnXcnnTypedDoorV2", 2]
 
 
 # ---------------------------------------------------------------- stamps
@@ -300,7 +341,7 @@ def _typed_mode_index(value: PythonObject, b: PythonObject) raises -> Int:
 def _typed_context_current(s: UnsafePointer[XcnnTyped, MutUntrackedOrigin], context: PythonObject) raises -> Bool:
     """Whether the typed context still describes `context`: every stamp it
     was filled under is unchanged."""
-    if not s[].ctx_ok or len(s[].held) <= _H_NONE or len(s[].modes) != 2:
+    if not s[].ctx_ok or len(s[].held) <= _H_LAST or len(s[].modes) != 2:
         return False
     if context._obj_ptr != s[].held[_H_CONTEXT]._obj_ptr:
         return False
@@ -358,8 +399,12 @@ def _typed_context_fill(s: UnsafePointer[XcnnTyped, MutUntrackedOrigin], context
     var backend = py_get(context, "backend_fields")
     var tensor_class = py_get(context, "xcnn_tensor_class")
     var avgpool_class = py_get(context, "xcnn_avgpool_class")
+    var maxpool_class = py_get(context, "xcnn_maxpool_class")
+    var dev_class = py_get(context, "xcnn_dev_class")
     var io_off = py_get(context, "xcnn_device_io_off")
     if bindings is None or backend is None or tensor_class is None or avgpool_class is None:
+        return False
+    if maxpool_class is None or dev_class is None:
         return False
     if py_type(bindings) is not b.dict or py_type(backend) is not b.dict or py_type(io_off) is not b.bool:
         return False
@@ -384,6 +429,8 @@ def _typed_context_fill(s: UnsafePointer[XcnnTyped, MutUntrackedOrigin], context
     held.append(b.tuple)
     held.append(b.int)
     held.append(PythonObject(None))
+    held.append(maxpool_class)
+    held.append(dev_class)
     var w = SHARED_DICT_WATCH.get_or_create_ptr()
     var cw = CLASS_WATCH.get_or_create_ptr()
     s[].held = held^
@@ -487,6 +534,68 @@ def _typed_same(left: List[Int], right: List[Int]) -> Bool:
     return True
 
 
+def _typed_winners(s: UnsafePointer[XcnnTyped, MutUntrackedOrigin], state: PythonObject, out4: List[Int],
+                   mode: Int, b: PythonObject, mut win: List[Int]) raises -> Bool:
+    """A max pool's resident winners as the door's forward left them in
+    `state` (the instance dictionary that holds them: the pool's own, or the
+    adaptive pool's for the adaptive kernel), read strictly: `_idx_host`
+    None, `_idx_dev` an exact positive int, `_idx_shape` the output's
+    (N, C, OH, OW), `_dev` an owner of the connected class on this binding
+    whose table names that handle under "idx" with the output's word count
+    (what `xcnn_dev_get_f` would return again, without reallocating). On
+    True `win` receives the handle, the owner, the owner's instance
+    dictionary and its watch epoch, the handle table and its epoch. Anything
+    else: False, and the layer keeps the door."""
+    if not py_contains(state, "_idx_host") or py_get(state, "_idx_host") is not None:
+        return False
+    var held = py_get(state, "_idx_dev")
+    if held is None or py_type(held) is not b.int:
+        return False
+    var handle = Int(py=held)
+    if handle < 1:
+        return False
+    var idx_shape = List[Int]()
+    if not _typed_words(py_get(state, "_idx_shape"), b, idx_shape) or not _typed_same(idx_shape, out4):
+        return False
+    var owner = py_get(state, "_dev")
+    if owner is None or py_type(owner) is not s[].held[_H_DEV]:
+        return False
+    var owner_fields = _fields(owner)
+    if py_get(owner_fields, "b") is not s[].modes[mode].module:
+        return False
+    var table = py_get(owner_fields, "h")
+    if table is None or py_type(table) is not b.dict:
+        return False
+    var pair = List[Int]()
+    if not _typed_words(py_get(table, "idx"), b, pair) or len(pair) != 2:
+        return False
+    if pair[0] != handle or pair[1] != max(xcnn_size(out4), 1):
+        return False
+    if not shared_dict_watch(owner_fields._obj_ptr) or not shared_dict_watch(table._obj_ptr):
+        return False
+    var w = SHARED_DICT_WATCH.get_or_create_ptr()
+    win.append(handle)
+    win.append(Int(owner._obj_ptr))
+    win.append(Int(owner_fields._obj_ptr))
+    win.append(_dict_epoch(w, Int(owner_fields._obj_ptr)))
+    win.append(Int(table._obj_ptr))
+    win.append(_dict_epoch(w, Int(table._obj_ptr)))
+    _ = table
+    _ = owner_fields
+    _ = owner
+    return True
+
+
+def _typed_set_winners(mut record: XcnnPoolRecord, win: List[Int]):
+    """The six words `_typed_winners` returned, into the record."""
+    record.win_handle = win[0]
+    record.owner = win[1]
+    record.owner_fields = win[2]
+    record.owner_stamp = win[3]
+    record.table = win[4]
+    record.table_stamp = win[5]
+
+
 def _typed_operation(operation: PythonObject, b: PythonObject) raises -> Int:
     if py_type(operation) is not b.str:
         return -1
@@ -566,8 +675,7 @@ def _typed_learn(model: PythonObject, operation: PythonObject, context: PythonOb
         return
 
     if which == _OP_POOL_FORWARD or which == _OP_POOL_BACKWARD:
-        if _is(model, "xcnn_maxpool_class", context):
-            return
+        var p_maxed = _is(model, "xcnn_maxpool_class", context)
         var one_d = _is(model, "xcnn_pool1d_class", context)
         if one_d and saved[2] != 1:
             return
@@ -587,24 +695,73 @@ def _typed_learn(model: PythonObject, operation: PythonObject, context: PythonOb
             out_dims = out4.copy()
         var out_count = max(xcnn_size(out4), 1)
         var in_count = max(xcnn_size(saved), 1)
-        _typed_store(s, XcnnPoolRecord(Int(fields._obj_ptr), stamp, Int(cls._obj_ptr), cls_epoch,
-                                       _KIND_AVG_1D if one_d else _KIND_AVG_2D, s[].ctx_serial, mode, from_default,
-                                       _typed_resident(s, mode), not one_d, x_dims^, saved^, out_dims^,
-                                       pool_run_m(3, words), out_count, in_count, 0, 0, 0))
+        # fx-maxpool: a max pool's record needs its winners as the door left
+        # them (the pool's own dictionary holds them); residency word 7.
+        var p_win = List[Int]()
+        if p_maxed:
+            if not _typed_winners(s, fields, out4, mode, b, p_win):
+                return
+        var p_kind = _KIND_AVG_1D if one_d else _KIND_AVG_2D
+        if p_maxed:
+            p_kind = _KIND_MAX_1D if one_d else _KIND_MAX_2D
+        var p_dev = 7 if p_maxed else 3
+        var p_record = XcnnPoolRecord(Int(fields._obj_ptr), stamp, Int(cls._obj_ptr), cls_epoch,
+                                      p_kind, s[].ctx_serial, mode, from_default,
+                                      _typed_resident(s, mode), not one_d, x_dims^, saved^, out_dims^,
+                                      pool_run_m(p_dev, words), pool_run_m(p_dev, words), out_count, in_count,
+                                      0, 0, 0, 0, 0, 0, 0, 0, 0)
+        if p_maxed:
+            _typed_set_winners(p_record, p_win)
+        _typed_store(s, p_record^)
         _ = fields
         _ = cls
         return
 
-    # AdaptiveAvgPool2d on the resident route, an output size that divides
-    if _adaptive_max(model, context):
-        return
-    if (s[].modes[mode].idn & XCNN_F_ADAPT) == 0 or not _typed_resident(s, mode):
+    # The adaptive pools on the resident route.
+    var a_maxed = _adaptive_max(model, context)
+    if (s[].modes[mode].idn & XCNN_F_ADAPT) == 0:
         return
     var o = List[Int]()
     if not _typed_pair(fields, "output_size", b, o):
         return
     pool_run_check_output(o[0], o[1])
     if not pool_run_adaptive_divides(saved, o):
+        # fx-maxpool: the adaptive kernel (an output size that does not
+        # divide the input). The door's forward wrote `_layer = None`, ran
+        # `XC_ADAPTIVE_POOL_M` on (x, y, winners or 0) with residency 3 (7
+        # for max) and, for max, left the winners in this dictionary; its
+        # backward runs the same entry on (g, dx, winners or 0) with the
+        # backward mode word and writes nothing.
+        if not py_contains(fields, "_layer") or py_get(fields, "_layer") is not None:
+            return
+        var k_out: List[Int] = [saved[0], saved[1], o[0], o[1]]
+        var k_win = List[Int]()
+        if a_maxed:
+            if not _typed_winners(s, fields, k_out, mode, b, k_win):
+                return
+        else:
+            if not py_contains(fields, "_idx_host") or not py_contains(fields, "_idx_dev"):
+                return
+            if py_get(fields, "_idx_host") is not None or py_get(fields, "_idx_dev") is not None:
+                return
+        var k_dev = 7 if a_maxed else 3
+        var k_out_count = max(xcnn_size(k_out), 1)
+        var k_in_count = max(xcnn_size(saved), 1)
+        var k_dims = saved.copy()
+        var k_fwd = pool_run_m(k_dev, pool_run_adaptive_words(saved, o, a_maxed, False))
+        var k_bwd = pool_run_m(k_dev, pool_run_adaptive_words(saved, o, a_maxed, True))
+        var k_record = XcnnPoolRecord(Int(fields._obj_ptr), stamp, Int(cls._obj_ptr), cls_epoch,
+                                      _KIND_ADAPTIVE_MAX_K if a_maxed else _KIND_ADAPTIVE_AVG_K, s[].ctx_serial,
+                                      mode, from_default, _typed_resident(s, mode), True, k_dims^, saved^, k_out^,
+                                      k_fwd^, k_bwd^, k_out_count, k_in_count, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+        if a_maxed:
+            _typed_set_winners(k_record, k_win)
+        _typed_store(s, k_record^)
+        _ = fields
+        _ = cls
+        return
+    # an output size that divides: the door's pool cache needs the resident glue
+    if not _typed_resident(s, mode):
         return
     # the door wrote None under both names; a missing key would be a write
     if not py_contains(fields, "_idx_host") or not py_contains(fields, "_idx_dev"):
@@ -613,7 +770,12 @@ def _typed_learn(model: PythonObject, operation: PythonObject, context: PythonOb
         return
     var k = pool_run_adaptive_kernel(saved, o)
     var layer = py_get(fields, "_layer")
-    if layer is None or py_type(layer) is not s[].held[_H_AVGPOOL]:
+    if layer is None:
+        return
+    if a_maxed:
+        if py_type(layer) is not s[].held[_H_MAXPOOL]:
+            return
+    elif py_type(layer) is not s[].held[_H_AVGPOOL]:
         return
     var cache = py_get(fields, "_pool_cache")
     if cache is None or py_type(cache) is not b.tuple or len(cache) != 2:
@@ -648,10 +810,21 @@ def _typed_learn(model: PythonObject, operation: PythonObject, context: PythonOb
     var a_out_count = max(xcnn_size(a_out), 1)
     var a_in_count = max(xcnn_size(saved), 1)
     var a_dims = saved.copy()
-    _typed_store(s, XcnnPoolRecord(Int(fields._obj_ptr), stamp, Int(cls._obj_ptr), cls_epoch, _KIND_ADAPTIVE_AVG,
-                                   s[].ctx_serial, mode, from_default, True, backward_ok, a_dims^, saved^, a_out^,
-                                   pool_run_m(3, a_words), a_out_count, a_in_count, Int(layer._obj_ptr),
-                                   Int(inner._obj_ptr), inner_stamp))
+    # fx-maxpool: the inner MaxPool2d holds the winners (its own dictionary,
+    # whose epoch the record already carries as `inner_stamp`).
+    var a_win = List[Int]()
+    if a_maxed:
+        if not _typed_winners(s, inner, a_out, mode, b, a_win):
+            return
+    var a_dev = 7 if a_maxed else 3
+    var a_record = XcnnPoolRecord(Int(fields._obj_ptr), stamp, Int(cls._obj_ptr), cls_epoch,
+                                  _KIND_ADAPTIVE_MAX if a_maxed else _KIND_ADAPTIVE_AVG,
+                                  s[].ctx_serial, mode, from_default, True, backward_ok, a_dims^, saved^, a_out^,
+                                  pool_run_m(a_dev, a_words), pool_run_m(a_dev, a_words), a_out_count, a_in_count,
+                                  Int(layer._obj_ptr), Int(inner._obj_ptr), inner_stamp, 0, 0, 0, 0, 0, 0)
+    if a_maxed:
+        _typed_set_winners(a_record, a_win)
+    _typed_store(s, a_record^)
     _ = inner
     _ = layer
     _ = fields
@@ -818,7 +991,12 @@ def xcnn_pool_typed_call(args: PyObjectPtr) raises -> PyObjectPtr:
         return PyObjectPtr()
     var backward = which == _OP_ADAPTIVE_BACKWARD or which == _OP_POOL_BACKWARD
     var adaptive = which == _OP_ADAPTIVE_FORWARD or which == _OP_ADAPTIVE_BACKWARD
-    if adaptive != (rec.kind == _KIND_ADAPTIVE_AVG):
+    var maxed = (rec.kind == _KIND_MAX_2D or rec.kind == _KIND_MAX_1D or rec.kind == _KIND_ADAPTIVE_MAX
+                 or rec.kind == _KIND_ADAPTIVE_MAX_K)
+    var kernel = rec.kind == _KIND_ADAPTIVE_AVG_K or rec.kind == _KIND_ADAPTIVE_MAX_K
+    if adaptive != (rec.kind == _KIND_ADAPTIVE_AVG or rec.kind == _KIND_ADAPTIVE_MAX or kernel):
+        return PyObjectPtr()
+    if maxed != (rec.win_handle != 0):
         return PyObjectPtr()
     if backward and not rec.backward_ok:
         return PyObjectPtr()
@@ -832,13 +1010,35 @@ def xcnn_pool_typed_call(args: PyObjectPtr) raises -> PyObjectPtr:
             if not current:
                 t[].PyErr_Clear()
             return PyObjectPtr()
-    if adaptive:
+    if rec.inner_layer != 0:
         # the inner pool the outer dictionary still holds (its stamp above):
-        # its own dictionary unchanged and its class still the average pool
+        # its own dictionary unchanged and its class still the pool class
         if _dict_epoch(w, rec.inner_fields) != rec.inner_stamp:
             return PyObjectPtr()
-        if PyObjectPtr(upcast_from=cpy.Py_TYPE(_borrowed(rec.inner_layer))) != s[].held[_H_AVGPOOL]._obj_ptr:
+        var inner_class = s[].held[_H_AVGPOOL]._obj_ptr
+        if maxed:
+            inner_class = s[].held[_H_MAXPOOL]._obj_ptr
+        if PyObjectPtr(upcast_from=cpy.Py_TYPE(_borrowed(rec.inner_layer))) != inner_class:
             return PyObjectPtr()
+    if maxed:
+        # the winners' owner the pool's dictionary still holds (the layer's
+        # stamp, or the inner pool's, above): still of the connected owner
+        # class, its instance dictionary the recorded one and unchanged, and
+        # its handle table unchanged (so the table still names the recorded
+        # handle with the recorded size)
+        var owner = _borrowed(rec.owner)
+        if PyObjectPtr(upcast_from=cpy.Py_TYPE(owner)) != s[].held[_H_DEV]._obj_ptr:
+            return PyObjectPtr()
+        var owner_dict = t[].PyObject_GenericGetDict(owner, PyObjectPtr())
+        if not owner_dict:
+            t[].PyErr_Clear()
+            return PyObjectPtr()
+        var owner_dict_owner = PythonObject(from_owned=owner_dict)
+        if Int(owner_dict) != rec.owner_fields or _dict_epoch(w, rec.owner_fields) != rec.owner_stamp:
+            return PyObjectPtr()
+        if _dict_epoch(w, rec.table) != rec.table_stamp:
+            return PyObjectPtr()
+        _ = owner_dict_owner
 
     # ---- UNPACK the one argument: a resident tensor of this binding
     var call_args = t[].PyTuple_GetItem(args, 2)
@@ -861,7 +1061,8 @@ def xcnn_pool_typed_call(args: PyObjectPtr) raises -> PyObjectPtr:
     # ---- everything the launch needs, copied out of the tables before the
     # GIL is released (another thread may refill them meanwhile)
     var entry = s[].modes[rec.mode].entry
-    var ints = rec.ints.copy()
+    var ints = rec.ints_back.copy() if backward else rec.ints.copy()
+    var winners = rec.win_handle
     var dims = List[Int]()
     if backward:
         dims = rec.saved.copy()
@@ -870,6 +1071,10 @@ def xcnn_pool_typed_call(args: PyObjectPtr) raises -> PyObjectPtr:
     var count = rec.in_count if backward else rec.out_count
     var alloc_op = XC_RES_ALLOC_NOFILL if rec.nofill else XC_RES_ALLOC
     var run_op = XC_AVGPOOL2D_BACKWARD_M if backward else XC_AVGPOOL2D_FORWARD_M
+    if kernel:
+        run_op = XC_ADAPTIVE_POOL_M
+    elif maxed:
+        run_op = XC_MAXPOOL2D_BACKWARD_M if backward else XC_MAXPOOL2D_FORWARD_M
     var tensor_class = s[].held[_H_TENSOR]
     _ = fields_owner  # the layer's dictionary stayed alive through the record reads above
 
@@ -879,9 +1084,22 @@ def xcnn_pool_typed_call(args: PyObjectPtr) raises -> PyObjectPtr:
     with GILReleased(py):
         handle = xcnn_run_call(entry, alloc_op, List[Int](), [count])
     var result = _typed_tensor(t, s, tensor_class, module, dims, handle)
-    var req_addrs: Array[Int, 2] = [source, handle]
-    with GILReleased(py):
-        _ = xcnn_run_fixed(entry, run_op, req_addrs, ints)
+    # The door's address order: the adaptive kernel (x, y, winners or 0) both
+    # ways; a max pool (x, y, winners) forward and (g, winners, dx) backward;
+    # an average pool (x, y).
+    if kernel or maxed:
+        var second = handle
+        var third = winners
+        if maxed and backward and not kernel:
+            second = winners
+            third = handle
+        var req_three: Array[Int, 3] = [source, second, third]
+        with GILReleased(py):
+            _ = xcnn_run_fixed(entry, run_op, req_three, ints)
+    else:
+        var req_addrs: Array[Int, 2] = [source, handle]
+        with GILReleased(py):
+            _ = xcnn_run_fixed(entry, run_op, req_addrs, ints)
     _ = module
     _ = tensor_class
     return result.steal_data()

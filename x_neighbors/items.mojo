@@ -35,6 +35,7 @@ from checks.numerics import (
 )
 
 from std.memory import bitcast
+from core.row_cells import softmax_row_from_max_f32, sqdist_diff_cell
 from std.sys.info import is_gpu
 
 comptime FP = MutPointer[Float32, MutAnyOrigin]
@@ -77,11 +78,8 @@ def sqdist_item(t: Int, x: FP, y: FP, res: FP, n: Int, m: Int, d: Int):
     features folded in ascending order through the pinned fma."""
     var i = t // m
     var j = t - i * m
-    var acc = Float32(0)
-    for f in range(d):
-        var df = _sub(x.unsafe_load(i * d + f), y.unsafe_load(j * d + f))
-        acc = ftz(identical_mul_add(df, df, acc))
-    res.unsafe_store(t, acc)
+    # core/row_cells.mojo: the one by-difference body (the same statements)
+    res.unsafe_store(t, sqdist_diff_cell(x, y, i, j, d))
 
 
 # DEVIATION 5206 (row 120)
@@ -979,13 +977,9 @@ def softmax_item(t: Int, x: FP, res: FP, n: Int, c: Int):
         var v = x.unsafe_load(t * c + j)
         if v > mx:
             mx = v
-    var acc = Float32(0)
-    for j in range(c):
-        var e = ftz(identical_exp(_sub(x.unsafe_load(t * c + j), mx)))
-        res.unsafe_store(t * c + j, e)
-        acc = _add(acc, e)
-    for j in range(c):
-        res.unsafe_store(t * c + j, ftz(identical_div(res.unsafe_load(t * c + j), acc)))
+    # core/row_cells.mojo: the one body of the exponentials, their ascending
+    # sum and the division (the same flushes as the statements that stood here)
+    softmax_row_from_max_f32(x, res, t * c, c, mx)
 
 
 # DEVIATION 5209 (row 123)

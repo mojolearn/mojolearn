@@ -10,8 +10,8 @@ Chain them to build an inference or hybrid algorithm (a mixture of experts,
 an ensemble with learned routing, statistics combined with a learned
 representation) without writing a kernel.
 
-In `identical` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs.
-Every operation here is the one mojolearn's own trainers run, so a
+In `identical` mode, Mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs.
+Every operation here is the one Mojolearn's own trainers run, so a
 composition gives the same output bits on every vendor for the same inputs.
 
 Tensors are float32 arrays of up to 8 dimensions addressed by integer
@@ -246,13 +246,13 @@ class Session:
     def state(self, x, ids=False):
         """Copy an array to the device as carried state; returns its handle.
 
-        A state tensor is updated in place by the operations that carry
-        state from one call to the next, such as a recurrent block's step,
-        and :meth:`Session.capture` records it as state of the program, so
+        A state tensor is carried from one call to the next and
+        :meth:`Session.capture` records it as state of the program, so
         :meth:`Program.decode` and :meth:`Program.while_loop` advance it
-        without copies. ``x`` is accepted as in :meth:`tensor`, or as in
-        :meth:`ids` with ``ids=True`` (integer state such as a position).
-        A state tensor takes no gradient.
+        without copies. An operation that keeps state between calls
+        writes its state tensors in place. ``x`` is accepted as in
+        :meth:`tensor`, or as in :meth:`ids` with ``ids=True`` (integer
+        state such as a position). A state tensor takes no gradient.
 
         Example
         -------
@@ -724,6 +724,289 @@ class Session:
         """Apply full-width rotary embeddings to sequence-by-concatenated-head features."""
         return _SESSION_CALL(self, "rotary", (x, head_dim, offset, theta))
 
+    # ------------------------------------------------------------ blocks
+    def mamba_block(self, weights, *, version=1, batch_size=1, dt_limit=(0.0, float("inf")),
+                    requires_grad=False):
+        """Put one Mamba block on the device; returns the block.
+
+        The block is the one :class:`mojolearn.Mamba1Block`,
+        :class:`mojolearn.Mamba2Block` and :class:`mojolearn.Mamba3Block`
+        run, so :meth:`mamba_step` returns the same bits as those classes
+        for the same weights and input.
+
+        Parameters
+        ----------
+        weights : list or tuple of arrays
+            The block's weights in the order the block class lists them.
+            For ``version=1``: ``norm.weight``, ``in_proj.weight``,
+            ``conv1d.weight``, ``conv1d.bias``, ``x_proj.weight``,
+            ``dt_proj.weight``, ``dt_proj.bias``, ``A_log``, ``D``,
+            ``out_proj.weight``. For ``version=2``: ``block_norm.weight``,
+            ``in_proj.weight``, ``conv1d.weight``, ``conv1d.bias``,
+            ``dt_bias``, ``A_log``, ``D``, ``norm.weight``,
+            ``out_proj.weight``. For ``version=3``: the nine arrays of
+            :class:`mojolearn.Mamba3Block`, in its order. Shapes are those
+            the block class documents; ``d_model`` is read from the first
+            array.
+        version : {1, 2, 3}, default 1
+            Mamba-1, Mamba-2 or Mamba-3.
+        batch_size : int, default 1
+            Number of sequences the block's state holds.
+        dt_limit : tuple of float, default (0.0, inf)
+            Clamp ``(lo, hi)`` applied to dt. Used by ``version=2``.
+        requires_grad : bool, default False
+            Make the weights trainable (recording sessions only).
+
+        Returns
+        -------
+        dict
+            ``'weights'`` is the handle of one tensor holding every weight,
+            ``'state'`` the handle of the block's state, which starts at
+            zero. Pass the dict to :meth:`mamba_step`. With
+            ``requires_grad=True`` pass ``block['weights']`` to :meth:`step`
+            to train the block and to :meth:`grad` to read its gradient.
+
+        Example
+        -------
+        >>> with ops.Session() as s:
+        ...     block = s.mamba_block(weights, version=1, batch_size=2)
+        ...     y = s.mamba_step(s.tensor(x), block)   # x: (2, tokens, d_model)
+        """
+        return _SESSION_CALL(self, "mamba_block", (weights, version, batch_size, dt_limit, requires_grad))
+
+    def mamba_step(self, x, block):
+        """Run a Mamba block over the next tokens; returns the output.
+
+        ``x`` holds ``batch_size * tokens * d_model`` values, usually as a
+        ``(batch_size, tokens, d_model)`` tensor; the result has ``x``'s
+        shape. ``block`` comes from :meth:`mamba_block`. One token per call
+        is a decode step and several tokens a prefill; the block's state is
+        updated in place either way, so the next call continues the
+        sequence.
+
+        In a recording session each call starts from a zero state and is
+        differentiable: after :meth:`backward`, :meth:`grad` of
+        ``block['weights']`` and of ``x`` return the gradients.
+        """
+        return _SESSION_CALL(self, "mamba_step", (x, block))
+
+    def attention_block(self, weights, *, n_heads, max_positions, batch_size=1, n_kv_heads=None, window=0,
+                        requires_grad=False, rope_theta=10000.0, rope_scaling=None, rope_dim=None,
+                        qkv_bias=False, o_bias=False, norm="rmsnorm", norm_eps=1e-6, norm_bias=False,
+                        mlp="swiglu", mlp_bias=False, qk_norm=False, attn_softcap=None):
+        """Put one transformer decoder block on the device; returns the block.
+
+        The block is :class:`mojolearn.TransformerBlock` with its default
+        options: input RMSNorm, causal self-attention with rotary position
+        embeddings and grouped-query attention, residual, RMSNorm, a
+        SiLU-gated MLP, residual. It keeps a key/value cache, so decoding a
+        token costs the same at any position.
+
+        Parameters
+        ----------
+        weights : list or tuple of arrays
+            Nine arrays in this order, in the ``(out, in)`` layout:
+            ``input_layernorm.weight``, ``post_attention_layernorm.weight``,
+            ``q_proj.weight``, ``k_proj.weight``, ``v_proj.weight``,
+            ``o_proj.weight``, ``gate_proj.weight``, ``up_proj.weight``,
+            ``down_proj.weight``. ``d_model`` is read from the first array
+            and the MLP width from ``gate_proj.weight``.
+        n_heads : int
+            Number of attention heads; ``d_model`` must be a multiple of it.
+        max_positions : int
+            The longest sequence the cache holds.
+        batch_size : int, default 1
+            Number of sequences the cache holds.
+        n_kv_heads : int or None, default None
+            Number of key/value heads; None means ``n_heads``.
+        window : int, default 0
+            Sliding-window length; 0 attends to every earlier position.
+        requires_grad : bool, default False
+            Make the weights trainable (recording sessions only).
+        rope_theta, rope_scaling, rope_dim, qkv_bias, o_bias, norm, norm_eps, norm_bias, mlp, mlp_bias, qk_norm, attn_softcap
+            The block options of :class:`mojolearn.TransformerBlock`, with
+            the same meanings and defaults. An option that adds weights
+            adds their arrays after the nine above, in this order:
+            ``q_proj.bias``, ``k_proj.bias``, ``v_proj.bias`` (`qkv_bias`),
+            ``o_proj.bias`` (`o_bias`), ``input_layernorm.bias``,
+            ``post_attention_layernorm.bias`` (`norm_bias`),
+            ``up_proj.bias``, ``down_proj.bias``, ``gate_proj.bias``
+            (`mlp_bias`; the last only for a gated MLP), ``q_norm.weight``,
+            ``k_norm.weight`` (`qk_norm`). An ungated MLP (``mlp='gelu'``
+            or ``'gelu_tanh'``) has no ``gate_proj.weight``: leave it out.
+
+        Returns
+        -------
+        dict
+            ``'weights'`` is the handle of one tensor holding every weight
+            and ``'state'`` the handle of the key/value cache, which starts
+            empty. Pass the dict to :meth:`attention_step`.
+
+        Example
+        -------
+        Two blocks stacked:
+
+        >>> with ops.Session() as s:
+        ...     first = s.attention_block(w0, n_heads=4, max_positions=64)
+        ...     second = s.attention_block(w1, n_heads=4, max_positions=64)
+        ...     h = s.attention_step(s.tensor(x), first)   # x: (1, tokens, d_model)
+        ...     h = s.attention_step(h, second)
+        """
+        return _SESSION_CALL(self, "attention_block",
+                             (weights, batch_size, n_heads, n_kv_heads, max_positions, window, requires_grad,
+                              rope_theta, rope_scaling, rope_dim, qkv_bias, o_bias, norm, norm_eps, norm_bias,
+                              mlp, mlp_bias, qk_norm, attn_softcap))
+
+    def attention_step(self, x, block):
+        """Run a transformer block over the next tokens; returns the output.
+
+        ``x`` holds ``batch_size * tokens * d_model`` values, usually as a
+        ``(batch_size, tokens, d_model)`` tensor; the result has ``x``'s
+        shape. ``block`` comes from :meth:`attention_block`. The tokens are
+        appended to the block's key/value cache: one token per call is a
+        decode step, several a prefill, and decoding token by token gives
+        the same bits as one prefill over the whole sequence.
+
+        In a recording session each call starts from an empty cache and is
+        differentiable: after :meth:`backward`, :meth:`grad` of
+        ``block['weights']`` and of ``x`` return the gradients.
+        """
+        return _SESSION_CALL(self, "attention_step", (x, block))
+
+    def small_mlp(self, x, weight1, bias1, weight2, bias2):
+        """A two-layer perceptron ``relu(x @ weight1.T + bias1) @ weight2.T + bias2``.
+
+        ``x`` is ``(rows, inputs)``, ``weight1`` ``(hidden, inputs)``,
+        ``bias1`` holds ``hidden`` values, ``weight2`` is
+        ``(outputs, hidden)`` and ``bias2`` holds ``outputs`` values; the
+        result is ``(rows, outputs)``. One operation for the whole network
+        and, in a recording session, one for its gradients. Its products are
+        summed in a different order from two :meth:`linear` calls, so the
+        two forms can differ in the last bits; each is the same on every
+        vendor.
+        """
+        return _SESSION_CALL(self, "small_mlp", (x, weight1, bias1, weight2, bias2))
+
+    def lm_head_loss(self, hidden, weight, codes):
+        """Mean cross-entropy of ``hidden @ weight.T`` against class codes.
+
+        ``hidden`` holds ``rows * width`` values, ``weight`` is
+        ``(vocabulary, width)`` and ``codes`` holds one class code per row;
+        the result is a ``(1, 1)`` tensor. The ``(rows, vocabulary)`` logits
+        are never stored, so a large vocabulary needs no extra memory. In a
+        recording session the loss is differentiable with respect to
+        ``hidden`` and ``weight``.
+        """
+        return _SESSION_CALL(self, "lm_head_loss", (hidden, weight, codes))
+
+    def lstm(self, x, weight_ih, weight_hh, bias_ih, bias_hh):
+        """One LSTM layer over a whole sequence; returns every hidden state.
+
+        ``x`` is ``(steps, batch, inputs)``, time first, as
+        ``torch.nn.LSTM`` takes it by default. The weights have PyTorch's
+        shapes and gate order (input, forget, cell, output):
+        ``weight_ih`` ``(4 * hidden, inputs)``, ``weight_hh``
+        ``(4 * hidden, hidden)``, ``bias_ih`` and ``bias_hh`` as
+        ``(1, 4 * hidden)`` tensors. The hidden and cell states start at
+        zero. The result is ``(steps, batch, hidden)``; its last step,
+        ``index`` or ``take`` it out, is the final hidden state. To stack
+        layers, pass the result as the next layer's ``x``. In a recording
+        session the layer is differentiable with respect to ``x`` and all
+        four parameters.
+        """
+        return _SESSION_CALL(self, "lstm", (x, weight_ih, weight_hh, bias_ih, bias_hh))
+
+    def gru(self, x, weight_ih, weight_hh, bias_ih, bias_hh):
+        """One GRU layer over a whole sequence; returns every hidden state.
+
+        As :meth:`lstm`, with PyTorch's GRU gate order (reset, update, new):
+        ``weight_ih`` is ``(3 * hidden, inputs)``, ``weight_hh``
+        ``(3 * hidden, hidden)`` and each bias ``(1, 3 * hidden)``.
+        """
+        return _SESSION_CALL(self, "gru", (x, weight_ih, weight_hh, bias_ih, bias_hh))
+
+    def rnn(self, x, weight_ih, weight_hh, bias_ih, bias_hh):
+        """One tanh RNN layer over a whole sequence; returns every hidden state.
+
+        As :meth:`lstm`, with ``weight_ih`` ``(hidden, inputs)``,
+        ``weight_hh`` ``(hidden, hidden)`` and each bias ``(1, hidden)``.
+        """
+        return _SESSION_CALL(self, "rnn", (x, weight_ih, weight_hh, bias_ih, bias_hh))
+
+    def conv_block(self, x, weight, bias, *, padding=0, pool_size=None):
+        """A convolution block ``max_pool(relu(conv2d(x, weight) + bias))``.
+
+        ``x`` is ``(N, C, H, W)``, ``weight`` ``(out_channels, C, k, k)``
+        and ``bias`` holds ``out_channels`` values. The convolution has
+        stride 1 and zero ``padding`` on every side; ``pool_size=p`` adds a
+        ``p`` by ``p`` max pool with stride ``p``, and None leaves the pool
+        out. One operation for the whole block, as
+        :class:`mojolearn.CNNClassifier` runs it, and one for its gradients
+        in a recording session.
+        """
+        return _SESSION_CALL(self, "conv_block", (x, weight, bias, padding, pool_size))
+
+    def conv_linear(self, x, weight, bias):
+        """A dense layer ``x @ weight.T + bias`` in PyTorch's layout.
+
+        ``x`` holds ``rows * inputs`` values (a ``(N, C, H, W)`` block
+        output is read as ``N`` rows), ``weight`` is ``(outputs, inputs)``
+        as in ``torch.nn.Linear`` and ``bias`` holds ``outputs`` values. It
+        is the output layer :class:`mojolearn.CNNClassifier` puts after its
+        convolution blocks.
+        """
+        return _SESSION_CALL(self, "conv_linear", (x, weight, bias))
+
+    def lm_embedding(self, table, ids, padding_idx=None):
+        """Rows of ``table`` picked by a tensor of token ids.
+
+        The values are those of :meth:`embedding`. ``ids`` is a tensor made
+        with :meth:`ids`. In a recording session the gradient of ``table``
+        is computed with the method the language-model trainers use, which
+        is faster for a long sequence over a large vocabulary; it gives the
+        same gradient bits as :meth:`embedding`.
+        """
+        return _SESSION_CALL(self, "lm_embedding", (table, ids, padding_idx))
+
+    def lm_rows(self, batch_size, eos_token_id=None):
+        """Create the bookkeeping of one text generation; returns its handle.
+
+        It records, for each of ``batch_size`` sequences, whether it has
+        finished and how many tokens it has produced. ``eos_token_id`` is
+        an id, or a list of ids, that ends a sequence. Pass the handle to
+        :meth:`lm_pick` and :meth:`lm_alive`.
+        """
+        return _SESSION_CALL(self, "lm_rows", (batch_size, eos_token_id))
+
+    def lm_pick(self, logits, rows, *, pad_token_id=0, do_sample=False, temperature=1.0, top_k=0,
+                top_p=1.0, seed=0):
+        """Choose the next token of every sequence; returns the ids.
+
+        ``logits`` is ``(batch_size, tokens, vocabulary)`` or
+        ``(batch_size, vocabulary)``; the last position of each sequence is
+        read. The result is a ``(batch_size, 1)`` tensor of int32 ids, as
+        :meth:`ids` makes: feed it to :meth:`lm_embedding` for the next
+        step. A finished sequence gets ``pad_token_id``.
+
+        ``do_sample=False`` takes the largest logit (the lowest id on a
+        tie). ``do_sample=True`` samples after ``temperature``, ``top_k``
+        (0 keeps every token) and ``top_p``, as in
+        :meth:`mojolearn.CausalLM.generate`; the draw depends only on
+        ``seed``, the sequence and its position, so it is the same on every
+        vendor. ``rows`` (from :meth:`lm_rows`) is updated in place.
+        """
+        return _SESSION_CALL(self, "lm_pick",
+                             (logits, rows, pad_token_id, do_sample, temperature, top_k, top_p, seed))
+
+    def lm_alive(self, ids, rows):
+        """Whether the generation should continue, as a ``(1, 1)`` tensor.
+
+        1.0 while at least one sequence is unfinished, else 0.0. ``ids`` is
+        the result of :meth:`lm_pick`. Capture it as the condition of
+        :meth:`Program.while_loop` to stop a decode loop on the device.
+        """
+        return _SESSION_CALL(self, "lm_alive", (ids, rows))
+
     # ------------------------------------------------------------ data steps
     def permutation(self, n, seed=0, epoch=0):
         """A random order of the rows ``0 .. n-1`` as an ``(n, 1)`` tensor,
@@ -1166,7 +1449,9 @@ class Session:
 
     # ------------------------------------------------------------ optimizers
     def optimizer(self, kind="adam", lr=1e-3, *, momentum=0.0, nesterov=False, beta1=0.9, beta2=0.999,
-                  eps=1e-8, weight_decay=0.0, schedule="constant", step_size=1, gamma=0.1):
+                  eps=1e-8, weight_decay=0.0, schedule="constant", step_size=1, gamma=0.1,
+                  alpha=0.99, centered=False, lr_decay=0.0, initial_accumulator_value=0.0,
+                  clip_grad_norm=None, clip_grad_value=None):
         """Create an optimizer for :meth:`step`; returns its integer handle.
 
         Parameters
@@ -1203,7 +1488,9 @@ class Session:
         >>> with ops.Session(record=True) as s:
         ...     opt = s.optimizer("sgd", lr=0.1, momentum=0.9, nesterov=True)
         """
-        return _SESSION_CALL(self, "optimizer", (kind, lr, momentum, nesterov, beta1, beta2, eps, weight_decay, schedule, step_size, gamma))
+        return _SESSION_CALL(self, "optimizer", (kind, lr, momentum, nesterov, beta1, beta2, eps, weight_decay, schedule, step_size, gamma,
+                                                 alpha, centered, lr_decay, initial_accumulator_value,
+                                                 clip_grad_norm, clip_grad_value))
 
     def step(self, optimizer, params):
         """Update the parameters in place from the last :meth:`backward`.

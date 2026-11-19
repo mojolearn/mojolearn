@@ -14,8 +14,8 @@ variable and is always `n_rows` in rung 1.
 THE CUB CALLS AND WHAT STANDS IN (svm/README.md section 2):
 
     cub::DeviceRadixSort::SortPairs(f, f_idx)   -> twiddle_keys_kernel +
-                                                   gbdt radix_sort.mojo::
-                                                   launch_radix_sort_bins
+                                                   core/fast_radix_sort.mojo::
+                                                   fast_radix_sort_pairs_u32
                                                    (stable LSD, 32 bits)
     thrust::copy(permutation_iterator(avail))   -> gather_u8_by_u32_kernel
     cub::DeviceSelect::Flagged                  -> SelectScratch.select_*
@@ -37,7 +37,6 @@ THE CUB CALLS AND WHAT STANDS IN (svm/README.md section 2):
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 
-from gbdt.gpu_util.kernel.radix_sort import launch_radix_sort_bins
 from core.fast_radix_sort import fast_radix_sort_pairs_u32, frs_counts_len
 from svm.impl.fast_ws_select import (
     FWS_ANY,
@@ -51,12 +50,11 @@ from svm.impl.fast_ws_select import (
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
-from gbdt.gpu_util.kernel.reorder_one_bit import REORDER_BLOCK
+from core.device_zero import enqueue_fill_n
 from svm.checks.device_select import (
     SEL_TPB,
     SelectScratch,
     copy_i32_kernel,
-    fill_u8_kernel,
     gather_u8_by_u32_kernel,
     range_i32_kernel,
     twiddle_keys_kernel,
@@ -165,7 +163,6 @@ struct WorkingSet(Movable):
     var tmp_keys: DeviceBuffer[DType.uint32]
     var tmp_vals: DeviceBuffer[DType.uint32]
     var sort_offsets: DeviceBuffer[DType.int32]
-    var sort_block_sums: DeviceBuffer[DType.int32]
     var idx_tmp: DeviceBuffer[DType.int32]
     var available: DeviceBuffer[DType.uint8]
     var available_sorted: DeviceBuffer[DType.uint8]
@@ -209,15 +206,11 @@ struct WorkingSet(Movable):
         self.f_idx_sorted = ctx.enqueue_create_buffer[DType.uint32](nt)
         self.tmp_keys = ctx.enqueue_create_buffer[DType.uint32](nt)
         self.tmp_vals = ctx.enqueue_create_buffer[DType.uint32](nt)
-        # FAST_WS_SORT reuses this as its (digit, tile) count table
+        # the sort's (digit, tile) count table
         var n_off = nt
-        comptime if FAST_WS_SORT:
-            if frs_counts_len(nt) > n_off:
-                n_off = frs_counts_len(nt)
+        if frs_counts_len(nt) > n_off:
+            n_off = frs_counts_len(nt)
         self.sort_offsets = ctx.enqueue_create_buffer[DType.int32](n_off)
-        self.sort_block_sums = ctx.enqueue_create_buffer[DType.int32](
-            (nt + REORDER_BLOCK - 1) // REORDER_BLOCK
-        )
         self.idx_tmp = ctx.enqueue_create_buffer[DType.int32](nt)
         self.available = ctx.enqueue_create_buffer[DType.uint8](nt)
         self.available_sorted = ctx.enqueue_create_buffer[DType.uint8](nt)
@@ -311,17 +304,12 @@ struct WorkingSet(Movable):
                 self.f_idx_sorted.unsafe_ptr(), Int32(nt),
                 grid_dim=_grid(nt), block_dim=SEL_TPB,
             )
-        comptime if FAST_WS_SORT:
-            fast_radix_sort_pairs_u32(
-                ctx, nt, self.f_keys, self.f_idx_sorted,
-                self.tmp_keys, self.tmp_vals, self.sort_offsets,
-            )
-        else:
-            launch_radix_sort_bins(
-                ctx, nt, 0, 32, self.f_keys, self.f_idx_sorted,
-                self.tmp_keys, self.tmp_vals, self.sort_offsets,
-                self.sort_block_sums,
-            )
+        # The one-bit sort that stood in the else of FAST_WS_SORT (true in
+        # both tiers, so never compiled) and its block-sums buffer are gone.
+        fast_radix_sort_pairs_u32(
+            ctx, nt, self.f_keys, self.f_idx_sorted,
+            self.tmp_keys, self.tmp_vals, self.sort_offsets,
+        )
 
         comptime if FAST_WS_SELECT:
             self._fast_select(ctx, alpha, y, C, n_already_selected)
@@ -349,10 +337,7 @@ struct WorkingSet(Movable):
         # In case we could not find enough elements, then we just fill using
         # the still available elements.
         if n_already_selected < self.n_ws:
-            ctx.enqueue_function[fill_u8_kernel](
-                self.available.unsafe_ptr(), UInt8(1), Int32(nt),
-                grid_dim=_grid(nt), block_dim=SEL_TPB,
-            )
+            enqueue_fill_n(ctx, self.available, nt, UInt8(1))
             n_already_selected += self.gather_available(
                 ctx, n_already_selected, self.n_ws - n_already_selected, True
             )

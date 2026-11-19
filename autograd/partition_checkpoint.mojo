@@ -124,7 +124,7 @@ def partition_from_checkpoint(ck: Checkpoint) raises -> PartitionPlan:
         var integer = Int(x[PARTITION_HEADER + 2 * j + 1])
         if (train != 0 and train != 1) or (integer != 0 and integer != 1) or (train != 0 and integer != 0):
             raise Error("partitioned checkpoint has invalid parameter flags")
-        var data = List[Float32](length=sh.count(), fill=Float32(0))
+        var data = List[Float32](unsafe_uninit_length=sh.count())
         unsafe_memcpy(dest=data.unsafe_ptr(), src=ck.param.unsafe_ptr() + ck.offsets[j], count=sh.count())
         plan.parameters.append(GraphBytes(sh, data^, integer != 0))
         plan.trainable.append(train != 0)

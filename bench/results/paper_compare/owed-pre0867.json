@@ -640,7 +640,7 @@
   },
   "xcnn-typed-door": {
    "define": "MOJOLEARN_XCNN_FAST_TYPED_DOOR",
-   "status": "define in code (bindings/xcnn_native_pack.mojo xcnn_c; bindings/xcnn_pool_typed_door.mojo): B = the typed boundary tables of the average pools (one typed context per process, one typed record per layer, valid under the 3.12+ dictionary and type watchers; no by-name read, Python str or instance-dictionary write per resident call); A = the door, the default, unchanged. Host side only: the same entry and launch words. Pilot of design A (~/mojolearn-evidence/briefs-20261118/ideas-boundary-RESULT.md), lane fx-typed-pilot (2026-11-18)",
+   "status": "define in code (bindings/xcnn_native_pack.mojo xcnn_c; bindings/xcnn_pool_typed_door.mojo): B = the typed boundary tables of the pools (one typed context per process, one typed record per layer, valid under the 3.12+ dictionary and type watchers; no by-name read, Python str or instance-dictionary write per resident call); A = the door, the default, unchanged. Host side only: the same entry and launch words. Pilot of design A (~/mojolearn-evidence/briefs-20261118/ideas-boundary-RESULT.md), lane fx-typed-pilot (2026-11-18): average pools. Lane fx-maxpool (2026-11-19): MaxPool1d/2d, AdaptiveMaxPool2d and the adaptive kernel (an output size that does not divide the input, avg and max); the max record carries the resident winners handle and the watch epochs of the two dictionaries that name it, and a hit writes nothing because the winners' state depends only on the input shape (~/mojolearn-evidence/briefs-20261118/fx-maxpool-RESULT.md)",
    "owed": "RUN"
   },
   "mamba3-s17-tail-tree": {
@@ -696,6 +696,36 @@
   "gemm-dx-concat": {
    "define": "MOJOLEARN_GEMM_FAST_DX_CONCAT",
    "status": "define in code (autograd/kernels/transformer.mojo BWD_GEMM_DX_CONCAT, bwd_dx_concat_pack_kernel, bwd_dx_concat3; autograd/rules_transformer.mojo _dx_fanin_cat; transformer/checks/transformer_backward_oracle.mojo BWD_HOST_DX_CONCAT; IDENTICAL, no poison build): B = the transformer backward's q/k/v fan-in dX (S29-32) as ONE product, d(norm1.out) = GEMM_contract([dQ | dK | dV], [Wq; Wk; Wv]) over K = q_width + 2 kv_width walked ascending in that order, after one pack launch that bit-copies the three gradients and the three weights into two stage scratch buffers; A = the default: three products into tmp0/tmp1/tmp2, then bwd_add3_kernel (q + k) + v. BITS CHANGE under B on every column and in the host oracle together (another rounding order of the same sum): digests of d(norm1.out) and of everything downstream of it MOVE, and must be equal between the device and the host column of the B build. Launches for the fan-in dX: pack 1 + one product (2 where it runs as groups + fold), against three products (6) + 1. gate/up (S9) is not changed",
+   "owed": "RUN"
+  },
+  "llama-stage-keep": {
+   "define": "MOJOLEARN_LLAMA_FAST_STAGE_KEEP",
+   "status": "define in code (transformer/impl/llama/modeling_llama.mojo LLAMA_FAST_STAGE_KEEP, LlamaDeviceStages.reset_flags; autograd/block_step_ops.mojo AttnPrefill.prepare keep_bytes, attn_step_fresh_prefill, _run_attn_on): B = a forward-only attention step run of L > 1 tokens on kept stages of the same shape (the stateless TransformerBlock.forward, a forward with the caller's caches, an inference-only stack layer) restores the stages' host flags and does not zero-fill the stage buffers again; A = the default, LlamaDeviceStages.reset before every such call (thirty zero fills and a wait; on NVIDIA the fills include the kept exp stash, B x n_heads x L x S floats). A run a backward may read, the CausalLM layer run and every L = 1 step are A in both arms. No float is produced differently",
+   "owed": "RUN"
+  },
+  "byte-lm-logits-hugepage": {
+   "define": "MOJOLEARN_BYTE_LM_FAST_LOGITS_HUGEPAGE",
+   "status": "define in code (bindings/byte_lm_trainer_native_door.mojo BYTE_LM_LOGITS_HUGEPAGE, _pooled_logits; bindings/native_array_storage_door.mojo native_scratch_advise_huge): B = a FRESH resident logits store (a pool miss) is advised for transparent huge pages (Linux madvise MADV_HUGEPAGE over the whole 2 MiB pages inside it) before the one download first-touches it; A = the default, the unfilled store on small pages (one page fault per 4 KiB of logits). A pooled store is untouched in both arms; nothing on Darwin; transport only, no output byte moves",
+   "owed": "RUN"
+  },
+  "rnn-step-gemm": {
+   "define": "MOJOLEARN_SEQ_FAST_RNN_STEP_GEMM",
+   "status": "define in code (autograd/rules_recurrent.mojo RNN_STEP_GEMM, rule rnn_step_gemm, _wgrad; oracle sequence/checks/oracle.mojo _o_bptt_block; IDENTICAL, every column, the host column runs the same launches): B = every recurrent product is one launch of the lane's own GEMM on the launch rule's route and fold: on the per-step chain (GRU, LSTM) the forward's hidden projection (OP_GEMM_EPI, b_hh epilogue) and the backward's dh += dGH W_hh (OP_GEMM accumulate), each followed by the elementwise cell (OP_CELL_FWD / OP_CELL_BWD), where the product holds at least 2^20 multiply-adds, split-K shapes included; and for every cell (rnn too) dW_hh and dW_ih as ONE OP_GEMM over the T B stacked rows instead of the two-launch blocked order. A = one fused one-thread launch a step and wgrad_blocked. BIT VERSION under the define: bits change at split-K shapes of the per-step products (the board's backward, K = G H = 256) and for the weight gradients when T B > 512; same bits elsewhere; the formula is beside the define. Device and host agree under the arm (the seams check's 5504_bptt_step_gemm cases). A and B digests therefore DIFFER on these lanes: compare quality, not digests. Build every binding that imports autograd/rules_recurrent.mojo (the sequence device and host bindings) and the seams check.",
+   "owed": "RUN"
+  },
+  "cnn-op-nowait": {
+   "define": "MOJOLEARN_CNN_FAST_OP_NOWAIT",
+   "status": "define in code (x_cnn/device.mojo CNN_OP_NOWAIT, entry_end; callers autograd/cnn_block_op.mojo pass may_defer): B = the CNN program's resident conv block and head entries (forward and backward) return after their last launch instead of ending in ctx.synchronize(), when every parameter block came from the cache; a full parameter-block cache waits before rewriting a victim; A = every entry waits (six waits a training step). Same launches in the same order on one in-order context: digests must not move. Build every binding that imports x_cnn/device.mojo or autograd/kernels/cnn.mojo (the x_cnn binding and the sequence device binding that runs the CNN program).",
+   "owed": "RUN"
+  },
+  "cnn-flat-update": {
+   "define": "MOJOLEARN_CNN_FAST_FLAT_UPDATE",
+   "status": "define in code (autograd/program_runtime.mojo PROGRAM_FLAT_UPDATE, replay_values_flat; caller sequence/cnn_classifier_program.mojo passes flat_update): B = Program.fit keeps the trained parameter tensors, their gradients and their moments in flat buffers for the fit and updates them with ONE optimizer launch a minibatch (Sequential's form, autograd/model.mojo model_fit_state); A = one OP_OPT launch per parameter tensor. Elementwise update with shared host scalars: digests must not move. Build every binding that imports autograd/program_runtime.mojo or sequence/cnn_classifier_program.mojo (the sequence device and host bindings).",
+   "owed": "RUN"
+  },
+  "gbdt-radix8": {
+   "define": "MOJOLEARN_GBDT_FAST_RADIX8",
+   "status": "define in code (gbdt/gpu_util/kernel/radix_sort.mojo GBDT_FAST_RADIX8, launch_radix_sort_low_bins; callers gbdt/ctrs/ctr_bins_builder.mojo add_cat_feature_bins and add_cat_feature_bins_device, gbdt/ctrs/fast_prep.mojo build_bins, gbdt/methods/leaves_estimation/doc_parallel_leaves_estimator.mojo partition_device): B = the low-bit sorts (CTR bins by category code, leaf partition by leaf id) on core/stable_radix_sort (eight-bit digits, 2 passes of 5 launches up to 16 key bits, 4 above); A = the default, one pass of 4 launches per key bit. Same stable order by key (every key below 2^bits), integer work only: digests must not move",
    "owed": "RUN"
   }
  },
@@ -3663,6 +3693,129 @@
    "decides": "keep A (the door, the default) unless B is faster on the NVIDIA L40S (small rows: median of 20 consecutive calls); digests must not move in either arm (host side only); the verdict decides the rollout of design A to the other families, not only this switch; time also a neighbouring shape (another batch and spatial size) and a non-board input before a flip (no dimension targeting)"
   },
   {
+   "id": "xcnn-typed-door-global-maxpool",
+   "source": "lane fx-maxpool (2026-11-19): the typed boundary tables extended to the max pools and the adaptive kernel, opt-in arm, default off (~/mojolearn-evidence/briefs-20261118/fx-maxpool-RESULT.md)",
+   "kind": "ab",
+   "lane": "global-maxpool",
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "xcnn-typed-door"
+   ],
+   "decides": "keep A (the door, the default) unless B is faster on the NVIDIA L40S, fit and infer (small rows: median of 20 consecutive calls); digests must not move in either arm (host side only); the measured global-maxpool gap this arm is for: fit 0.108 ms and infer 0.057 ms on the door against 0.069 and 0.039 ms stored for 0.8.55"
+  },
+  {
+   "id": "xcnn-typed-door-maxpool2d",
+   "source": "lane fx-maxpool (2026-11-19): the typed boundary tables extended to the max pools and the adaptive kernel, opt-in arm, default off (~/mojolearn-evidence/briefs-20261118/fx-maxpool-RESULT.md)",
+   "kind": "ab",
+   "lane": "maxpool2d",
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "xcnn-typed-door"
+   ],
+   "decides": "keep A (the door, the default) unless B is faster on the NVIDIA L40S, fit and infer (small rows: median of 20 consecutive calls); digests must not move in either arm (host side only); the measured global-maxpool gap this arm is for: fit 0.108 ms and infer 0.057 ms on the door against 0.069 and 0.039 ms stored for 0.8.55"
+  },
+  {
+   "id": "xcnn-typed-door-maxpool1d",
+   "source": "lane fx-maxpool (2026-11-19): the typed boundary tables extended to the max pools and the adaptive kernel, opt-in arm, default off (~/mojolearn-evidence/briefs-20261118/fx-maxpool-RESULT.md)",
+   "kind": "ab",
+   "lane": "maxpool1d",
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "xcnn-typed-door"
+   ],
+   "decides": "keep A (the door, the default) unless B is faster on the NVIDIA L40S, fit and infer (small rows: median of 20 consecutive calls); digests must not move in either arm (host side only); the measured global-maxpool gap this arm is for: fit 0.108 ms and infer 0.057 ms on the door against 0.069 and 0.039 ms stored for 0.8.55"
+  },
+  {
+   "id": "xcnn-typed-door-max-sizes",
+   "source": "lane fx-maxpool (2026-11-19): the typed boundary tables extended to the max pools and the adaptive kernel, opt-in arm, default off (~/mojolearn-evidence/briefs-20261118/fx-maxpool-RESULT.md); the neighbouring shape, the non-board model and the adaptive kernel sizes of the arm (no dimension targeting)",
+   "kind": "ab",
+   "lane": [
+    "maxpool2d",
+    "global-maxpool",
+    "global-avgpool"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "xcnn-typed-door"
+   ],
+   "shape": {
+    "cases": [
+     {
+      "note": "neighbouring shape",
+      "layer": "MaxPool2d(3, 2)",
+      "x": [
+       4,
+       8,
+       33,
+       33
+      ],
+      "columns": [
+       "fit",
+       "infer"
+      ]
+     },
+     {
+      "note": "non-board model",
+      "layers": "Conv2d(3, 16, 3) -> BatchNorm2d(16) -> AdaptiveMaxPool2d(1)",
+      "x": [
+       8,
+       3,
+       32,
+       32
+      ],
+      "columns": [
+       "fit",
+       "infer"
+      ]
+     },
+     {
+      "note": "adaptive kernel, output size not dividing the input",
+      "layer": "AdaptiveMaxPool2d(3) and AdaptiveAvgPool2d(3)",
+      "x": [
+       8,
+       16,
+       14,
+       14
+      ],
+      "columns": [
+       "fit",
+       "infer"
+      ]
+     },
+     {
+      "note": "input shape changing every call (a record miss and refill per call: the arm's worst case)",
+      "layer": "MaxPool2d(3, 2)",
+      "x": [
+       [
+        4,
+        8,
+        33,
+        33
+       ],
+       [
+        4,
+        8,
+        35,
+        35
+       ]
+      ],
+      "columns": [
+       "infer"
+      ]
+     }
+    ]
+   },
+   "decides": "B at least as fast as the door at the first three cases, outputs and winners (indices_) equal in both arms, a backward after a typed forward equal to the door's; the fourth case states the cost of a miss and blocks nothing by itself. OWED TOOLING: the board harness has no driver for a caller-given CNN layer and input shape; until one exists these cases are timed with the layer recipe of the named lanes at the stated shapes"
+  },
+  {
    "id": "mamba3-s17-tail-tree-samba-train-step",
    "source": "lane fx-mamba3-s17-fold (2026-11-18; ideas-training-speed idea 1, ~/mojolearn-evidence/briefs-20261118/fx-mamba3-s17-fold-RESULT.md): the S17 tail's serial chain (532,480 steps at qs 64) was re-staged twice (IDN_M3_S17_TAIL_PIPE promoted NV 1.04 / AMD 0.585, IDN_M3_S17_TAIL_DBUF deleted NV 0.935 / AMD 1.726) and never shortened",
    "kind": "ab",
@@ -4177,6 +4330,421 @@
     ]
    },
    "decides": "B at least as fast as the candidate at both cases, quality equal; a slower case blocks the promotion decided on fx-gemm-dx-concat-rows. OWED TOOLING (shared with fx-gemm-epi-sizes): the board harness has no driver for a transformer train step at a caller-given d_model; until one exists these two cases are timed with the lm-train-step recipe at the stated widths"
+  },
+  {
+   "id": "llama-stage-keep",
+   "source": "lane fx-transformer-forward (2026-11-19): ~/mojolearn-evidence/briefs-20261118/fx-transformer-forward-RESULT.md section 2b row 2 (30 zero fills, 1 wait and about 178 MB written before every stateless forward at B1 L2048 d384 h6 on the L40S, 100.7 MB of it the kept exp stash) and section 4",
+   "kind": "ab",
+   "lane": [
+    "transformer-forward",
+    "samba-forward",
+    "lm-forward",
+    "lm-train-step",
+    "transformer-decode"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "llama-stage-keep"
+   ],
+   "decides": "keep A (the default: every stage zero-filled before the call) unless B is faster on transformer-forward on the NVIDIA L40S, base and arm back to back in one job, with every output digest and the host-reference check equal to A's (the arm produces no float differently: a moved digest is a defect in the arm, not a bits change) and samba-forward not slower; then B becomes the default with a _OFF define and LlamaDeviceStages.reset keeps only its other callers. lm-forward, lm-train-step and transformer-decode are controls (their stages are never reset in either arm, or are L = 1). Expected from the arithmetic: transformer-forward -0.5 to -1.0 ms of 2.5 (medium confidence: the fill rate of the L40S and the cost of a queued fill are assumed, not measured). Before a flip the native transformer checks run with the define on, including a forward of one shape after a forward of another and a forward after a backward on the same block; and the cases of llama-stage-keep-shapes are timed (no dimension targeting)"
+  },
+  {
+   "id": "llama-stage-keep-shapes",
+   "source": "lane fx-transformer-forward (2026-11-19): ~/mojolearn-evidence/briefs-20261118/fx-transformer-forward-RESULT.md section 4; the neighbouring shapes and the non-board model of llama-stage-keep (no dimension targeting)",
+   "kind": "driver",
+   "driver": "transformer_forward",
+   "vendor": "nvidia",
+   "shape": {
+    "cases": [
+     {
+      "name": "longer-l4096",
+      "batch": 1,
+      "length": 4096,
+      "d_model": 384,
+      "n_heads": 6,
+      "head_dim": 64,
+      "intermediate": 1024
+     },
+     {
+      "name": "d512-heads8",
+      "batch": 1,
+      "length": 2048,
+      "d_model": 512,
+      "n_heads": 8,
+      "head_dim": 64,
+      "intermediate": 2048
+     },
+     {
+      "name": "nonboard-3x700-d320",
+      "batch": 3,
+      "length": 700,
+      "d_model": 320,
+      "n_heads": 5,
+      "head_dim": 64,
+      "intermediate": 896
+     },
+     {
+      "name": "short-l128",
+      "batch": 4,
+      "length": 128,
+      "d_model": 384,
+      "n_heads": 6,
+      "head_dim": 64,
+      "intermediate": 1024
+     }
+    ]
+   },
+   "arms": [
+    "candidate",
+    "llama-stage-keep"
+   ],
+   "b_arms": [
+    "llama-stage-keep"
+   ],
+   "decides": "TransformerBlock.forward (stateless) at a longer sequence, at the block of a 12-layer d_model 512 model, at a non-board size and at a short sequence, candidate (A) against the B wheel set, median of 20 calls, each line with its output digest: B must not be slower at any case and every digest must equal A's. Expected: the gain grows with L (the kept exp stash is B x n_heads x L x S floats) and is about thirty queued fills at the short case"
+  },
+  {
+   "id": "byte-lm-logits-hugepage",
+   "source": "lane fx-transformer-forward (2026-11-19): ~/mojolearn-evidence/briefs-20261118/fx-transformer-forward-RESULT.md section 2c (lm-forward 37.5-39.7 ms on the L40S: 13-15 ms of device work, a 4-5 ms copy and an estimated 17-20 ms of first-touch page faults on a fresh 64 MiB output store, 16,384 faults) and section 4",
+   "kind": "ab",
+   "lane": [
+    "lm-forward",
+    "lm-train-step",
+    "transformer-forward"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "byte-lm-logits-hugepage"
+   ],
+   "decides": "keep A (the default: the fresh logits store on small pages) unless B is faster on lm-forward on the NVIDIA L40S, base and arm back to back in one job, with mean_nll and the output digest equal to A's (transport only); then B becomes the default with a _OFF define, and the same advice is opened as its own arm for the other large fresh result stores (native_scratch_bytes callers). lm-train-step and transformer-forward are controls (no logits store). Expected from the arithmetic: lm-forward -8 to -15 ms of 37.5 WHERE THE BOX GRANTS HUGE PAGES; record /sys/kernel/mm/transparent_hugepage/enabled and defrag of the box with the result: on `never` the arm is a no-op and the row decides nothing (low-medium confidence: the split of the row is an estimate, and a box with fragmented memory may compact at fault time). Before a flip the cases of byte-lm-logits-hugepage-shapes are timed (no dimension targeting)"
+  },
+  {
+   "id": "byte-lm-logits-hugepage-shapes",
+   "source": "lane fx-transformer-forward (2026-11-19): ~/mojolearn-evidence/briefs-20261118/fx-transformer-forward-RESULT.md section 4; the neighbouring shapes and the non-board model of byte-lm-logits-hugepage (no dimension targeting)",
+   "kind": "driver",
+   "driver": "lm_logits",
+   "vendor": "nvidia",
+   "shape": {
+    "cases": [
+     {
+      "name": "half-length",
+      "batch": 1,
+      "length": 1024,
+      "d_model": 384,
+      "n_heads": 6,
+      "n_kv": 6,
+      "head_dim": 64,
+      "intermediate": 1024,
+      "n_layers": 8,
+      "vocab_size": 8192
+     },
+     {
+      "name": "nonboard-12x512",
+      "batch": 1,
+      "length": 1024,
+      "d_model": 512,
+      "n_heads": 8,
+      "n_kv": 8,
+      "head_dim": 64,
+      "intermediate": 2048,
+      "n_layers": 12,
+      "vocab_size": 16384
+     },
+     {
+      "name": "small-2x300-v1000",
+      "batch": 2,
+      "length": 300,
+      "d_model": 320,
+      "n_heads": 5,
+      "n_kv": 5,
+      "head_dim": 64,
+      "intermediate": 896,
+      "n_layers": 4,
+      "vocab_size": 1000
+     }
+    ]
+   },
+   "arms": [
+    "candidate",
+    "byte-lm-logits-hugepage"
+   ],
+   "b_arms": [
+    "byte-lm-logits-hugepage"
+   ],
+   "decides": "LanguageModelTrainer(resident=True).logits at 32 MiB of logits, at a 12-layer d_model 512 model with 64 MiB, and at 2.3 MiB (one whole huge page inside the store), candidate (A) against the B wheel set; each line carries the fresh-store time (the scored value), the pooled median and the output digest: B must not be slower on the fresh store at any case, the pooled times must not move, every digest must equal A's"
+  },
+  {
+   "id": "rnn-step-gemm-rows",
+   "source": "lane fx-rnn-cnn-fit (2026-11-19; report ~/mojolearn-evidence/briefs-20261118/fx-rnn-cnn-fit-RESULT.md): default-off arm, never timed",
+   "kind": "ab",
+   "lane": [
+    "lstm-clf",
+    "lstm-reg",
+    "gru-clf",
+    "gru-reg",
+    "rnn-clf",
+    "rnn-reg",
+    "lstm-fit",
+    "gru-fit",
+    "rnn-fit"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "rnn-step-gemm"
+   ],
+   "decides": "promote B only if the lstm and gru fits (algos synthetic and taxi-hourly, neural lstm-fit and gru-fit) are faster on the NVIDIA L40S (same box, same job) with quality equal (accuracy / logloss / r2 beside every time: the arm is a bit version on these rows, so digests differ between A and B and are not the test; device against host under the arm is the seams check's), and the predict rows are not slower. rnn rows take the scan and change only in their two weight gradients (one launch each instead of two): they must not be slower. Launches a step: lstm / gru 68 -> 113, rnn 22 -> 20; the bet is arithmetic rate (the fused one-thread folds and the blocked dW_hh hold about 300 M multiply-adds a step at about 0.9 TFLOP/s; the lane's GEMM tile runs 3.6-4.0), not launch count. Estimate 0.75-1.05x; the L40S launch floor is unmeasured, so a result inside the noise floor is a loser and the arm is deleted with the four tombstone parts"
+  },
+  {
+   "id": "rnn-step-gemm-shapes",
+   "source": "lane fx-rnn-cnn-fit (2026-11-19; report ~/mojolearn-evidence/briefs-20261118/fx-rnn-cnn-fit-RESULT.md); the neighbouring shapes, the non-board model and two controls of the arm (no dimension targeting); driver rnn_shapes in tools/measure_owed_driver.py",
+   "kind": "driver",
+   "b_arms": [
+    "rnn-step-gemm"
+   ],
+   "shape": {
+    "cases": [
+     {
+      "note": "neighbouring shape: longer sequence",
+      "cell": "lstm",
+      "rows": 60000,
+      "window": 48,
+      "features": 1,
+      "hidden_size": 64,
+      "num_layers": 1,
+      "batch_size": 256,
+      "max_epochs": 2
+     },
+     {
+      "note": "neighbouring shape: wider hidden size",
+      "cell": "lstm",
+      "rows": 60000,
+      "window": 24,
+      "features": 1,
+      "hidden_size": 128,
+      "num_layers": 1,
+      "batch_size": 256,
+      "max_epochs": 2
+     },
+     {
+      "note": "neighbouring shape: wider hidden size, gru",
+      "cell": "gru",
+      "rows": 60000,
+      "window": 24,
+      "features": 1,
+      "hidden_size": 128,
+      "num_layers": 1,
+      "batch_size": 256,
+      "max_epochs": 2
+     },
+     {
+      "note": "non-board model: 2-layer GRU regressor on a 12-feature series",
+      "cell": "gru",
+      "rows": 40000,
+      "window": 32,
+      "features": 12,
+      "hidden_size": 96,
+      "num_layers": 2,
+      "batch_size": 128,
+      "max_epochs": 2
+     },
+     {
+      "note": "scan route (one-gate cell): only the weight gradients change",
+      "cell": "rnn",
+      "rows": 60000,
+      "window": 24,
+      "features": 1,
+      "hidden_size": 64,
+      "num_layers": 1,
+      "batch_size": 256,
+      "max_epochs": 2
+     },
+     {
+      "note": "control under the per-step floor (fewer than 2^20 multiply-adds a step): only the weight gradients change",
+      "cell": "lstm",
+      "rows": 20000,
+      "window": 24,
+      "features": 1,
+      "hidden_size": 16,
+      "num_layers": 1,
+      "batch_size": 64,
+      "max_epochs": 2
+     }
+    ]
+   },
+   "decides": "B at least as fast as the candidate at the four cases above the floor and not slower at the two controls, with the last loss_curve_ value beside each time equal to the candidate's within training noise (the arm is a bit version: the words differ); a slower case blocks the promotion decided on rnn-step-gemm-rows or moves RNN_STEP_GEMM_MIN_FMA with the reason beside it",
+   "driver": "rnn_shapes",
+   "arms": [
+    "candidate",
+    "rnn-step-gemm"
+   ]
+  },
+  {
+   "id": "cnn-op-nowait-rows",
+   "source": "lane fx-rnn-cnn-fit (2026-11-19; report ~/mojolearn-evidence/briefs-20261118/fx-rnn-cnn-fit-RESULT.md): default-off arm, never timed",
+   "kind": "ab",
+   "lane": [
+    "cnn-clf"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "cnn-op-nowait"
+   ],
+   "decides": "promote B only if cnn-clf fit is faster on the NVIDIA L40S (same box, same job) and predict is not slower, with quality equal and every digest equal (same launches in the same order: a moved digest is a bug in the arm). Estimate: six waits a step at 20-50 us of a 0.56 ms step (unmeasured); inside the noise floor the arm is deleted with the four tombstone parts"
+  },
+  {
+   "id": "cnn-op-nowait-widths",
+   "source": "lane fx-rnn-cnn-fit (2026-11-19; report ~/mojolearn-evidence/briefs-20261118/fx-rnn-cnn-fit-RESULT.md): default-off arm, never timed; a neighbouring shape and a non-board model (no dimension targeting)",
+   "kind": "driver",
+   "driver": "cnn_widths",
+   "shape": {
+    "rows": 20000,
+    "classes": 10,
+    "input_shape": [
+     3,
+     32,
+     32
+    ],
+    "batch_size": 64,
+    "max_iter": 2,
+    "conv_channels": [
+     [
+      16,
+      32
+     ],
+     [
+      24
+     ]
+    ]
+   },
+   "arms": [
+    "candidate",
+    "cnn-op-nowait"
+   ],
+   "b_arms": [
+    "cnn-op-nowait"
+   ],
+   "decides": "B at least as fast as the candidate at both widths on the NVIDIA L40S, quality equal; a slower case blocks the promotion decided on cnn-op-nowait-rows"
+  },
+  {
+   "id": "cnn-flat-update-rows",
+   "source": "lane fx-rnn-cnn-fit (2026-11-19; report ~/mojolearn-evidence/briefs-20261118/fx-rnn-cnn-fit-RESULT.md): default-off arm, never timed",
+   "kind": "ab",
+   "lane": [
+    "cnn-clf"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "cnn-flat-update"
+   ],
+   "decides": "promote B only if cnn-clf fit is faster on the NVIDIA L40S (same box, same job) with quality equal and every digest equal (same elementwise update: a moved digest is a bug in the arm). Estimate 5 optimizer launches a step at 3-8 us of a 0.56 ms step; inside the noise floor the arm is deleted with the four tombstone parts. Composes with cnn-op-nowait: time each alone"
+  },
+  {
+   "id": "cnn-flat-update-widths",
+   "source": "lane fx-rnn-cnn-fit (2026-11-19; report ~/mojolearn-evidence/briefs-20261118/fx-rnn-cnn-fit-RESULT.md): default-off arm, never timed; a neighbouring shape and a non-board model (no dimension targeting)",
+   "kind": "driver",
+   "driver": "cnn_widths",
+   "shape": {
+    "rows": 20000,
+    "classes": 10,
+    "input_shape": [
+     3,
+     32,
+     32
+    ],
+    "batch_size": 64,
+    "max_iter": 2,
+    "conv_channels": [
+     [
+      16,
+      32
+     ],
+     [
+      24
+     ]
+    ]
+   },
+   "arms": [
+    "candidate",
+    "cnn-flat-update"
+   ],
+   "b_arms": [
+    "cnn-flat-update"
+   ],
+   "decides": "B at least as fast as the candidate at both widths on the NVIDIA L40S, quality equal; a slower case blocks the promotion decided on cnn-flat-update-rows"
+  },
+  {
+   "id": "gbdt-radix8-rows",
+   "source": "lane fx-dup-next (2026-11-19; ideas-functional-duplicates C5 and open doubt 5, ~/mojolearn-evidence/briefs-20261118/fx-dup-next-RESULT.md): the one-bit sort may be the better form for the 1 to 8 bit ranges these sites mostly sort, so the eight-bit form is an arm and the default is unchanged",
+   "kind": "ab",
+   "lane": [
+    "gbdt-symmetric",
+    "gbdt-ordered",
+    "gbdt-depthwise",
+    "gbdt-lossguide",
+    "gbdt-multiclass"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "gbdt-radix8"
+   ],
+   "decides": "keep A (the default) unless B is at least as fast on every row with a categorical feature or a leaf partition and faster on one, quality equal, on the NVIDIA L40S; digests must not move (same stable order). General cause: one launch round of four per key bit"
+  },
+  {
+   "id": "gbdt-radix8-sizes",
+   "source": "lane fx-dup-next (2026-11-19): the neighbouring shapes and a non-board dataset of the arm (no dimension targeting)",
+   "kind": "ab",
+   "lane": [
+    "gbdt-symmetric",
+    "gbdt-ordered"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "gbdt-radix8"
+   ],
+   "shape": {
+    "cases": [
+     {
+      "note": "neighbouring shape: few categories (2 and 4 values a feature: 1 and 2 key bits, where A is fewer launches)",
+      "cat_cardinality": [
+       2,
+       4
+      ]
+     },
+     {
+      "note": "neighbouring shape: many categories (300 and 70000 values a feature: 9 and 17 key bits, 2 and 4 eight-bit passes)",
+      "cat_cardinality": [
+       300,
+       70000
+      ]
+     },
+     {
+      "note": "neighbouring shape: tree depth 2, 6 and 10 (leaf partition of 4, 64 and 1024 leaves)",
+      "depth": [
+       2,
+       6,
+       10
+      ]
+     },
+     {
+      "note": "non-board dataset: one public categorical table not on the board, all rows"
+     }
+    ]
+   },
+   "decides": "B at least as fast as A at every case, quality equal; a slower case blocks the promotion decided on gbdt-radix8-rows, or the promotion is made per bit count with the crossover stated from these cases (cost reasoning over key bits, never a board shape). OWED TOOLING: the board harness needs a GBDT driver with caller-given category cardinality and depth"
   }
  ]
 }

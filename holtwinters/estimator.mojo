@@ -530,7 +530,7 @@ def holtwinters_fit_ptr(
     if direct >= 0:
         return direct
     # the traced sequence: bulk copies in and out, no per-cell host walk
-    var data = List[Float32](length=_cells, fill=Float32(0.0))
+    var data = List[Float32](unsafe_uninit_length=_cells)
     unsafe_memcpy(dest=data.unsafe_ptr(), src=data_ptr, count=_cells)
     var fitted = holtwinters_fit_host(
         data, n, batch_size, frequency, start_periods, seasonal, eps, init_method

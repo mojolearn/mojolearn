@@ -62,6 +62,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from core.device_zero import enqueue_fill
+from core.transfer import transfer_download_list, transfer_upload_list
 from gbdt.ctrs.ctr import (
     CTR_BORDERS,
     CTR_BUCKETS,
@@ -85,7 +86,9 @@ from gbdt.ctrs.kernel.ctr_calcers import (
     launch_update_borders_mask,
 )
 from gbdt.gpu_util.kernel.partitions import launch_update_partition_offsets
-from gbdt.gpu_util.kernel.radix_sort import launch_radix_sort_bins
+from gbdt.gpu_util.kernel.radix_sort import (
+    launch_radix_sort_low_bins, radix_low_block_sums_len, radix_low_offsets_len,
+)
 from gbdt.gpu_util.kernel.scan import SCAN_BLOCK, launch_scan_vector_u32
 from gbdt.gpu_util.kernel.segmented_reduce import launch_segmented_reduce_sum
 from gbdt.gpu_util.kernel.segmented_scan import (
@@ -537,13 +540,14 @@ def read_codes(
 ) raises -> List[UInt32]:
     """The host copy of a device code column, for a caller that still runs
     main's host drivers over it."""
-    var h = ctx.enqueue_create_host_buffer[DType.uint32](n)
-    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=codes)
-    ctx.synchronize()
-    var out = List[UInt32]()
-    out.resize(n, UInt32(0))
-    unsafe_memcpy(dest=out.unsafe_ptr(), src=h.unsafe_ptr(), count=n)
-    return out^
+    # core/transfer.mojo (lane fx-dup-next, 2026-11-19): one copy into the
+    # list's own words. Gone: a pinned host buffer of the column per call, a
+    # zero fill of the list and a memcpy over it. The wait for an empty
+    # column is kept.
+    if n <= 0:
+        ctx.synchronize()
+        return List[UInt32]()
+    return transfer_download_list[DType.uint32](ctx, codes, n)
 
 
 def upload_codes(
@@ -551,14 +555,11 @@ def upload_codes(
 ) raises -> DeviceBuffer[DType.uint32]:
     """Host codes (main's `dense_category_code` loop) onto the device once
     per feature, for the fast drivers when `CTR_ONEHOT_DEVICE` is off."""
+    # core/transfer.mojo (lane fx-dup-next, 2026-11-19): copied in place from
+    # the caller's list, one wait. Gone: a pinned host buffer of the column
+    # per feature and a memcpy into it.
     var n = len(codes)
-    var h = ctx.enqueue_create_host_buffer[DType.uint32](n)
-    unsafe_memcpy(dest=h.unsafe_ptr(), src=codes.unsafe_ptr(), count=n)
-    var d = ctx.enqueue_create_buffer[DType.uint32](n)
-    ctx.enqueue_copy(dst_buf=d, src_ptr=h.unsafe_ptr())
-    ctx.synchronize()
-    _ = h^  # past the drain (step-33 race class)
-    return d^
+    return transfer_upload_list[DType.uint32](ctx, codes, n, n)
 
 
 # --- the device min/max and the Uniform grid (CTR_INDEX_FUSED) ----------------
@@ -778,9 +779,11 @@ struct CtrPrepFast(Movable):
             (n + SCAN_BLOCK - 1) // SCAN_BLOCK
         )
         # 512 is `REORDER_BLOCK`, the radix pass's block
-        self.sort_offsets = ctx.enqueue_create_buffer[DType.int32](n)
+        self.sort_offsets = ctx.enqueue_create_buffer[DType.int32](
+            radix_low_offsets_len(n)
+        )
         self.sort_block_sums = ctx.enqueue_create_buffer[DType.int32](
-            (n + 512 - 1) // 512
+            radix_low_block_sums_len(n)
         )
         self.gathered_weights = ctx.enqueue_create_buffer[DType.float32](n)
         self.scanned_weights = ctx.enqueue_create_buffer[DType.float32](n)
@@ -874,10 +877,11 @@ struct CtrPrepFast(Movable):
         launch_gather_with_mask_u32(
             ctx, self.bins, codes, self.indices, n, CTR_INDEX_MASK
         )
-        launch_radix_sort_bins(
+        # every bin is a code below `unique_values` (the resident codes are
+        # validated dense on the device), so below `2^int_log2(unique_values)`
+        launch_radix_sort_low_bins(
             ctx,
             n,
-            0,
             int_log2(unique_values),
             self.bins,
             self.indices,

@@ -3,15 +3,19 @@
 """Host <-> device copies for the x_ann drivers (lane ann-apple2, 2026-09-28).
 
 `metrics/checks/device_io.mojo`'s four functions with the same contract
-(each synchronizes before it returns), minus two host passes: an upload
+(each synchronizes before it returns), minus the host passes: an upload
 copies straight from the caller's list (no private copy first), and a
-download moves the staged words with one memcpy instead of appending them
-one by one. Plain copies: the same words. At the IVF shapes these lists are
+download lands in the returned list's own words (core/transfer.mojo). Plain copies: the same words. At the IVF shapes these lists are
 1M x 28 floats (the residuals) and 1M x 14 codes."""
-from std.memory import unsafe_memcpy
 from max.gpu.host import DeviceBuffer, DeviceContext
+from core.transfer import TRANSFER_TIER_IDENTICAL, transfer_download_f32_list, transfer_download_i32_list
 from core.admitted_finite_status import enqueue_finite_status, enqueue_finite_word
 from core.device_zero import enqueue_fill
+
+#: The pinned download stages of this module and tier (core/transfer.mojo);
+#: a slot holds stages of one element type, so the int32 ones have their own.
+comptime _XFER_POOL = "MojolearnXAnnIoTransferStagesIdenticalV1" if TRANSFER_TIER_IDENTICAL else "MojolearnXAnnIoTransferStagesFastV1"
+comptime _XFER_I32_POOL = "MojolearnXAnnIoTransferI32StagesIdenticalV1" if TRANSFER_TIER_IDENTICAL else "MojolearnXAnnIoTransferI32StagesFastV1"
 
 
 def upload_f32(ctx: DeviceContext, values: List[Float32]) raises -> DeviceBuffer[DType.float32]:
@@ -33,35 +37,24 @@ def upload_i32(ctx: DeviceContext, values: List[Int32]) raises -> DeviceBuffer[D
 
 
 def download_f32(ctx: DeviceContext, buf: DeviceBuffer[DType.float32], n: Int) raises -> List[Float32]:
-    var h = ctx.enqueue_create_host_buffer[DType.float32](n if n > 0 else 1)
-    if n > 0:
-        if n == len(buf):
-            ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=buf)
-        else:
-            var view = buf.create_sub_buffer[DType.float32](0, n)
-            ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=view)
-    ctx.synchronize()
-    var out = List[Float32](length=n, fill=Float32(0.0))
-    if n > 0:
-        unsafe_memcpy(dest=out.unsafe_ptr(), src=h.unsafe_ptr(), count=n)
-    _ = h^
-    return out^
+    # core/transfer.mojo (lane fx-dup-next, 2026-11-19): the copy engine
+    # writes the list's own words, through the pooled pinned stages from
+    # DOWNLOAD_STAGE_MIN floats. Gone: a pinned host buffer the size of the
+    # result per call and a memcpy out of it. The wait for an empty result is
+    # kept (each helper here synchronizes before it returns).
+    if n <= 0:
+        ctx.synchronize()
+        return List[Float32]()
+    return transfer_download_f32_list[_XFER_POOL](ctx, buf, n)
 
 
 def download_i32(ctx: DeviceContext, buf: DeviceBuffer[DType.int32], n: Int) raises -> List[Int32]:
-    var h = ctx.enqueue_create_host_buffer[DType.int32](n if n > 0 else 1)
-    if n > 0:
-        if n == len(buf):
-            ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=buf)
-        else:
-            var view = buf.create_sub_buffer[DType.int32](0, n)
-            ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=view)
-    ctx.synchronize()
-    var out = List[Int32](length=n, fill=Int32(0))
-    if n > 0:
-        unsafe_memcpy(dest=out.unsafe_ptr(), src=h.unsafe_ptr(), count=n)
-    _ = h^
-    return out^
+    # As `download_f32`, through the pooled pinned int32 stages (the 1M x 14
+    # codes).
+    if n <= 0:
+        ctx.synchronize()
+        return List[Int32]()
+    return transfer_download_i32_list[_XFER_I32_POOL](ctx, buf, n)
 
 
 def enqueue_query_status(

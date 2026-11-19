@@ -204,7 +204,7 @@ def _ocsvm_fit_native(model: PythonObject, binding: PythonObject, source: Python
     if weights.selected and n_sv > 0:
         # The former first prefix Array was private. Preserve its copy in a
         # native owner before allocating the final mapped public support.
-        var prefix = List[Int32](length=n_sv, fill=0)
+        var prefix = List[Int32](unsafe_uninit_length=n_sv)
         unsafe_memcpy(dest=prefix.unsafe_ptr(), src=state.support_rows.unsafe_ptr(), count=n_sv)
         support = family_array(Python.tuple(PythonObject(n_sv)), "<i4", context)
         labels_gather(context, 0, oc_i32_address(weights.rows), m, oc_i32_address(prefix), n_sv, Int(py=_a(support)))

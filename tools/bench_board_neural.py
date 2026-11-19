@@ -2349,6 +2349,12 @@ class OursLM(Ours):
             bits = self.model.train_step(np.ascontiguousarray(self.batches[self.k]))
             self.losses.append(float(np.array([int(bits)], dtype=np.uint32).view(np.float32)[0]))
             self.k += 1
+        # Holding the previous call's logits in self.out while the next call runs is deliberate (lane
+        # fx-harness-honest, 2026-11-18, on fx-transformer-forward's finding): it is what a user's loop
+        # `y = model.logits(ids)` does (the old y is released only when the new one is assigned), and each call
+        # returns a fresh array the caller owns, whose first touch is the product's cost. Releasing it first
+        # would not remove that cost either: a 64 MiB block is above the allocator's mmap threshold, so its pages
+        # are fresh on every call whether or not the previous block was freed before.
         elif self.lane == "lm-infer":
             self.out = self.model.logits(self.ids)
         else:
@@ -2626,6 +2632,12 @@ class OursSamba(Ours):
                                accumulation_steps=accumulation_steps)
         self.batches = data["batches"]
         self.ids = np.ascontiguousarray(self.batches[0][:, :-1])
+        if lane == "samba-train-step":
+            # FAIRNESS FIX (2026-11-18 audit, lane fx-harness-honest): each step's input and target slices (b[:, :-1],
+            # b[:, 1:]: strided views) were made contiguous INSIDE our clock, a harness copy per step. They are made
+            # once here, before any clock, from the same batches; the step takes them as a user's loader hands them.
+            self.pairs = [(np.ascontiguousarray(b[:, :-1]), np.ascontiguousarray(b[:, 1:])) for b in self.batches]
+            self.info["harness_clock"] = "2026-11-18 harness input copies made before the clock (our arm)"
         self.k = 0
         self.losses = []
         # samba-decode: the per-token ids, made before the clock
@@ -2649,8 +2661,7 @@ class OursSamba(Ours):
     def call(self):
         np = self.np
         if self.lane == "samba-train-step":
-            b = self.batches[self.k]
-            res = self.model.train_step(np.ascontiguousarray(b[:, :-1]), np.ascontiguousarray(b[:, 1:]))
+            res = self.model.train_step(*self.pairs[self.k])
             self.losses.append(float(res["loss"]))
             self.k += 1
         elif self.decode_ids is not None and self.decode_session is None:

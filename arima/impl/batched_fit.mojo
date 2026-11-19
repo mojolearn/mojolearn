@@ -106,7 +106,7 @@ a compile slot should replace both with what it sees, exactly as
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
-from core.transfer import TRANSFER_TIER_IDENTICAL, transfer_download_f32_list
+from core.transfer import TRANSFER_TIER_IDENTICAL, transfer_download_f32_list, transfer_upload_into
 
 #: The pinned download stages of this module and tier (core/transfer.mojo).
 comptime _XFER_POOL = "MojolearnArimaFitTransferStagesIdenticalV1" if TRANSFER_TIER_IDENTICAL else "MojolearnArimaFitTransferStagesFastV1"
@@ -180,14 +180,10 @@ def arima_fit_params(max_iterations: Int = 1000) -> LBFGSParam:
 
 
 def _upload(ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], v: List[Float32]) raises:
-    var n = len(v)
-    if n == 0:
-        return
-    var h = v.copy()
-    var view = buf.create_sub_buffer[DType.float32](0, n)
-    ctx.enqueue_copy(dst_buf=view, src_ptr=h.unsafe_ptr())
-    ctx.synchronize()
-    _ = h^
+    # core/transfer.mojo (lane fx-dup-next, 2026-11-19): copied in place from
+    # the caller's list, which outlives the wait inside. Gone: `v.copy()`, a
+    # second list of the packed parameters per upload.
+    transfer_upload_into[DType.float32](ctx, buf, v, len(v))
 
 
 def _download(ctx: DeviceContext, buf: DeviceBuffer[DType.float32], n: Int) raises -> List[Float32]:
@@ -238,7 +234,7 @@ def _download_i32(ctx: DeviceContext, buf: DeviceBuffer[DType.int32], n: Int) ra
         var view = buf.create_sub_buffer[DType.int32](0, n)
         ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=view)
     ctx.synchronize()
-    var out = List[Int32](length=n, fill=Int32(0))
+    var out = List[Int32](unsafe_uninit_length=max(n, 0))
     if n > 0:
         unsafe_memcpy(dest=out.unsafe_ptr(), src=h.unsafe_ptr(), count=n)
     _ = h^

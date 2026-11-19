@@ -45,7 +45,7 @@ from bindings.optimizer_public_words_unpack import optimizer_python_error, PYTHO
 from bindings.byte_checkpoint_native_door import byte_checkpoint_save, byte_checkpoint_load
 from providers.python.byte_lm_json_checkpoint_pyapi_door import BYTE_JSON_LIMIT, byte_json_payload, byte_json_arrays, byte_json_encode, byte_json_read, byte_json_write
 from bindings.tsa_hw_native_door import tsa_array, tsa_array_unfilled
-from bindings.native_array_storage_door import native_scratch_bytes, native_scratch_address
+from bindings.native_array_storage_door import native_scratch_bytes, native_scratch_address, native_scratch_advise_huge
 from core.admitted_ids import admitted_ids_i32
 from bindings.byte_perf_helpers_pack import byte_int_list_from_i64
 from core.byte_lm_teardown_switch import byte_lm_teardown_with_gil
@@ -1425,6 +1425,9 @@ def _pooled_logits(mut mods: NativeModules, fields: PythonObject, batch: Int, le
                 raise Error("TypeError: Byte-LM logits pool contains a foreign buffer")
         else:
             store = native_scratch_bytes(count * 4)
+            comptime if BYTE_LM_LOGITS_HUGEPAGE:
+                # A fresh store only (a pool miss), before its first write.
+                native_scratch_advise_huge(native_scratch_address(store), count * 4)
             # The store's memoryview is one C-API call (PyMemoryView_FromObject
             # through the CPython table, as `classical_wrap_admitted_layout`
             # makes `_mv`), its "f" cast the `memoryview.cast` descriptor with
@@ -1459,6 +1462,26 @@ def _pooled_logits(mut mods: NativeModules, fields: PythonObject, batch: Int, le
 #: ragged result (padding must read +0.0) and the stateless output keep
 #: `tsa_array`'s zeros.
 comptime BYTE_LM_LOGITS_ZERO_FILL = is_defined["MOJOLEARN_BYTE_LM_LOGITS_ZERO_FILL"]()
+
+#: lane fx-transformer-forward (2026-11-19), EXPERIMENT ARM, default OFF
+#: (`-D MOJOLEARN_BYTE_LM_FAST_LOGITS_HUGEPAGE`; docs/apple-fast/EXPERIMENTS.md;
+#: A/B owed, bench/results/paper_compare/owed-pre0867.json row
+#: byte-lm-logits-hugepage). A FRESH resident logits store (a pool miss: the
+#: first calls, and every call of a caller that still holds the previous
+#: result) is advised for transparent huge pages before the download writes
+#: it (`native_scratch_advise_huge`). The store is batch * length * vocab
+#: floats of untouched memory and the one device-to-host download is its
+#: first write, so the copy-out pays one page fault per 4 KiB: 256 faults a
+#: MiB of logits, whatever the model, against one per 2 MiB with the advice
+#: where the system grants it. By the arithmetic that is the larger part of a
+#: logits call once the output passes a few MiB (it grows with batch, length
+#: and vocabulary; the device work does not grow with the vocabulary beyond
+#: the head product). A pooled store keeps its pages and is not advised
+#: again. Transport only: the same bytes land in the same places, no output
+#: bit moves; on a system that grants no huge page nothing changes. The
+#: default arm (unfilled store, small pages) is untouched; the ZERO_FILL B
+#: arm's array.array store is not advised.
+comptime BYTE_LM_LOGITS_HUGEPAGE = is_defined["MOJOLEARN_BYTE_LM_FAST_LOGITS_HUGEPAGE"]()
 
 
 def _pooled_store_type(mut mods: NativeModules, context: PythonObject) raises -> PythonObject:

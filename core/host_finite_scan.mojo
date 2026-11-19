@@ -41,6 +41,7 @@ here, all on bits, all one parallel SIMD pass with the same grain floor:
                   (exponent all ones and a nonzero fraction; `v != v`):
                   `host_any_nan_f32`, `host_any_nan_list`,
                   `host_any_nan_unit` (one unit of a caller's own split)
+                  `host_copy_f32_any_nan` (an owned copy and its any-NaN verdict, one pass)
     any infinity  +inf or -inf refused, NaN is a missing value and passes
                   (magnitude bits exactly 0x7F800000):
                   `host_any_inf_f32`
@@ -331,6 +332,76 @@ def host_copy_f32_finite(src: Int, dst: Int, n: Int) -> Bool:
             finite = False
     _ = flags^
     return finite
+
+
+@always_inline
+def _hfs_span_copy_any_nan(src: Int, dst: Int, n: Int) -> Bool:
+    """Copy `n` float32 words from byte address `src` to `dst` and return
+    True when any copied word is a NaN (exponent field all ones and a
+    nonzero fraction, on bits; an infinity is an ordinary value). The test
+    is folded branch-free into the copy's own SIMD loads, the form of
+    `_hfs_span_copy_finite` with the NaN test of `_hfs_span_any_class`.
+    Every word is copied whatever the verdict."""
+    var src_ptr = _HFS_F32P(unsafe_from_address=src)
+    var dst_ptr = _HFS_F32P(unsafe_from_address=dst)
+    var exp = SIMD[DType.uint32, 8](_HFS_EXP)
+    var fraction = SIMD[DType.uint32, 8](0x007FFFFF)
+    var zero = SIMD[DType.uint32, 8](0)
+    var hit = SIMD[DType.uint32, 8](0)
+    var i = 0
+    var body = n - n % 8
+    while i < body:
+        var v = src_ptr.unsafe_load[width=8](i)
+        dst_ptr.unsafe_store[width=8](i, v)
+        var w = bitcast[DType.uint32, 8](v)
+        hit |= (w & exp).eq(exp).select(w & fraction, zero)
+        i += 8
+    var tail = UInt32(0)
+    while i < n:
+        var v1 = src_ptr.unsafe_load(i)
+        dst_ptr.unsafe_store(i, v1)
+        var w1 = bitcast[DType.uint32](v1)
+        if (w1 & _HFS_EXP) == _HFS_EXP and (w1 & UInt32(0x007FFFFF)) != UInt32(0):
+            tail = 1
+        i += 1
+    return hit.reduce_or() != UInt32(0) or tail != 0
+
+
+def host_copy_f32_any_nan(src: Int, dst: Int, n: Int) -> Bool:
+    """Copy `n` float32 words from host address `src` to `dst` (the ranges
+    must not overlap) and return True when any word is a NaN: the copy and
+    the test are one pass, split into contiguous spans across the host's
+    cores above the grain floor (`host_copy_f32_finite`'s split). Every word
+    is copied whatever the verdict; the verdict is the OR of the spans'
+    verdicts, so it does not depend on the split."""
+    if n <= 0:
+        return False
+    if n < 2 * HOST_MIN_TASK_WORK:
+        return _hfs_span_copy_any_nan(src, dst, n)
+    # parallel: the owned copy and its any-NaN verdict over spans across host cores
+    var tasks = host_predict_task_count_work(n, n)
+    if tasks <= 1:
+        return _hfs_span_copy_any_nan(src, dst, n)
+    var chunk = host_predict_chunk(n, tasks)
+    chunk = ((chunk + _HFS_W - 1) // _HFS_W) * _HFS_W
+    var flags = List[UInt8](length=tasks, fill=UInt8(0))
+    var flag_ptr = rebind[MutPointer[UInt8, MutUntrackedOrigin]](flags.unsafe_ptr())
+
+    def _span(t: Int) {imm src, imm dst, imm n, imm chunk, imm flag_ptr}:
+        var lo = t * chunk
+        if lo >= n:
+            return
+        var hi = min(lo + chunk, n)
+        if _hfs_span_copy_any_nan(src + lo * 4, dst + lo * 4, hi - lo):
+            flag_ptr.unsafe_store(t, UInt8(1))
+
+    host_parallelize(_span, tasks)
+    var found = False
+    for t in range(tasks):  # driver-loop: over the copy tasks' flags (at most one per core)
+        if flags[t] != UInt8(0):
+            found = True
+    _ = flags^
+    return found
 
 
 def host_all_finite_f32_strided(addr: Int, s0: Int, s1: Int, rows: Int, cols: Int) -> Bool:

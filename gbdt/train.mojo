@@ -22,6 +22,7 @@ from gbdt.options.child_hessian import child_hessian_threshold, check_child_hess
 from gbdt.models.trained_model import TrainedModel
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from core.device_zero import enqueue_fill
+from core.transfer import transfer_upload_list
 
 from core.device_plan import DevicePlan, plan_for_single
 from core.identity_trace import IdentityTrace
@@ -3183,14 +3184,10 @@ def _upload_ctr_column(
             "CTR column has " + String(len(col)) + " values for "
             + String(n_rows) + " rows"
         )
-    var h = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
-    ctx.synchronize()
-    unsafe_memcpy(dest=h.unsafe_ptr(), src=col.unsafe_ptr(), count=n_rows)
-    var d = ctx.enqueue_create_buffer[DType.float32](n_rows)
-    ctx.enqueue_copy(dst_buf=d, src_ptr=h.unsafe_ptr())
-    ctx.synchronize()
-    _ = h^  # past the drain (step-33 race class)
-    return d^
+    # core/transfer.mojo (lane fx-dup-next, 2026-11-19): copied in place from
+    # the caller's list, one wait. Gone: a pinned host buffer of the column
+    # per call, a memcpy into it and a wait before it.
+    return transfer_upload_list[DType.float32](ctx, col, n_rows, n_rows)
 
 
 def _ctr_borders_device(

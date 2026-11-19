@@ -21,6 +21,7 @@ a thread per group (its block mean) and a thread per pair (the scatter)."""
 from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
 
+from core.device_zero import enqueue_fill_addr
 from x_decomp.cells import F32Ptr, I32Ptr
 from x_decomp.device import TPB, _blocks, _down, xd_ctx
 from x_decomp.mds_iso import ISO_CHUNK, iso_chunk, iso_group_sum, iso_mean, iso_merge
@@ -122,12 +123,6 @@ def mds_gst_kernel(keys: F32Ptr, gid: I32Ptr, gst: I32Ptr, m: Int32, dst: I32Ptr
             var g = Int(gid.unsafe_load(t))
             gst.unsafe_store(g, Int32(mm))
             dst.unsafe_store(0, Int32(g))
-
-
-def zero_kernel(dst: F32Ptr, count: Int32):
-    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if t < Int(count):
-        dst.unsafe_store(t, Float32(0))
 
 
 def scatter_keys_kernel(keys: F32Ptr, idx: I32Ptr, dst: F32Ptr, m: Int32):
@@ -259,7 +254,7 @@ def mds_disp_dev(d_id: Int, dst_id: Int, ids: List[Int], n: Int, m: Int, G: Int,
     device matrices; p = [n, m, G, first]."""
     var po = _ptr(dst_id, n * n)
     var ctx = xd_ctx()
-    ctx.enqueue_function[zero_kernel](po, Int32(n * n), grid_dim=_blocks(n * n), block_dim=TPB)
+    enqueue_fill_addr[DType.float32](ctx, Int(po), n * n, Float32(0))
     if m == 0:
         return
     var pk = _ptr(ids[0], m)

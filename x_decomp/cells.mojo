@@ -37,6 +37,7 @@ from checks.numerics import (
     identical_tanh,
 )
 from core.philox import philox4x32_10
+from core.row_cells import sqdist_diff_cell
 
 #: The one-sided Jacobi SVD's sweep budget in this lane (x_decomp svd):
 #: decomposition/'s JACOBI_SWEEPS (15, RAFT's) stops short on the `wide`
@@ -480,12 +481,9 @@ def rowsum_part_cell(a: F32Ptr, i: Int, d: Int, c0: Int, c1: Int) -> Float32:
 # multiply-add per term; arm 5302_sqdist_order.
 @always_inline
 def sqdist_cell(a: F32Ptr, b: F32Ptr, i: Int, j: Int, d: Int) -> Float32:
-    """||a_i - b_j||^2, features ascending."""
-    var acc = Float32(0)
-    for p in range(d):
-        var t = sub(a.unsafe_load(i * d + p), b.unsafe_load(j * d + p))
-        acc = ftz(identical_mul_add(t, t, acc))
-    return acc
+    """||a_i - b_j||^2, features ascending: core/row_cells.mojo's one
+    by-difference body (the same statements)."""
+    return sqdist_diff_cell(a, b, i, j, d)
 
 
 comptime PD_MANHATTAN = 1

@@ -159,7 +159,7 @@ def _spectral_post_pass_device(
         grid_dim=(blocks, 1, 1),
         block_dim=(SPECTRAL_POST_TPB, 1, 1),
     )
-    var ws = List[Int32](length=3 * n_components, fill=Int32(0))
+    var ws = List[Int32](unsafe_uninit_length=3 * n_components)
     ctx.enqueue_copy(dst_ptr=ws.unsafe_ptr(), src_buf=d_ws)
     ctx.synchronize()
     # The refusals in the host walk's order: column by column, a non-finite
@@ -179,7 +179,7 @@ def _spectral_post_pass_device(
         grid_dim=(blocks, 1, 1),
         block_dim=(SPECTRAL_POST_TPB, 1, 1),
     )
-    var out = List[Float32](length=total, fill=Float32(0.0))
+    var out = List[Float32](unsafe_uninit_length=total)
     ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=d_out)
     ctx.synchronize()
     _ = d_ws^

@@ -272,7 +272,7 @@ def transform(
     _tr_check(ctx, flags)
 
     # The result back once.
-    var result = List[Float32](length=n_queries * comps, fill=Float32(0.0))
+    var result = List[Float32](unsafe_uninit_length=n_queries * comps)
     ctx.enqueue_copy(dst_ptr=result.unsafe_ptr(), src_buf=dc)
     ctx.synchronize()
     _ = flags^

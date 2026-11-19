@@ -922,3 +922,18 @@ freeze, the one verification, publish." Replaced by: measure before the release 
 speed; otherwise measure the published wheel after the release, and broadcast only published-wheel numbers.
 Same day the bits rule was restated: bits must be consistent across vendors within one version; bits may change
 between versions.
+
+## 2026-11-19: `fast` reopened on every vendor (replaces "Focus on identical; Apple fast investment is stopped")
+
+Andrew, 2026-11-19: "i am OK reopening the standing rule on nvidia and amd. i think we initially measure only nvidia
+for fast and identical... hope the others ride along. tune later if need be." The text it replaces, verbatim:
+
+> - **Focus on `identical`; Apple `fast` investment is stopped (Andrew, 2026-10-22).** `deterministic` is retired. No
+>   dedicated `fast` features, fixes, tuning, builds, validation or benchmark campaigns unless Andrew reopens it.
+>   Existing `fast` code may stay opt-in, Apple only; keep historical records and the rejection tests for retired
+>   mode values. Apple `identical` stays in the three-vendor contract. The
+>   current `fast` implementation is not a baseline for the cost of identity. The paper covers `identical` only.
+
+What did not change: the identical contract; `fast` needs no identical anything; `fast` is judged on speed and on
+quality that does not go down; the docs rule (part 7) keeps `fast` listed as Apple only until it is qualified on
+another vendor.

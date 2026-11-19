@@ -531,7 +531,7 @@ def _umap_epochs_download(
     else:
         ctx.enqueue_copy(dst_ptr=host_out.unsafe_ptr(), src_buf=second)
     ctx.synchronize()
-    var out = List[Float32](length=n_values, fill=Float32(0.0))
+    var out = List[Float32](unsafe_uninit_length=n_values)
     unsafe_memcpy(dest=out.unsafe_ptr(), src=host_out.unsafe_ptr(), count=n_values)
     _ = host_out^
     return out^
@@ -771,7 +771,7 @@ def umap_init_prep_kernel(v: _UC_F32P, flag: _UC_I32P, n_: Int32, flush: Int32):
 
 def _uc_read_i32(ctx: DeviceContext, mut buf: DeviceBuffer[DType.int32], at: Int, n: Int) raises -> List[Int32]:
     """`n` words of `buf` from `at` (a handful of refusal and sizing words)."""
-    var out = List[Int32](length=n, fill=Int32(0))
+    var out = List[Int32](unsafe_uninit_length=n)
     var view = buf.create_sub_buffer[DType.int32](at, n)
     ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=view)
     ctx.synchronize()

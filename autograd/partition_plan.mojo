@@ -89,7 +89,7 @@ def _emit_node(mut p: OpsProgram, code: Int, args: List[Int], ints: List[Int], f
 def column_bytes(a: GraphBytes, lo: Int, width: Int) raises -> GraphBytes:
     if a.shape.ndim != 2 or lo < 0 or width < 1 or lo + width > a.shape.cols():
         raise Error("tensor partition requires a valid rank-two column range")
-    var data = List[Float32](length=a.shape.rows() * width, fill=Float32(0))
+    var data = List[Float32](unsafe_uninit_length=a.shape.rows() * width)
     # Byte packing, no host arithmetic on tensor values. The full unpartitioned
     # parameter is never uploaded to a model-stage executor.
     for row in range(a.shape.rows()):  # driver-loop: packed parameter row copies

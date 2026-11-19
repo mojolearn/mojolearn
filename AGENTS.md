@@ -101,11 +101,17 @@ retired with a reason within two weeks. Applies to hardware, firmware and softwa
 - **`fast` needs no identical anything (Andrew, 2026-10-04).** Not the same bits across vendors, runs or arms. `fast`
   is judged on speed and on quality that does not go down: no material drop against `fast` main, and at least as
   good as the best opponent. A `fast` candidate is never held for different bits or a noise-level metric change.
-- **Focus on `identical`; Apple `fast` investment is stopped (Andrew, 2026-10-22).** `deterministic` is retired. No
-  dedicated `fast` features, fixes, tuning, builds, validation or benchmark campaigns unless Andrew reopens it.
-  Existing `fast` code may stay opt-in, Apple only; keep historical records and the rejection tests for retired
-  mode values. Apple `identical` stays in the three-vendor contract. The
-  current `fast` implementation is not a baseline for the cost of identity. The paper covers `identical` only.
+- **`fast` is reopened, on Apple, NVIDIA and AMD (Andrew, 2026-11-19).** `fast` is `identical` with named relaxations
+  switched on, never a separate implementation: each kernel is written once against the identical contract, and each
+  relaxation (free reduction order, fused multiply-add allowed, reduced-precision matrix units where quality holds,
+  elided waits, tile and block shape tuned per hardware) is one experiment define, measured for speed and checked
+  for quality, which must not drop. `fast` and `identical` are both measured on NVIDIA first (the L40S); AMD and Apple
+  ride along and are tuned later if need be. The work order is the mode policy table
+  (`docs/plans/SPEED_AND_CLEANUP_2026-11-18.md`; lane `ideas-mode-policy`). An `identical` build is never changed by a
+  relaxation: a row switched off in an `identical` build is a compile error. `deterministic` stays retired; keep the
+  rejection tests for retired mode values. The paper covers `identical` only, and uses the table to state what
+  identity costs kernel by kernel. Public docs keep saying `fast` is Apple only until `fast` has been built, checked
+  for quality and measured on a vendor; the same change that qualifies it there updates the docs (part 7).
 
 ### The GPU path
 

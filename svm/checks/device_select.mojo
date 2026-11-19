@@ -152,14 +152,6 @@ def flag_free_kernel(
         flags.unsafe_store(i, UInt8(1) if ok else UInt8(0))
 
 
-def fill_u8_kernel(
-    flags: MutPointer[UInt8, MutAnyOrigin], value: UInt8, n_in: Int32
-):
-    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if i < Int(n_in):
-        flags.unsafe_store(i, value)
-
-
 def fill_f32_kernel(
     v: MutPointer[Float32, MutAnyOrigin], value: Float32, n_in: Int32
 ):

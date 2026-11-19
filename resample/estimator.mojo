@@ -38,6 +38,7 @@ from core.hostptr import copy_f32, f32_ptr, i32_ptr
 from core.transfer import (
     TRANSFER_TIER_IDENTICAL,
     transfer_download_f32_list,
+    transfer_download_i32_list,
     transfer_download_list,
     transfer_upload_list,
 )
@@ -322,6 +323,8 @@ struct MonteCarloResult(Movable):
 
 #: The pinned download stages of this module and tier (core/transfer.mojo).
 comptime _XFER_POOL = "MojolearnResampleTransferStagesIdenticalV1" if TRANSFER_TIER_IDENTICAL else "MojolearnResampleTransferStagesFastV1"
+#: The pinned int32 stages (a slot holds stages of one element type).
+comptime _XFER_I32_POOL = "MojolearnResampleTransferI32StagesIdenticalV1" if TRANSFER_TIER_IDENTICAL else "MojolearnResampleTransferI32StagesFastV1"
 
 
 def _upload(
@@ -457,10 +460,11 @@ def _perm_observed(
 def _download_i32(
     ctx: DeviceContext, buf: DeviceBuffer[DType.int32], n: Int
 ) raises -> List[Int32]:
-    # core/transfer.mojo (lane fx-transfer-helpers, 2026-11-18): one copy into
-    # the list's own words (the drawn row indices: `count` of them). Gone: a
-    # pinned buffer per call and one append per index into a growing list.
-    return transfer_download_list[DType.int32](ctx, buf, n)
+    # core/transfer.mojo: the drawn row indices (`count` of them) straight
+    # into the list's own words; from DOWNLOAD_STAGE_MIN words through the
+    # pooled pinned int32 stages (lane fx-dup-next, 2026-11-19: millions of
+    # indices went down in one copy into fresh pageable pages).
+    return transfer_download_i32_list[_XFER_I32_POOL](ctx, buf, n)
 
 
 # ===========================================================================

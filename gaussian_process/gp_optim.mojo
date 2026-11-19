@@ -566,7 +566,7 @@ def gpr_optimize_device(
     # the results land straight in their lists (no host unpack loops)
     var theta = List[Float32](length=nt, fill=Float32(0.0))
     var values = List[Float32](length=nt, fill=Float32(0.0))
-    var runs = List[Float32](length=n_runs * 4, fill=Float32(0.0))
+    var runs = List[Float32](unsafe_uninit_length=n_runs * 4)
     var hsi = ctx.enqueue_create_host_buffer[DType.int32](GP_OPT_SI_LEN)
     var out_theta = dout.create_sub_buffer[DType.float32](0, nt)
     var out_values = dout.create_sub_buffer[DType.float32](nt, nt)

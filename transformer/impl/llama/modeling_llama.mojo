@@ -1770,6 +1770,45 @@ struct LlamaKVCache(Movable):
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_SOFTMAX-arm2.patch
 
 
+comptime LLAMA_FAST_STAGE_KEEP = is_defined["MOJOLEARN_LLAMA_FAST_STAGE_KEEP"]()
+"""lane/fx-transformer-forward (2026-11-19), EXPERIMENT ARM, default OFF
+(docs/apple-fast/EXPERIMENTS.md; A/B owed on transformer-forward and
+samba-forward, bench/results/paper_compare/owed-pre0867.json row
+llama-stage-keep). A forward-only attention step run of L > 1 tokens on kept
+stages of the same shape (`AttnPrefill.prepare(..., keep_bytes=True)`: the
+stateless `TransformerBlock.forward`, a forward with the caller's caches, an
+inference-only stack layer) restores the stages' host flags
+(`LlamaDeviceStages.reset_flags`) and does NOT zero-fill the stage buffers
+again, where the default runs `LlamaDeviceStages.reset`: thirty zero fills
+and a wait before every call.
+
+WHY THE OUTPUT IS THE SAME. A forward writes each stage it reads, whole,
+before reading it: the stages are built for exactly this call's (B, L)
+(`llama_decoder_layer_forward_planted` refuses any other), every stage
+kernel covers all M rows of its output, the packed key and value spans are
+written by the append for all `s` used positions and nothing reads past `s`,
+and the eager attention kernels (a regime or corner refusal) write
+`scores`, `masked`, `aexp` and `weights` over the call's whole
+`[B, n_heads, L, S]` before the next kernel reads them. The byte LM's logits
+forward has run this same `llama_decoder_layer_forward(forward_only=True)`
+on kept stages with no reset since DEVIATION 2942
+(training/byte_lm_logits.mojo `ByteLogitsScratch`), the trainer's per-layer
+stages serve every training step without one, and the L = 1 decode stages of
+a resident entry are never reset between tokens. A run that a backward may
+read (`forward_only` False) keeps the default reset. No float is produced
+differently: no bit moves on any column.
+
+WHAT IT REMOVES, from sizes alone. The fills write every stage: twelve
+M x d_model-wide buffers, four M x intermediate, the two key / value spans,
+and `aexp`, which a column whose default attention arm keeps the fused
+forward's exp stash (NVIDIA) grows to B x n_heads x L x S floats at the
+first call. The fill is linear in B x L x (12 d_model + 4 intermediate) and
+QUADRATIC in L through `aexp`, while the launches that do the work are not
+cheaper for it: the saving grows with the sequence length, the head count
+and the width (twice the bytes at d_model 768; four times the `aexp` bytes
+at L doubled), and is thirty queued fills and one wait at any shape."""
+
+
 struct LlamaDeviceStages(Movable):
     """Every recorded stage of one block call, contract section 9, in card
     order, in the layouts that section names. `M = B * L` token-major rows.
@@ -1888,6 +1927,15 @@ struct LlamaDeviceStages(Movable):
     three buffers) and on the AFN flash path; set after a fused forward.
     The fused backward takes the three maxima from it instead of scanning
     the three buffers again."""
+    var refuse_batch: Optional[DeviceNonfiniteBatch]
+    """lane/fx-transformer-forward (2026-11-19): the scan scratch of this
+    stage set's from-position-0 refusal (`_llama_refuse_prefill_held`: the
+    hidden states and inv_freq, two fixed lengths for a stage set, since the
+    stages are built for one (B, L)), built at the first such call and kept,
+    where every call allocated two device buffers and one host buffer and
+    freed them. None until that call; not a stage, never recorded, and
+    `reset` leaves it alone (it holds no call's data between calls: every
+    slot is rewritten by the scan before it is read)."""
 
     def __init__(
         out self,
@@ -1984,6 +2032,7 @@ struct LlamaDeviceStages(Movable):
         self.attn_estash_cells = 0
         self.defer_addr = 0
         self.attn_fwd_scan = AttnFwdScan()
+        self.refuse_batch = Optional[DeviceNonfiniteBatch]()
 
         # All 30 buffers are owned by self through this fence. Preserve every
         # zero fill, but submit them together instead of waiting per buffer.
@@ -2068,6 +2117,21 @@ struct LlamaDeviceStages(Movable):
         self.attn_fwd_scan = AttnFwdScan()
         step_count_sync()
         ctx.synchronize()
+
+    def reset_flags(mut self) raises:
+        """MOJOLEARN_LLAMA_FAST_STAGE_KEEP: the host half of `reset`, every
+        route flag and per-call record back to the constructor's value, with
+        no fill and no wait. For a forward-only run on kept stages of the
+        same shape, which writes each stage whole before reading it
+        (`LLAMA_FAST_STAGE_KEEP`). Keep this list equal to `reset`'s."""
+        self.attn_prefer_eager = False
+        self.attn_recompute_backward = False
+        self.attn_forward_status = -1
+        self.attn_fused_off = False
+        self.attn_materialized = False
+        self.attn_estash_cells = 0
+        self.defer_addr = 0
+        self.attn_fwd_scan = AttnFwdScan()
 
 
 def llama_proj(
@@ -4550,6 +4614,52 @@ def llama_refuse_bad_call(
         )
 
 
+def _llama_refuse_prefill_held(
+    ctx: DeviceContext,
+    mut held: Optional[DeviceNonfiniteBatch],
+    mut rope: LlamaRopeTable,
+    mut x: DeviceBuffer[DType.float32],
+    nx: Int,
+) raises:
+    """`llama_refuse_bad_call` for a call that starts at an EMPTY cache
+    (`kv.s == 0`: a prefill, a training forward, the first decode token), on
+    scan scratch the caller keeps (`LlamaDeviceStages.refuse_batch`).
+
+    With no carried keys or values the refusal is two scans, the `nx` hidden
+    states and inv_freq, and both lengths are fixed for a stage set. The
+    default built a `DeviceNonfiniteBatch` for them on every call: two
+    device buffers and one host buffer allocated and freed per layer per
+    forward. Here the batch is built at the first call and reused
+    (`DeviceNonfiniteBatch`: "a completed batch can be reused with the same
+    lengths; enqueue rereads every source"); a batch of other lengths is
+    replaced. The same kernels at the same geometry, the same integer fold,
+    the same one wait, the names tested in the same order with the same
+    messages: no float is produced and nothing a caller sees changes. A
+    scan that raises (a short source) drops the batch, so the next call
+    builds a clean one, as a per-call batch was."""
+    var fits = False
+    if held:
+        fits = (len(held.value().lengths) == 2 and held.value().lengths[0] == nx
+                and held.value().lengths[1] == rope.half)
+    if not fits:
+        # Drop a batch of other lengths before allocating its replacement.
+        held = None
+        var lens = List[Int]()
+        lens.append(nx)
+        lens.append(rope.half)
+        held = DeviceNonfiniteBatch(ctx, lens)
+    var hits = List[Int]()
+    try:
+        held.value().enqueue(ctx, 0, x)
+        held.value().enqueue(ctx, 1, rope.inv_freq)
+        hits = held.value().finish(ctx)
+    except err:
+        held = None
+        raise err
+    _refuse_nonfinite_at(ctx, "hidden_states", x, hits[0])
+    _refuse_nonfinite_at(ctx, "rotary_emb.inv_freq", rope.inv_freq, hits[1])
+
+
 def llama_refuse_bad_inputs(
     ctx: DeviceContext,
     mut w: LlamaDeviceWeights,
@@ -6731,7 +6841,25 @@ def llama_decoder_layer_forward_planted(
                 ctx, w, rope, x, kv, b, l, stages.defer_addr
             )
     if not refusal_deferred:
-        llama_refuse_bad_call(ctx, w, rope, x, kv, b, l)
+        # lane/fx-transformer-forward (2026-11-19): a call that starts at an
+        # empty cache scans the hidden states and inv_freq only, on scratch
+        # these stages keep (`_llama_refuse_prefill_held`); before, this was
+        # `llama_refuse_bad_call` here for every call, which allocated and
+        # freed three scan buffers per layer per forward. Call site: once per
+        # layer per forward, no loop inside. A call with carried keys and
+        # values (lengths that grow with the cache) and a FAST build (separate
+        # scans) take `llama_refuse_bad_call` as before.
+        var refused_held = False
+        comptime if IDN_LLAMA_REFUSE_BATCH:
+            if kv.s == 0:
+                _llama_refuse_prefill_held(ctx, stages.refuse_batch, rope, x, b * l * dm)
+                comptime if LLAMA_FAST_REFUSE_WATERMARK:
+                    # as `llama_refuse_bad_call` after its whole scans
+                    if kv.wm_on:
+                        kv.wm_upto = kv.s
+                refused_held = True
+        if not refused_held:
+            llama_refuse_bad_call(ctx, w, rope, x, kv, b, l)
     pc.tick(ctx, "fwd.refuse_call")
     # lane/lowbit-blocks: this call runs under `fixed15_v1` exactly when its
     # weights carry planes.

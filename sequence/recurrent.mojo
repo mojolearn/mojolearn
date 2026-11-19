@@ -264,6 +264,35 @@ struct Work(Movable):
     var one: FP
     var wsplit: FP
 
+    def __init__(out self, gx: FP, gh: FP, act: FP, hall: FP, call: FP, dgh: FP, dh: FP, dhn: FP, dc: FP,
+                 one: FP, wsplit: FP):
+        """ONE layer's buffers on storage the caller owns (lane
+        fx-ops-session-blocks, 2026-11-19: the session's recurrent scan op,
+        autograd/rules_recurrent.mojo `rnn_scan_op`, hands tape storage of
+        the sizes the constructor below allocates for T, B and one layer).
+        `one` holds 1.0. The batch, target and head buffers are placeholders
+        nothing on that path reads."""
+        self.gx = List[FP]()
+        self.gh = List[FP]()
+        self.act = List[FP]()
+        self.hall = List[FP]()
+        self.call = List[FP]()
+        self.gx.append(gx)
+        self.gh.append(gh)
+        self.act.append(act)
+        self.hall.append(hall)
+        self.call.append(call)
+        self.dgh = dgh
+        self.dh = dh
+        self.dhn = dhn
+        self.dc = dc
+        self.xb = one
+        self.yb = one
+        self.yhat = one
+        self.dy = one
+        self.one = one
+        self.wsplit = wsplit
+
     def __init__[E: Exec](out self, mut ex: E, net: Net, T: Int, B: Int, train: Bool) raises:
         var GH = net.G() * net.H
         var H = net.H

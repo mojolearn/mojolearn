@@ -334,7 +334,7 @@ def _down_f32(ctx: DeviceContext, buf: DeviceBuffer[DType.float32], off: Int, n:
     if n > 0:
         ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=buf.create_sub_buffer[DType.float32](off, n))
     ctx.synchronize()
-    var out = List[Float32](length=n, fill=Float32(0.0))
+    var out = List[Float32](unsafe_uninit_length=max(n, 0))
     if n > 0:
         unsafe_memcpy(dest=out.unsafe_ptr(), src=h.unsafe_ptr(), count=n)
     _ = h^
@@ -346,7 +346,7 @@ def _down_i32(ctx: DeviceContext, buf: DeviceBuffer[DType.int32], off: Int, n: I
     if n > 0:
         ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=buf.create_sub_buffer[DType.int32](off, n))
     ctx.synchronize()
-    var out = List[Int32](length=n, fill=Int32(0))
+    var out = List[Int32](unsafe_uninit_length=max(n, 0))
     if n > 0:
         unsafe_memcpy(dest=out.unsafe_ptr(), src=h.unsafe_ptr(), count=n)
     _ = h^

@@ -58,6 +58,7 @@ from checks.native_tests.core_ops_import_kinds import register as register_core_
 from checks.native_tests.core_ops_layernorm_view import register as register_core_ops_layernorm_view
 from checks.native_tests.core_ops_program import register as register_core_ops_program
 from checks.native_tests.core_ops_session import register as register_core_ops_session
+from checks.native_tests.core_ops_session_blocks import register as register_core_ops_session_blocks
 from checks.native_tests.core_partitioned_program import register as register_core_partitioned_program
 from checks.native_tests.core_program_fit_stop import register as register_core_program_fit_stop
 from checks.native_tests.core_program_loop import register as register_core_program_loop
@@ -627,6 +628,7 @@ def all_checks() -> List[Check]:
     checks.append(register_core_ops_layernorm_view())
     checks.append(register_core_ops_program())
     checks.append(register_core_ops_session())
+    checks.append(register_core_ops_session_blocks())
     checks.append(register_core_partitioned_program())
     checks.append(register_core_program_fit_stop())
     checks.append(register_core_program_loop())

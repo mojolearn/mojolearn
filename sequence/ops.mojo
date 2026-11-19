@@ -36,6 +36,7 @@ from std.sys.compile import is_defined
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from std.math import fma as _std_fma
 from std.memory import bitcast
+from core.row_cells import softmax_row_from_max_f32
 
 # TOMBSTONE: MOJOLEARN_NN42_INPUT_BIAS_FUSED (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at c906dcaf57.
 # Restore: git apply experiments/removed/MOJOLEARN_NN42_INPUT_BIAS_FUSED.patch
@@ -730,8 +731,14 @@ def op_cell_bwd_h(t: Int, a: Args):
     same terms in the same order (`gemm_dot`, k ascending, from the direct
     part the later step stored), stores the sum where the GEMM did, then runs
     `op_cell_bwd` verbatim. Args as `op_cell_bwd`, plus p11 W_hh, i3 = 1 when
-    a later step exists (0 at s = T - 1, where dh is the zero fill), i4 the
-    offset of dGH_{s+1} from p9 (B*G*H)."""
+    a later step exists (0 at s = T - 1, where dh and dc are zero), i4 the
+    offset of dGH_{s+1} from p9 (B*G*H).
+    Lane fx-rnn-cnn-fit (2026-11-19): at i3 = 0 the element stores the zeros
+    of its own dh[t] and dc[t] before the cell reads them. They were two
+    OP_FILL launches over the same B*H words before every layer's backward
+    chain (autograd/rules_recurrent.mojo _layer_bwd); element t reads and
+    writes only index t of both buffers, so the cell reads the same +0.0
+    words: the same bits. The scan's first step repeats its own zero stores."""
     if a.i3 != 0:
         var H = a.i2
         var GH = gates_of(a.i0) * H
@@ -739,6 +746,9 @@ def op_cell_bwd_h(t: Int, a: Args):
         var u = t - b * H
         var acc = gemm_dot(a.p9 + a.i4, b * GH, 1, a.p11, u, H, GH, ld(a.p5, t))
         st(a.p5, t, acc)
+    else:
+        st(a.p5, t, Float32(0.0))
+        st(a.p7, t, Float32(0.0))
     op_cell_bwd(t, a)
 
 
@@ -1046,12 +1056,8 @@ def op_softmax(t: Int, a: Args):
         var v = ld(a.p0, base + c)
         if v > m:
             m = v
-    var s = Float32(0.0)
-    # each exp once: parked in the output row (p1 may be p0: element c
-    # is read before it is written), read back for the division
-    for c in range(C):
-        var e = ftz(identical_exp(sub(ld(a.p0, base + c), m)))
-        st(a.p1, base + c, e)
-        s = add(s, e)
-    for c in range(C):
-        st(a.p1, base + c, ftz(identical_div(ld(a.p1, base + c), s)))
+    # core/row_cells.mojo, the one body: each exp once, parked in the
+    # output row (p1 may be p0: element c is read before it is written),
+    # read back for the division. The same flushes as the statements that
+    # stood here.
+    softmax_row_from_max_f32(a.p0, a.p1, base, C, m)
