@@ -143,6 +143,7 @@ from gemm.neural_dispatch import NEURAL_GEMM_WORKLIST  # lane/fx-gemm-worklist (
 from autograd.kernels.transformer import (
     BWD_FUSE_GATED_SILU,
     BWD_FUSE_NORM2_RESIDUAL,
+    BWD_GEMM_DX_CONCAT,
     BWD_GEMM_EPI,
     BWD_TPB,
     IDN_BWD_ENTRY_ALIAS,
@@ -157,6 +158,7 @@ from autograd.kernels.transformer import (
     bwd_add2_kernel,
     bwd_add3_kernel,
     bwd_attention_dispatch,
+    bwd_dx_concat3,
     bwd_kv_slice2_kernel,
     bwd_mul2_kernel,
     bwd_mul2_silu_backward_kernel,
@@ -202,6 +204,8 @@ comptime TF_DX_TMP0_ADD2 = 3
 comptime TF_DX_TMP2_ADD3 = 4
 # lane fx-gemm-epi (BWD_GEMM_EPI only): never recorded; _linear's local mark
 # that _dx_fanin_epi already wrote this member's dX.
+# lane fx-gemm-dx-concat (BWD_GEMM_DX_CONCAT only) uses the same mark for a
+# q, k or v member that _dx_fanin_cat handled.
 comptime TF_DX_JOINED = 5
 
 # Args slot i9 (TF_CARD_SLOT) of a TF_LINEAR or TF_ROPE node: which identity
@@ -467,6 +471,60 @@ struct TransformerRules(BackwardRules):
         else:
             raise Error("transformer linear: unknown dX destination")
 
+    def _dx_fanin_cat(
+        self, mode: Int, upstream: FP, weight: FP, total: FP, m: Int, n: Int, k: Int,
+    ) raises:
+        # lane fx-gemm-dx-concat (-D MOJOLEARN_GEMM_FAST_DX_CONCAT=1, default
+        # off; BITS CHANGE, formula in autograd/kernels/transformer.mojo above
+        # BWD_GEMM_DX_CONCAT): S32 as ONE product,
+        #   d(norm1.out) = GEMM_contract([dQ | dK | dV], [Wq; Wk; Wv])
+        # over K = qw + kw + kw walked ascending in that order, in place of
+        # three products and (q + k) + v. The q and the k member launch no dX:
+        # each leaves the address of its dC (the tape's storage, bst.d_*_proj_out
+        # in llama_decoder_layer_record) and of its weight, and its width, in
+        # the stages. The v member, the one that completes the fan-in, runs
+        # one pack launch and the product into `total` (every member's
+        # gradients[0]: writes_total). Nothing reads d(norm1.out) between the
+        # members (the EPI and work-list arms rely on the same fact).
+        # With the work-list arm the product is queued behind the three weight
+        # gradients _route_b queued and the v member runs the list: one list
+        # of four (the pack launch is already on the queue ahead of it).
+        # Call site: once per q, k, v TF_LINEAR node of a backward.
+        ref bst = self.bst[]
+        if mode == TF_DX_TMP0:
+            bst.dx_cat_dq = Int(upstream)
+            bst.dx_cat_wq = Int(weight)
+            bst.dx_cat_nq = n
+            bst.dx_cat_have = 1
+        elif mode == TF_DX_TMP1:
+            if bst.dx_cat_have != 1:
+                raise Error("transformer linear: the k member of the q, k, v fan-in ran before q (concatenated dX)")
+            bst.dx_cat_dk = Int(upstream)
+            bst.dx_cat_wk = Int(weight)
+            bst.dx_cat_nk = n
+            bst.dx_cat_have = 2
+        elif mode == TF_DX_TMP2_ADD3:
+            if bst.dx_cat_have != 2:
+                raise Error("transformer linear: the v member of the q, k, v fan-in ran before q and k (concatenated dX)")
+            bst.dx_cat_have = 0
+            var nq = bst.dx_cat_nq
+            var nk = bst.dx_cat_nk
+            var d = _view(self.ctx, total, m * k)
+            var dq = _view(self.ctx, FP(unsafe_from_address=bst.dx_cat_dq), m * nq)
+            var dk = _view(self.ctx, FP(unsafe_from_address=bst.dx_cat_dk), m * nk)
+            var dv = _view(self.ctx, upstream, m * n)
+            var wq = _view(self.ctx, FP(unsafe_from_address=bst.dx_cat_wq), nq * k)
+            var wk = _view(self.ctx, FP(unsafe_from_address=bst.dx_cat_wk), nk * k)
+            var wv = _view(self.ctx, weight, n * k)
+            bwd_dx_concat3[NEURAL_GEMM_WORKLIST](
+                self.ctx, bst.gemm_workspace, d, bst.dx_cat_d, bst.dx_cat_w,
+                dq, dk, dv, wq, wk, wv, m, nq, nk, n, k,
+            )
+            comptime if NEURAL_GEMM_WORKLIST:
+                bst.gemm_workspace.list_run(self.ctx)
+        else:
+            raise Error("transformer linear: unknown dX destination")
+
     def _linear(
         self, saved: Args, upstream: FP, inputs: List[FP], gradients: List[FP],
         rows: List[Int], cols: List[Int],
@@ -495,9 +553,17 @@ struct TransformerRules(BackwardRules):
         # not use the TMP modes under this arm. Call site: once per TF_LINEAR node of a backward.
         _route_b[NEURAL_GEMM_WORKLIST](self.ctx, bst.gemm_workspace, dw, dc, x, OP_NT, m, n, k)
         var mode = saved.i0
+        comptime if BWD_GEMM_DX_CONCAT:
+            # lane fx-gemm-dx-concat: the q, k, v members under the arm (q is the only TMP0, v the only
+            # TMP2_ADD3, k the TMP1 that is not up). It goes first and wins over the epilogue arm for this
+            # fan-in: one product leaves no join for a store to fuse. gate and up are not touched.
+            if mode == TF_DX_TMP0 or mode == TF_DX_TMP2_ADD3 or (mode == TF_DX_TMP1 and saved.i9 != TF_CARD_UP):
+                self._dx_fanin_cat(mode, upstream, inputs[1], gradients[0], m, n, k)
+                mode = TF_DX_JOINED
         comptime if BWD_GEMM_EPI:
             # lane fx-gemm-epi: the fan-in members under the arm
-            if mode != TF_DX_PLAIN:
+            # (`and mode != TF_DX_JOINED`: lane fx-gemm-dx-concat; never JOINED here without its define)
+            if mode != TF_DX_PLAIN and mode != TF_DX_JOINED:
                 self._dx_fanin_epi(mode, saved.i9, dc, w, gradients[0], m, n, k)
                 comptime if NEURAL_GEMM_WORKLIST:
                     # lane/fx-gemm-worklist with the epilogue arm: the dX above took its own launch (an

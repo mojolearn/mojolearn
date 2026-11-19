@@ -692,6 +692,11 @@
    "define": "MOJOLEARN_GEMM_FAST_EPI",
    "status": "define in code (gemm/checks/gemm_epilogue.mojo GEMM_FAST_EPI / GEMM_EPI_FUSES; autograd/kernels/transformer.mojo BWD_GEMM_EPI; IDENTICAL, no poison build): B = a product whose output is joined to the value already in its destination stores the join in its own final store (the packed kernel's all-leaves store, or the fold-stack kernel after the unchanged group launch), so the transformer backward's two dX fan-ins (S9 bwd_add2_kernel, S32 bwd_add3_kernel) issue no follower launch: 2 launches a layer fewer (S9's add2 and S32's add3), 16 a step at 8 layers, and tmp0/tmp1/tmp2 are not written; A = the default: each dX into a tmp buffer, then one add kernel per fan-in. The join is the follower's expression on the same words in the same operand order (ftz(ftz(x) + ftz(y)), both addends flush results, nothing to contract): digests must not move. Fuses only where the shipped dispatch runs the packed body (NVIDIA today); AMD, Apple and declined sizes run the same follower kernels, same launch count as A",
    "owed": "RUN"
+  },
+  "gemm-dx-concat": {
+   "define": "MOJOLEARN_GEMM_FAST_DX_CONCAT",
+   "status": "define in code (autograd/kernels/transformer.mojo BWD_GEMM_DX_CONCAT, bwd_dx_concat_pack_kernel, bwd_dx_concat3; autograd/rules_transformer.mojo _dx_fanin_cat; transformer/checks/transformer_backward_oracle.mojo BWD_HOST_DX_CONCAT; IDENTICAL, no poison build): B = the transformer backward's q/k/v fan-in dX (S29-32) as ONE product, d(norm1.out) = GEMM_contract([dQ | dK | dV], [Wq; Wk; Wv]) over K = q_width + 2 kv_width walked ascending in that order, after one pack launch that bit-copies the three gradients and the three weights into two stage scratch buffers; A = the default: three products into tmp0/tmp1/tmp2, then bwd_add3_kernel (q + k) + v. BITS CHANGE under B on every column and in the host oracle together (another rounding order of the same sum): digests of d(norm1.out) and of everything downstream of it MOVE, and must be equal between the device and the host column of the B build. Launches for the fan-in dX: pack 1 + one product (2 where it runs as groups + fold), against three products (6) + 1. gate/up (S9) is not changed",
+   "owed": "RUN"
   }
  },
  "rows": [
@@ -4125,6 +4130,53 @@
     ]
    },
    "decides": "B at least as fast as the candidate at both cases, digests equal; a slower case blocks the promotion decided on fx-gemm-epi-rows. OWED TOOLING: the board harness has no driver for a transformer train step at a caller-given d_model (drivers today: cnn_widths, f16_widen, kde_widths, mamba_backward, mlp_fit, pandas_input, samba_step, samba_train_step, while_loop); until one exists these two cases are timed with the lm-train-step recipe at the stated widths"
+  },
+  {
+   "id": "fx-gemm-dx-concat-rows",
+   "source": "lane fx-gemm-dx-concat (2026-11-19, idea 6 of ~/mojolearn-evidence/briefs-20261118/ideas-gemm-headroom-RESULT.md; report ~/mojolearn-evidence/briefs-20261118/fx-gemm-dx-concat-RESULT.md): default-off arm, never timed",
+   "kind": "ab",
+   "lane": [
+    "lm-train-step",
+    "transformer-train-step",
+    "samba-train-step"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "gemm-dx-concat"
+   ],
+   "decides": "promote B only if lm-train-step is faster on the NVIDIA L40S (same box, same job) with quality equal: the loss after the timed steps within the noise of A (B changes the rounding order of one sum per layer, so digests MOVE by design and are compared between the B build's device and host columns, never against A). Expected -0.3 to -0.6 ms of about 35 (4 launches a layer fewer, 32 a step at 8 layers; the add3 and tmp traffic goes, the pack's copy of [M, K] and [K, d_model] is added); a result inside the noise floor is a loser and is deleted with the four tombstone parts. samba-train-step reaches the arm through its attention layers and must not be slower. First run transformer/checks/transformer_backward_check.mojo on the B build ('arm dx-concat: PASS' and clause (a) 37/37 against the oracle). Also time B with gemm-worklist and with gemm-epi if those are still open (the three compose: fx-gemm-dx-concat-RESULT.md). Before a flip, time the neighbouring shape and the non-board size (row fx-gemm-dx-concat-sizes). If B wins, the follow-up that removes the pack launch (the rope and KV-slice kernels storing straight into the [M, K] buffer) is owed before the flip is final"
+  },
+  {
+   "id": "fx-gemm-dx-concat-sizes",
+   "source": "lane fx-gemm-dx-concat (2026-11-19, idea 6 of ~/mojolearn-evidence/briefs-20261118/ideas-gemm-headroom-RESULT.md; report ~/mojolearn-evidence/briefs-20261118/fx-gemm-dx-concat-RESULT.md); the neighbouring shape and the non-board size of the arm (no dimension targeting)",
+   "kind": "ab",
+   "lane": [
+    "transformer-train-step"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "gemm-dx-concat"
+   ],
+   "shape": {
+    "cases": [
+     {
+      "note": "neighbouring shape",
+      "d_model": 512,
+      "batch_tokens": 2048
+     },
+     {
+      "note": "non-board size",
+      "d_model": 320,
+      "batch_tokens": 1536,
+      "intermediate": 960
+     }
+    ]
+   },
+   "decides": "B at least as fast as the candidate at both cases, quality equal; a slower case blocks the promotion decided on fx-gemm-dx-concat-rows. OWED TOOLING (shared with fx-gemm-epi-sizes): the board harness has no driver for a transformer train step at a caller-given d_model; until one exists these two cases are timed with the lm-train-step recipe at the stated widths"
   }
  ]
 }
