@@ -101,8 +101,8 @@ def connect(context, package):
         scalers += ((preprocessing.StandardScaler, 'STANDARD', ('copy', 'with_mean', 'with_std', 'numeric_mode'), (arg(0), const(False), const(None))),
                     (preprocessing.MinMaxScaler, 'MINMAX', ('feature_range', 'copy', 'clip', 'numeric_mode'), (arg(0), const(False))))
     if _expansion_prep is not None:
-        scalers += ((_expansion_prep.MaxAbsScaler, 'MAXABS', ('copy',), (arg(0),)),
-                    (_expansion_prep.RobustScaler, 'ROBUST', ('with_centering', 'with_scaling', 'quantile_range', 'copy', 'unit_variance'), (arg(0),)))
+        scalers += ((_expansion_prep.MaxAbsScaler, 'MAXABS', ('copy', 'numeric_mode'), (arg(0),)),
+                    (_expansion_prep.RobustScaler, 'ROBUST', ('with_centering', 'with_scaling', 'quantile_range', 'copy', 'unit_variance', 'numeric_mode'), (arg(0),)))
     for cls, owner, names, transform in scalers:  # glue: fixed native scaler schemas
         module = preprocessing if owner in ('STANDARD', 'MINMAX') else _expansion_prep
         register(cls, vars(module)['_' + owner + '_CALL'], vars(module)['_' + owner + '_CONTEXT'], names, 'init', {

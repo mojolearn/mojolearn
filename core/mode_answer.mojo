@@ -84,7 +84,10 @@ comptime MODE_FAMILY_RESOLVER = 1 << 19     # estimator_binding_pyapi_door (shar
 comptime MODE_FAMILY_METADATA = 1 << 20     # mode_metadata_native_door, model_catalog_native_door
 comptime MODE_FAMILY_MSEL = 1 << 21         # msel_scorer_native_door
 comptime MODE_FAMILY_LINALG = 1 << 22       # linalg_ops_resample_door
-comptime MODE_FAMILIES_ALL = (1 << 23) - 1
+comptime MODE_FAMILY_PROGRAM = 1 << 23      # arena_prog_native_door (the shared x_prep / x_metrics program runner: every classifier's accuracy score passes it)
+comptime MODE_FAMILY_MIXTURE = 1 << 24      # mixture_native_door, svm_mixture_native_door (GaussianMixture's compiled-mode check)
+comptime MODE_FAMILY_GP = 1 << 25           # gp_common_native_pack (the GP estimators' compiled-mode check)
+comptime MODE_FAMILIES_ALL = (1 << 26) - 1
 
 # THE ONE DECISION of which families answer `fast` by the identical set where
 # the selector decided so. Every family not named here refuses `fast` in all

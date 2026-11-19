@@ -439,7 +439,7 @@ FAMILIES = [
 ESTIMATOR_FAMILY = {
     "RandomForestClassifier": "FOREST", "RandomForestRegressor": "FOREST", "ExtraTreesClassifier": "FOREST",
     "GradientBoostingRegressor": "GBDT", "GradientBoostingClassifier": "GBDT", "IsolationForest": "IFOREST",
-    "StandardScaler": "SCALER", "MinMaxScaler": "SCALER", "MaxAbsScaler": "none", "RobustScaler": "none",
+    "StandardScaler": "SCALER", "MinMaxScaler": "SCALER", "MaxAbsScaler": "SCALER", "RobustScaler": "SCALER",
     "PCA": "PCA", "IncrementalPCA": "IPCA", "TruncatedSVD": "TSVD", "KernelPCA": "KPCA", "NMF": "NMF",
     "PLSRegression": "PLS", "LinearRegression": "LINEAR", "Ridge": "LINEAR", "LogisticRegression": "LINEAR",
     "ElasticNet": "LINEAR", "SGDClassifier": "LINEAR", "GaussianNB": "LINEAR", "KernelRidge": "KERNEL",
