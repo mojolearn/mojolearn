@@ -36,9 +36,13 @@ from sequence.exec_trait import Exec
 from sequence.ops import (
     FP,
     Args,
+    OP_CELL_BWD,
     OP_CELL_BWD_H,
+    OP_CELL_FWD,
     OP_CELL_FWD_H,
     OP_COPY,
+    OP_GEMM,
+    OP_GEMM_EPI,
     OP_SEQ_IOTA,
     OP_SEQ_OUT,
     OP_SOFTMAX,
@@ -48,6 +52,9 @@ from sequence.ops import (
 from sequence.recurrent_scan import OP_CELL_BWD_SCAN, OP_CELL_FWD_SCAN, SEQ_LSTM_SCAN, scan_routes
 from sequence.recurrent import Net, Work, RnnStep, SEQ_WGRAD_BLOCKED, TASK_CE, bias_rows, fill, gather_seq, gemm
 from autograd.kernels.recurrent import colsum, wgrad_block, wgrad_blocked
+from sequence.mlp import EPI_BIAS_ACT
+from sequence.gemm_split import gemm_split_shape
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 # The recurrent trainer's backward runs on the tape (promoted 2026-10-19). One run per arm, HIGGS
 # 1M rows, 16-step sequences, hidden 64, b512, 1 epoch, identical: NVIDIA L40S lstm 0.1419 -> 0.1397 s, gru 0.1256 ->
@@ -70,6 +77,84 @@ comptime RNN_LAST_STEP = 18
 # (Sweep 2026-11-15: NN42_INPUT_BIAS_FUSED is gone, so the input bias is always in GX; the name stays for
 # sequence/checks/seams_check.mojo.)
 comptime RNN_INPUT_BIAS_IN_GX = True
+
+# Lane fx-rnn-cnn-fit (2026-11-19), default path, same bits: a projection's bias is the GEMM launch's own epilogue
+# (OP_GEMM_EPI with EPI_BIAS_ACT and no activation: op_gemm for the cell, then op_bias on the word it stored,
+# sequence/mlp.mojo op_gemm_epi; the launch the hand MLP has used for every layer since 2026-09-28) where it was a
+# GEMM launch and then an OP_BIAS launch over the same R x out words. The product takes the route and the fold order
+# OP_GEMM took: DeviceExec and HostExec ask the same split-K rule and the same tile route for both opcodes; only the
+# few-cells-over-a-long-K cooperative kernel is OP_GEMM's alone, so that shape keeps the two launches (_coop_shape).
+# One launch and one pass over R x out words fewer per projection per step (the input projection of every layer and
+# the head). IDENTICAL only: FAST's `gemm` has its own split for some shapes (sequence/recurrent.mojo gemm).
+comptime RNN_BIAS_EPI = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+
+# Experiment MOJOLEARN_SEQ_FAST_RNN_STEP_GEMM (lane fx-rnn-cnn-fit, 2026-11-19; default OFF, A/B owed on the NVIDIA
+# L40S: owed-pre0867.json "rnn-step-gemm"). The per-step chain (cells of more gates than the scan takes) runs each
+# time step as ONE launch of one thread per (row, unit): the thread folds its own G gate dots of K = H terms straight
+# from device memory, then the cell (OP_CELL_FWD_H; the backward one dot of K = G H, OP_CELL_BWD_H). That fusion was
+# made for Apple's launch cost (2026-09-28). From the board rows (L40S, 564 steps, T 24, B 256, H 64): gru 0.80 and
+# lstm 0.97 ms a step on the same 74 launches, so one more gate costs 3.5 us a cell launch: the one-thread fold runs
+# about 0.6 TFLOP/s where the sequence tile runs 3.6-4.0 (sequence/gemm_tiled.mojo), and the 2 T cell launches hold
+# about two thirds of a step. Under the define a step is two launches: the hidden projection as the lane's own GEMM
+# (forward: GH = h_prev W_hh^T + b_hh, OP_GEMM_EPI; backward: dh += dGH_{s+1} W_hh, OP_GEMM accumulate) on the tile
+# route, then the elementwise cell (OP_CELL_FWD / OP_CELL_BWD): the three launches HostExec already runs for the
+# fused opcode (sequence/exec.mojo), argument for argument, so THE SAME BITS (each cell's chain is gemm_dot's, k
+# ascending from +0.0 or from dh; the bias add and the cell are the fused body's).
+# The rule (rnn_step_gemm): only where the launch rule keeps that chain (not a split-K shape, not the cooperative
+# shape: there the fused launch stays, see below), and only where the fold is worth a launch: at least
+# RNN_STEP_GEMM_MIN_FMA multiply-adds a step. Cost reasoning, not a shape: the second launch costs one launch floor
+# (3-8 us on the L40S, from the same rows), which the fused fold spends on about 1 M multiply-adds; below that the
+# fused launch is the cheaper form on any hardware with a launch floor. Neighbouring shapes to time: T 48, H 128;
+# non-board model: a 2-layer GRU regressor on a 12-feature series. Estimate 0.80-1.00x on lstm/gru fits (forward
+# only at H 64: the backward's K = G H there is a split-K shape).
+# NOT DONE, would change bits (every column together): the backward on split-K shapes, where the standalone GEMM
+# takes the split order; the fused kernel keeps the one chain there.
+comptime RNN_STEP_GEMM = (
+    is_defined["MOJOLEARN_SEQ_FAST_RNN_STEP_GEMM"]() and GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+)
+comptime RNN_STEP_GEMM_MIN_FMA = 1 << 20
+
+
+@always_inline
+def _coop_shape(M: Int, N: Int, K: Int) -> Bool:
+    """The shape DeviceExec._launch gives OP_GEMM's cooperative kernel (few
+    cells over a long K); the epilogue opcodes never take it."""
+    return M * N <= 1024 and K >= 32768
+
+
+@always_inline
+def rnn_step_gemm(M: Int, N: Int, K: Int) -> Bool:
+    """Whether a time step's M x N x K hidden projection runs as its own
+    GEMM launch under MOJOLEARN_SEQ_FAST_RNN_STEP_GEMM (the rule above)."""
+    comptime if not RNN_STEP_GEMM:
+        return False
+    if gemm_split_shape(M, N, K) or _coop_shape(M, N, K):
+        return False
+    return M * N * K >= RNN_STEP_GEMM_MIN_FMA
+
+
+def _gemm_bias[E: Exec](
+    mut ex: E, A: FP, Bm: FP, bias: FP, C: FP, M: Int, N: Int, K: Int,
+    sam: Int, sak: Int, sbk: Int, sbn: Int,
+) raises:
+    """C [M, N] dense = A B + bias[n] in one launch: `gemm` (no accumulate)
+    with op_bias as its epilogue (sequence/mlp_fit.mojo gemm_epi's layout)."""
+    var a = Args()
+    a.p0 = A
+    a.p1 = Bm
+    a.p2 = C
+    a.p3 = bias
+    a.i0 = M
+    a.i1 = N
+    a.i2 = K
+    a.i3 = sam
+    a.i4 = sak
+    a.i5 = sbk
+    a.i6 = sbn
+    a.i8 = N
+    a.i9 = EPI_BIAS_ACT
+    a.i10 = 0
+    ex.launch[OP_GEMM_EPI](a, M * N)
 
 
 def _copy[E: Exec](mut ex: E, dst: FP, src: FP, n: Int) raises:
@@ -107,9 +192,16 @@ def _linear_record[E: Exec](
         # the rule leaves dX unwritten (and unzeroed): only for an input
         # that needs no gradient
         raise Error("recurrent linear: need_dx=False needs an input without a gradient")
-    gemm(ex, tape.value(x) + first_row * din, tape.value(weight), output, R, dout, din, din, 1, 1, din, False, dout)
-    if add_bias:
-        bias_rows(ex, output, tape.value(bias), output, R, dout)
+    var with_bias = False
+    comptime if RNN_BIAS_EPI:
+        if add_bias and not _coop_shape(R, dout, din):
+            _gemm_bias(ex, tape.value(x) + first_row * din, tape.value(weight), tape.value(bias), output,
+                       R, dout, din, din, 1, 1, din)
+            with_bias = True
+    if not with_bias:
+        gemm(ex, tape.value(x) + first_row * din, tape.value(weight), output, R, dout, din, din, 1, 1, din, False, dout)
+        if add_bias:
+            bias_rows(ex, output, tape.value(bias), output, R, dout)
     var saved = Args()
     saved.p0 = w.wsplit
     saved.p1 = w.one
@@ -143,10 +235,12 @@ def rnn_head[E: Exec](
 
 def rnn_layer[E: Exec](
     mut tape: Tape, mut ex: E, gx: Tensor, w_hh: Tensor, b_hh: Tensor, b_ih: FP,
-    cell: Int, T: Int, B: Int, w: Work, l: Int,
+    cell: Int, T: Int, B: Int, w: Work, l: Int, h0_clean: Bool = False,
 ) raises -> Tensor:
     """Layer l's recurrence over gx [T B, G H]; returns h_1..h_T [T B, H]
-    (w.hall[l] holds h_0 = 0 first). The launches are recurrent.forward's."""
+    (w.hall[l] holds h_0 = 0 first). The launches are recurrent.forward's.
+    `h0_clean`: the caller knows rows [0, B) of w.hall[l] and w.call[l]
+    already hold zeros, so the per-step chain does not fill them again."""
     var H = tape.cols(w_hh)
     var GH = tape.rows(w_hh)
     if GH != gates_of(cell) * H or tape.cols(gx) != GH or tape.rows(gx) != T * B:
@@ -183,9 +277,18 @@ def rnn_layer[E: Exec](
             ex.launch[OP_CELL_FWD_SCAN](sa, B)
             scanned = True
     if not scanned:
-        fill(ex, w.hall[l], B * H, Float32(0.0))
-        fill(ex, w.call[l], B * H, Float32(0.0))
-        for s in range(T):  # driver-loop: over time steps (one launch per step)
+        # Lane fx-rnn-cnn-fit (2026-11-19): h_0 and c_0 are rows [0, B) of the two buffers, which nothing but
+        # this fill (or the scan's own zero stores) writes while the batch size stays B: step s stores rows
+        # [(s + 1) B, (s + 2) B). Only a forward of FEWER rows writes below B H, so the caller passes h0_clean when
+        # the previous forward on this Work had at least B rows (AutogradRnnStep, rnn_predict): the two fills then
+        # run once after an epoch's short last batch, not every step. The same zeros, so the same bits.
+        if not h0_clean:
+            fill(ex, w.hall[l], B * H, Float32(0.0))
+            fill(ex, w.call[l], B * H, Float32(0.0))
+        var step_gemm = False
+        comptime if RNN_STEP_GEMM:
+            step_gemm = rnn_step_gemm(B, GH, H)
+        for s in range(T):  # driver-loop: over time steps (one launch per step; two under RNN_STEP_GEMM)
             var a = Args()
             a.p0 = gxp + s * B * GH
             a.p1 = w.gh[l] + s * B * GH
@@ -201,7 +304,12 @@ def rnn_layer[E: Exec](
             a.i0 = cell
             a.i1 = B
             a.i2 = H
-            ex.launch[OP_CELL_FWD_H](a, B * H)
+            if step_gemm:
+                # GH_s = h_{s-1} W_hh^T + b_hh where the fused body stores it, then the cell alone
+                _gemm_bias(ex, a.p3, whh, bhh, a.p1, B, GH, H, H, 1, 1, H)
+                ex.launch[OP_CELL_FWD](a, B * H)
+            else:
+                ex.launch[OP_CELL_FWD_H](a, B * H)
     var saved = Args()
     saved.p0 = w.act[l]
     saved.p1 = w.gh[l]
@@ -302,8 +410,16 @@ def _layer_bwd[E: Exec](
             ex.launch[OP_CELL_BWD_SCAN](sa, B)
             scanned = True
     if not scanned:
-        fill(ex, dh, B * H, Float32(0.0))
-        fill(ex, dc, B * H, Float32(0.0))
+        # Lane fx-rnn-cnn-fit (2026-11-19): on the device the first backward step's kernel (s = T - 1, i3 = 0)
+        # stores its own dh and dc zeros (sequence/ops.mojo op_cell_bwd_h), so the two fill launches are the
+        # host's alone: HostExec runs OP_CELL_BWD_H as its GEMM and then op_cell_bwd, not that body
+        # (sequence/exec.mojo). The same zeros in the same words on every column.
+        comptime if not E.IS_DEVICE:
+            fill(ex, dh, B * H, Float32(0.0))
+            fill(ex, dc, B * H, Float32(0.0))
+    var step_gemm = False
+    comptime if RNN_STEP_GEMM:
+        step_gemm = (not scanned) and rnn_step_gemm(B, H, GH)
     var s = T - 1 if not scanned else -1
     while s >= 0:  # driver-loop: over time steps, T - 1 down (one launch per step)
         var a = Args()
@@ -324,7 +440,26 @@ def _layer_bwd[E: Exec](
         a.i2 = H
         a.i3 = 1 if s < T - 1 else 0
         a.i4 = B * GH
-        ex.launch[OP_CELL_BWD_H](a, B * H)
+        if step_gemm and s < T - 1:
+            # dh += dGH_{s+1} W_hh as the lane's GEMM (accumulate onto the direct part the later step stored),
+            # then the cell alone. Step T - 1 has no product and keeps the fused launch (its dh / dc zeros).
+            var g = Args()
+            g.p0 = a.p9 + a.i4
+            g.p1 = whh
+            g.p2 = dh
+            g.i0 = B
+            g.i1 = H
+            g.i2 = GH
+            g.i3 = GH
+            g.i4 = 1
+            g.i5 = H
+            g.i6 = 1
+            g.i7 = 1
+            g.i8 = H
+            ex.launch[OP_GEMM](g, B * H)
+            ex.launch[OP_CELL_BWD](a, B * H)
+        else:
+            ex.launch[OP_CELL_BWD_H](a, B * H)
         var t = dh
         dh = dhn
         dhn = t
@@ -385,12 +520,14 @@ struct RecurrentRules(BackwardRules):
 # ------------------------------------------------------------------ trainer step
 def rnn_forward_autograd[E: Exec](
     mut tape: Tape, mut ex: E, net: Net, P: FP, Gr: FP, x: FP, T: Int, B: Int, w: Work, yhat: FP,
+    h0_clean: Bool = False,
 ) raises -> Tensor:
     """Record input projections, layers and the head on the tape; the
     head's output lands in `yhat` (B x O; the trainer passes w.yhat) and its
     gradient is w.dy. Every parameter leaf's gradient is its slice of Gr
     (the `Net` layout). In inference mode (tape.no_grad(), rnn_predict) the
-    same launches run and nothing is recorded."""
+    same launches run and nothing is recorded. `h0_clean`: the previous
+    forward on `w` had at least B rows (rnn_layer)."""
     tape.reset()
     var H = net.H
     var GH = net.G() * H
@@ -402,7 +539,7 @@ def rnn_forward_autograd[E: Exec](
         var b_ih = tape.variable_into(ex, P + net.b_ih(l), Gr + net.b_ih(l), 1, GH)
         var b_hh = tape.variable_into(ex, P + net.b_hh(l), Gr + net.b_hh(l), 1, GH)
         var gx = rnn_linear(tape, ex, inp, w_ih, b_ih, w.gx[l], RNN_INPUT_BIAS_IN_GX, True, l > 0, w)
-        inp = rnn_layer(tape, ex, gx, w_hh, b_hh, P + net.b_ih(l), net.cell, T, B, w, l)
+        inp = rnn_layer(tape, ex, gx, w_hh, b_hh, P + net.b_ih(l), net.cell, T, B, w, l, h0_clean)
     var w_o = tape.variable_into(ex, P + net.head(), Gr + net.head(), net.O, H)
     var b_o = tape.variable_into(ex, P + net.head() + net.O * H, Gr + net.head() + net.O * H, 1, net.O)
     return rnn_head(tape, ex, inp, w_o, b_o, B, yhat, w.dy, w)
@@ -436,15 +573,22 @@ struct AutogradRnnStep(RnnStep):
     #              writing its own buffer, so the bits are unchanged.
     var tape: Tape
     var logits: Tensor
+    #: rows of the last forward this step ran on its trainer's one Work (0: none yet). A forward of B rows
+    #: leaves rows [0, B) of every layer's h and c buffers zero and writes above them, so the next forward
+    #: of at most that many rows needs no h_0 / c_0 fill (rnn_layer's h0_clean). rnn_fit hands one Work to
+    #: one step for a whole fit; a step given a second Work must be a new step.
+    var h0_rows: Int
 
     def __init__(out self):
         self.tape = Tape()
         self.logits = Tensor(0, 0, -1)
+        self.h0_rows = 0
 
     def forward_head[E: Exec](
         mut self, mut ex: E, net: Net, P: FP, Gr: FP, x: FP, T: Int, B: Int, w: Work,
     ) raises:
-        self.logits = rnn_forward_autograd(self.tape, ex, net, P, Gr, x, T, B, w, w.yhat)
+        self.logits = rnn_forward_autograd(self.tape, ex, net, P, Gr, x, T, B, w, w.yhat, B <= self.h0_rows)
+        self.h0_rows = B
 
     def backward[E: Exec](mut self, mut ex: E, net: Net, P: FP, Gr: FP, x: FP, T: Int, B: Int, w: Work) raises:
         rnn_backward_autograd(self.tape, ex, net, self.logits, w.dy, B)
@@ -495,6 +639,8 @@ def rnn_predict[E: Exec](
     var w = Work(ex, net, T, bmax, False)
     var tape = Tape()
     tape.no_grad()
+    # rows of the previous chunk's forward on w (rnn_layer's h0_clean: every chunk but a longer one skips the fills)
+    var h0_rows = 0
     var b0 = 0
     while b0 < N:  # driver-loop: over prediction chunks
         var B = bmax if b0 + bmax <= N else N - b0
@@ -503,7 +649,8 @@ def rnn_predict[E: Exec](
         # a placeholder; rnn_forward_autograd resets the tape, so every chunk
         # reuses the first chunk's storage. The head writes this chunk's rows
         # of dout directly.
-        _ = rnn_forward_autograd(tape, ex, net, P, dummy_ptr(), w.xb, T, B, w, dout + b0 * net.O)
+        _ = rnn_forward_autograd(tape, ex, net, P, dummy_ptr(), w.xb, T, B, w, dout + b0 * net.O, B <= h0_rows)
+        h0_rows = B
         if task == TASK_CE:
             var a = Args()
             a.p0 = dout + b0 * net.O
