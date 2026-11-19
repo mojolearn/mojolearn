@@ -2,7 +2,7 @@
 """Native constructor/parameter names and fitted-state metadata decisions."""
 
 
-from core.mode_answer import answer_mode_word
+from core.mode_answer import MODE_FAMILY_LINEAR, answer_mode_word
 
 
 def _linear_mode_space(point: Int) -> Bool:
@@ -32,7 +32,7 @@ def linear_mode_name(source: String) raises -> String:
         word += String(chr(point))
     if word != "identical" and word != "fast":
         raise Error("numeric_mode must be fast, identical or None")
-    answer_mode_word(word)
+    answer_mode_word(word, MODE_FAMILY_LINEAR)
     return word^
 
 

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """KernelPCA UNPACK/PACK around typed fit, eigen and query plans."""
-from core.mode_answer import answer_mode_word
+from core.mode_answer import MODE_FAMILY_KPCA, answer_mode_word
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
@@ -77,7 +77,7 @@ def _mode(fields: PythonObject, context: PythonObject) raises -> String:
         name = String(py_call(py_call(mode.strip).lower))
         if name != "identical" and name != "fast":
             raise Error("numeric_mode must be fast, identical or None")
-    answer_mode_word(name)
+    answer_mode_word(name, MODE_FAMILY_KPCA)
     return name^
 
 

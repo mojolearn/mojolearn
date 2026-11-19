@@ -18,6 +18,7 @@ A host inference class (`HostExponentialSmoothing`) reads its loaded
 forecast host binding from the module table.
 """
 from bindings.mode_answer_door import answer_mode_object
+from core.mode_answer import MODE_FAMILY_TSA
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
@@ -133,7 +134,7 @@ def _hw_entries(model: PythonObject, fields: PythonObject, context: PythonObject
     var mode_word = String(py=mode)
     if mode_word != "identical" and mode_word != "fast":
         raise Error("ValueError: numeric_mode must be fast, identical or None")
-    answer_mode_object(mode, mode_word)
+    answer_mode_object(mode, mode_word, MODE_FAMILY_TSA)
     var entries = context["hw_bindings"][mode]
     if py_type(entries) is b.str:
         raise Error(String(py=entries))

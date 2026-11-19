@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Native Sequential orchestration of the existing model numerical ABI."""
-from core.mode_answer import answer_mode_word
+from core.mode_answer import MODE_FAMILY_NEURAL, answer_mode_word
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.native_loaded_module_door import NativeModules
@@ -33,7 +33,7 @@ def sequential_entries(model: PythonObject, context: PythonObject) raises -> Pyt
         word = String(mode)
     if word != "identical" and word != "fast":
         raise Error("numeric_mode must be fast, identical or None")
-    answer_mode_word(word)
+    answer_mode_word(word, MODE_FAMILY_NEURAL)
     var entries = context["bindings"][PythonObject(word)]
     if py_type(entries) is not b.dict and Bool(py=py_call(b.isinstance, entries, b.str)):
         raise Error(String(entries))

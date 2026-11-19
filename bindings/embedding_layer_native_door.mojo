@@ -19,6 +19,7 @@ The same compiled entries with the same argument words as the Python bodies
 it replaces, so no bit moves.
 """
 from bindings.mode_answer_door import answer_mode_object
+from core.mode_answer import MODE_FAMILY_NEURAL
 from bindings.native_class_admission_door import class_record, class_admit
 from bindings.native_loaded_module_door import NativeModules
 from std.memory import unsafe_memcpy
@@ -105,7 +106,7 @@ def _want_mode(fields: PythonObject, context: PythonObject) raises -> PythonObje
     var lowered_word = String(py=lowered)
     if lowered_word != "identical" and lowered_word != "fast":
         raise Error("ValueError: numeric_mode must be fast, identical or None")
-    answer_mode_object(lowered, lowered_word)
+    answer_mode_object(lowered, lowered_word, MODE_FAMILY_NEURAL)
     return lowered
 
 

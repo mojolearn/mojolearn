@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Native standalone block construction, state allocation and sequence execution."""
-from core.mode_answer import answer_mode_word
+from core.mode_answer import MODE_FAMILY_NEURAL, answer_mode_word
 from bindings.native_class_admission_door import class_record, class_admit
 from std.python import Python, PythonObject
 from core.neural_block_public_impl import neural_copy_row_prefixes
@@ -1040,7 +1040,7 @@ def neural_training_selection(mut mods: NativeModules, fields: PythonObject, con
     var mode_text = String(py=mode)
     if mode_text != "identical" and mode_text != "fast":
         raise Error("NotImplementedError: neural backward requires identical or fast mode")
-    answer_mode_word(mode_text)
+    answer_mode_word(mode_text, MODE_FAMILY_NEURAL)
     var key = PythonObject(String(py=fields["_native_route"]) + ":" + mode_text)
     var selected = py_get(context["training_bindings"], key)
     if selected is None:

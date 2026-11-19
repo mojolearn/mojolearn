@@ -13,6 +13,7 @@ The numerical entry selection and argument layout are preserved. Compilation
 does not establish runtime behavior or within-release bitwise identity.
 A host inference class (`HostARIMA`) reads its loaded forecast host binding
 from bindings.mode_answer_door import answer_mode_object
+from core.mode_answer import MODE_FAMILY_TSA
 from the module table.
 """
 from std.memory import unsafe_memcpy
@@ -114,7 +115,7 @@ def _arima_entries(model: PythonObject, fields: PythonObject, context: PythonObj
     var want_word = String(py=want)
     if want_word != "identical" and want_word != "fast":
         raise Error("ValueError: numeric_mode must be fast, identical or None")
-    answer_mode_object(want, want_word)
+    answer_mode_object(want, want_word, MODE_FAMILY_TSA)
     var entries = context["arima_bindings"][want]
     if py_type(entries) is b.str:
         raise Error(String(py=entries))

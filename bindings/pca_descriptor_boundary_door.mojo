@@ -3,7 +3,7 @@
 
 The typed connection records and their capability reads are in
 `x_decomp/pca_descriptor_boundary_run.mojo`; the provider pins stay here."""
-from core.mode_answer import answer_mode_word
+from core.mode_answer import MODE_FAMILY_PCA, answer_mode_word
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from core.shared_slot import SharedSlot
@@ -30,7 +30,7 @@ def pca_mode_name(value: PythonObject) raises -> String:
     var mode = String(py_call(py_call(value.strip).lower))
     if mode != "identical" and mode != "fast":
         raise Error("numeric_mode must be identical, fast or None")
-    answer_mode_word(mode)
+    answer_mode_word(mode, MODE_FAMILY_PCA)
     return mode
 
 

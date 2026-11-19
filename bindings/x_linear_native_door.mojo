@@ -18,7 +18,7 @@
 # (no second conversion); IsotonicRegression.fit_transform transforms the
 # column the fit converted; a classifier's score scores the prediction the
 # same call decoded; Lasso / ElasticNet score the prediction buffer as it is.
-from core.mode_answer import answer_mode_word
+from core.mode_answer import MODE_FAMILY_LINEAR, answer_mode_word
 from std.ffi import c_int, c_long
 from std.math import isinf
 from std.python import Python, PythonObject
@@ -223,7 +223,7 @@ def _xl_mode(fields: PythonObject, context: PythonObject) raises -> String:
         clean = String(py=py_call(py_call(mode.strip).lower))
     if clean != "identical" and clean != "fast":
         raise Error("numeric_mode must be fast, identical or None")
-    answer_mode_word(clean)
+    answer_mode_word(clean, MODE_FAMILY_LINEAR)
     return clean
 
 

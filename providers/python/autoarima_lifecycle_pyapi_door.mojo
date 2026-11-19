@@ -2,6 +2,7 @@
 # Complete AutoARIMA construction and forecast operation boundaries. Search and
 # fitting remain separate owners; this provider never calls their Python methods.
 from bindings.mode_answer_door import answer_mode_object
+from core.mode_answer import MODE_FAMILY_TSA
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module, NativeModules
 from bindings.native_class_admission_door import class_record, class_admit, dict_keys_admitted, dict_keys_admit
@@ -226,7 +227,7 @@ def autoarima_forecast(model: PythonObject, args: PythonObject, context: PythonO
         var mode_word = String(mode)
         if mode_word != "identical" and mode_word != "fast":
             raise Error("ValueError: numeric_mode must be identical or fast")
-        answer_mode_object(mode, mode_word)
+        answer_mode_object(mode, mode_word, MODE_FAMILY_TSA)
         var entries = context["arima_bindings"][mode]
         if py_type(entries) is py_type(PythonObject("")):
             raise Error(String(entries))

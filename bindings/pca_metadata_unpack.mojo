@@ -2,6 +2,7 @@
 # Native PCA constructor and scalar-parameter metadata. Public activation is
 # separate: this private owner does not replace inherited Python API wrappers.
 from bindings.mode_answer_door import answer_mode_object
+from core.mode_answer import MODE_FAMILY_PCA
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module, NativeModules
 from bindings.native_class_admission_door import class_record, class_admit
@@ -67,7 +68,7 @@ def pca_mode(fields: PythonObject, context: PythonObject) raises -> PythonObject
     var mode_word = String(mode)
     if mode_word != "identical" and mode_word != "fast":
         raise Error("numeric_mode must be identical, fast or None")
-    answer_mode_object(mode, mode_word)
+    answer_mode_object(mode, mode_word, MODE_FAMILY_PCA)
     return mode
 
 

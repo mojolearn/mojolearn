@@ -2,7 +2,7 @@
 # Public Transformer decode-session admission/ownership. The Python class is a
 # thin connection; GPU execution uses the common native provider and CPU copies
 # stay native. No Python session methods or block hooks are invoked here.
-from core.mode_answer import answer_mode_word
+from core.mode_answer import MODE_FAMILY_NEURAL, answer_mode_word
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
 from std.python._cpython import PyObjectPtr, GILReleased
@@ -405,7 +405,7 @@ def _transformer_decode_binding(fields: PythonObject, context: PythonObject) rai
     var mode_name = String(mode.strip().lower())
     if mode_name != "identical" and mode_name != "fast":
         raise Error("Transformer decode mode must be identical or fast")
-    answer_mode_word(mode_name)
+    answer_mode_word(mode_name, MODE_FAMILY_NEURAL)
     var selected = py_get(context["bindings"], PythonObject(route + ":" + mode_name))
     if selected is None:
         raise Error("Transformer decode native binding connection is unavailable")

@@ -15,7 +15,7 @@
 # set are staged and handed to the fit entry in the same call (Python
 # returned between each conversion, scan and the launch); the output
 # dimension is read from the fitted text in the same call.
-from core.mode_answer import answer_mode_word
+from core.mode_answer import MODE_FAMILY_GBDT, answer_mode_word
 from std.math import isfinite
 from std.memory import bitcast
 from std.python import Python, PythonObject
@@ -1666,7 +1666,7 @@ def _fit_native(model: PythonObject, validated: PythonObject, X: PythonObject, y
     _check_learner_mode(raw)
     var learner = validated
     var mode = String(py_call(py_call(raw.strip).lower))
-    answer_mode_word(mode)
+    answer_mode_word(mode, MODE_FAMILY_GBDT)
     var learner_fields = py_fields(learner)
     py_setitem(learner_fields, "numeric_mode", PythonObject(mode))
     var table = gbdt_table(learner_fields, context)
