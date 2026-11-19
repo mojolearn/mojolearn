@@ -415,7 +415,7 @@ def _publish_min_max(
 
 
 from checks.numerics import GLOBAL_NUMERIC_MODE as BUILD_MODE
-"""The repo-wide numeric mode (`checks/numerics.mojo`)."""
+# The repo-wide numeric mode (`checks/numerics.mojo`).
 
 from extratrees.impl.decisiontree.batched_levelalgo.kernels.builder_kernels import (
     WorkloadInfo,
