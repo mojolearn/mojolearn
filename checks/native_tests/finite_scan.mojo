@@ -39,6 +39,7 @@ from core.host_finite_scan import (
     host_any_inf_f32,
     host_first_nonfinite_f32,
     host_copy_f32_finite,
+    host_copy_f32_any_nan,
 )
 from checks.native_tests.runner import Check, Column, Report
 
@@ -285,6 +286,15 @@ def _scan_predicates(size_index: Int, variant: Int) raises:
                  "fused copy changed a word")
     _require(bitcast[DType.uint32](staged[0]) == 0 and bitcast[DType.uint32](staged[n + 1]) == 0,
              "fused copy wrote outside its range")
+    # the copy with the any-NaN verdict (GBDT host fit): same range, same words
+    for i in range(n + 2):
+        staged[i] = bitcast[DType.float32](UInt32(0))
+    _require(host_copy_f32_any_nan(Int(ptr), Int(dst), n) == is_nan, "fused copy any-NaN verdict")
+    for i in range(n):
+        _require(bitcast[DType.uint32](staged[1 + i]) == bitcast[DType.uint32](storage[lead + i]),
+                 "fused NaN copy changed a word")
+    _require(bitcast[DType.uint32](staged[0]) == 0 and bitcast[DType.uint32](staged[n + 1]) == 0,
+             "fused NaN copy wrote outside its range")
     if bad >= 0:
         _require(bitcast[DType.uint32](storage[lead + bad]) == _pred_word(kind), "scan changed the special input word")
     _ = storage
