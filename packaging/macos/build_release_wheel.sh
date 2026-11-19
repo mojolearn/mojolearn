@@ -707,7 +707,10 @@ module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 assert module.byte_lm_numeric_mode() == {"fast": 0, "identical": 1}[sys.argv[2]]
 assert module.byte_lm_vendor() == 'metal'
-assert module.byte_lm_profile() == 'mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1'
+# Base profile plus this binary's arithmetic tags (packaging/byte_lm_profile.py; an arm define adds one).
+_ps = importlib.util.spec_from_file_location('_byte_lm_profile', os.path.join(os.getcwd(), 'packaging', 'byte_lm_profile.py'))
+_pm = importlib.util.module_from_spec(_ps); _ps.loader.exec_module(_pm)
+_pm.check(module.byte_lm_profile())
 print(json.dumps(dict(extension='_mojolearn_byte_lm', native_vendor='metal', numeric_mode=module.byte_lm_numeric_mode(),
     profile=module.byte_lm_profile(), supported_modes=['fast', 'identical'], unsupported_modes=[])))
 PYBYTE
