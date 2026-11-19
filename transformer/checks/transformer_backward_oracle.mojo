@@ -274,6 +274,72 @@ def _gemm_bwd_b(
 comptime BWD_HOST_DX_CONCAT = is_defined["MOJOLEARN_GEMM_FAST_DX_CONCAT"]()
 
 
+def _qkv_concat_cols_into(
+    dq: List[Float32],
+    dk: List[Float32],
+    dv: List[Float32],
+    m: Int,
+    nq: Int,
+    nk: Int,
+    nv: Int,
+    mut output: List[Float32],
+):
+    """`output [m, nq + nk + nv]` = `[dq | dk | dv]`, bit copies, rows over
+    host tasks (a row reads its own three member rows and nothing else).
+    Sized once and every cell written (the form `rope_backward_into` uses)."""
+    var nt = nq + nk + nv
+    output = host_f32_uninit(m * nt)
+    var tasks = host_row_tasks(m, nt)
+    var chunk = (m + tasks - 1) // tasks
+    def _rows(task: Int) {imm dq, imm dk, imm dv, mut output, imm m, imm nq, imm nk, imm nv, imm nt, imm chunk}:
+        for r in range(task * chunk, min((task + 1) * chunk, m)):
+            var base = r * nt
+            for c in range(nq):
+                output[base + c] = dq[r * nq + c]
+            for c in range(nk):
+                output[base + nq + c] = dk[r * nk + c]
+            for c in range(nv):
+                output[base + nq + nk + c] = dv[r * nv + c]
+    if tasks <= 1:
+        _rows(0)
+    else:
+        host_parallelize(_rows, tasks)
+
+
+def _qkv_concat_rows_into(
+    wq: List[Float32],
+    wk: List[Float32],
+    wv: List[Float32],
+    nq: Int,
+    nk: Int,
+    nv: Int,
+    dm: Int,
+    mut output: List[Float32],
+):
+    """`output [nq + nk + nv, dm]` = `[wq; wk; wv]`, bit copies, rows over
+    host tasks."""
+    var nt = nq + nk + nv
+    output = host_f32_uninit(nt * dm)
+    var tasks = host_row_tasks(nt, dm)
+    var chunk = (nt + tasks - 1) // tasks
+    def _rows(task: Int) {imm wq, imm wk, imm wv, mut output, imm nq, imm nk, imm nt, imm dm, imm chunk}:
+        for p in range(task * chunk, min((task + 1) * chunk, nt)):
+            var base = p * dm
+            if p < nq:
+                for j in range(dm):
+                    output[base + j] = wq[p * dm + j]
+            elif p < nq + nk:
+                for j in range(dm):
+                    output[base + j] = wk[(p - nq) * dm + j]
+            else:
+                for j in range(dm):
+                    output[base + j] = wv[(p - nq - nk) * dm + j]
+    if tasks <= 1:
+        _rows(0)
+    else:
+        host_parallelize(_rows, tasks)
+
+
 def qkv_fanin_concat_host(
     dq: List[Float32],
     dk: List[Float32],
@@ -315,41 +381,10 @@ def qkv_fanin_concat_host(
         or len(wq) != nq * dm or len(wk) != nk * dm or len(wv) != nv * dm
     ):
         raise Error("transformer backward: a member of the concatenated fan-in has the wrong length")
-    var dcat = host_f32_uninit(m * nt)
-    var dtasks = host_row_tasks(m, nt)
-    var dchunk = (m + dtasks - 1) // dtasks
-    def _drows(task: Int) {imm dq, imm dk, imm dv, mut dcat, imm m, imm nq, imm nk, imm nv, imm nt, imm dchunk}:
-        for r in range(task * dchunk, min((task + 1) * dchunk, m)):
-            var base = r * nt
-            for c in range(nq):
-                dcat[base + c] = dq[r * nq + c]
-            for c in range(nk):
-                dcat[base + nq + c] = dk[r * nk + c]
-            for c in range(nv):
-                dcat[base + nq + nk + c] = dv[r * nv + c]
-    if dtasks <= 1:
-        _drows(0)
-    else:
-        host_parallelize(_drows, dtasks)
-    var wcat = host_f32_uninit(nt * dm)
-    var wtasks = host_row_tasks(nt, dm)
-    var wchunk = (nt + wtasks - 1) // wtasks
-    def _wrows(task: Int) {imm wq, imm wk, imm wv, mut wcat, imm nq, imm nk, imm nt, imm dm, imm wchunk}:
-        for p in range(task * wchunk, min((task + 1) * wchunk, nt)):
-            var base = p * dm
-            if p < nq:
-                for j in range(dm):
-                    wcat[base + j] = wq[p * dm + j]
-            elif p < nq + nk:
-                for j in range(dm):
-                    wcat[base + j] = wk[(p - nq) * dm + j]
-            else:
-                for j in range(dm):
-                    wcat[base + j] = wv[(p - nq - nk) * dm + j]
-    if wtasks <= 1:
-        _wrows(0)
-    else:
-        host_parallelize(_wrows, wtasks)
+    var dcat = List[Float32]()
+    var wcat = List[Float32]()
+    _qkv_concat_cols_into(dq, dk, dv, m, nq, nk, nv, dcat)
+    _qkv_concat_rows_into(wq, wk, wv, nq, nk, nv, dm, wcat)
     var out = _gemm_bwd_a(dcat, wcat, OP_NT, m, nt, dm)
     _ = dcat^
     _ = wcat^
