@@ -60,6 +60,7 @@ from autograd.ops import TANH as AG_TANH
 from autograd.data import AUTOGRAD_GATHER_EPOCH, gather_epoch, gather_epoch_fits
 from autograd.fold import fold_partials_bound
 from sequence.ops import dummy_ptr
+from core.nan_canon import NAN_CANON_ON, nan_canon_f32
 
 # The tape-assembled backward is the default (promoted 2026-10-18). A/B
 # fad4bec3e, tools/sequence_speed.py case_mlp, HIGGS 1M x 28, (256,) b512
@@ -934,9 +935,17 @@ def mlp_predict[E: Exec](mut ex: E, net: MLPNet, X: FP, N: Int, Pin: FP, dst: FP
         ex.launch[OP_PROBA2](q, N * 2)
         ex.sync()
         ex.download(dst, two, N * 2)
+        # -D MOJOLEARN_IDENTITY_FAST_NAN_CANON (default off; core/nan_canon.mojo):
+        # the returned predictions' NaN words become the one canonical word,
+        # on the device executor and on the host one alike (this function is
+        # generic over both, so every column takes the same pass).
+        comptime if NAN_CANON_ON:
+            _ = nan_canon_f32(dst, N * 2)
         return
     ex.sync()
     ex.download(dst, dout, N * O)
+    comptime if NAN_CANON_ON:
+        _ = nan_canon_f32(dst, N * O)
 
 
 # TOMBSTONE: MOJOLEARN_AUTOGRAD_PREDICT (DROPPED-slower: tape predict 1.04-1.06x on the four MLP infer cells, NV L40S 2026-11-18) deleted 2026-11-18 by lane/fb15-ab-verdicts; code recoverable at c989eb9222.
