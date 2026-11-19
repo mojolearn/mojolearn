@@ -461,7 +461,8 @@ declare -A ARM_ENV
 wheel_set_args() {
     local w bw=() a
     for w in "$2"/mojolearn_core-*.whl "$2"/mojolearn_"$V"-*.whl; do [ -f "$w" ] && bw+=("$w"); done
-    [ "${#bw[@]}" -eq 2 ] || { say "wheel set $1: $2 must hold one core and one $V wheel"; return 1; }
+    # stderr: the caller captures stdout (the args); the job's log holds both
+    [ "${#bw[@]}" -eq 2 ] || { say "wheel set $1: $2 must hold one core and one $V wheel" >&2; return 1; }
     a="--mojolearn-version $(basename "${bw[0]}" | cut -d- -f2) --candidate-source-commit $3"
     for w in "${bw[@]}"; do a="$a --candidate-wheel $w"; done
     echo "$a"
@@ -485,7 +486,7 @@ if [ "$OWED" = 1 ] && [ -n "${PC_B_ARMS:-}" ]; then
             B_NAMES+=("$name")
             continue
         fi
-        a=$(wheel_set_args "B set $name" "$dir" "$commit") || continue
+        a=$(wheel_set_args "$name" "$dir" "$commit") || continue
         add_arm "$name" $a; B_NAMES+=("$name")
     done < "$PC_B_ARMS"
 fi
@@ -508,7 +509,7 @@ if [ -n "${PC_PRIOR_WHEELS:-}" ]; then
     while read -r name dir commit; do
         { [ -z "${name:-}" ] || [ "${name:0:1}" = "#" ]; } && continue
         [[ "$name" =~ ^[a-z0-9][a-z0-9.-]*$ ]] && [[ "${commit:-}" =~ ^[0-9a-f]{40}$ ]] || { say "bad PC_PRIOR_WHEELS line: $name"; exit 2; }
-        a=$(wheel_set_args "prior wheel $name" "$dir" "$commit") || exit 2
+        a=$(wheel_set_args "$name" "$dir" "$commit") || exit 2
         add_arm "prior-$name" $a; PRIOR_ARMS+=("prior-$name"); PRIOR_WHEEL_NAMES+=("$name")
     done < "$PC_PRIOR_WHEELS"
     say "prior wheels (the verdict baseline: ${PRIOR_WHEEL_NAMES[0]:-none}): ${PRIOR_WHEEL_NAMES[*]:-none}"
