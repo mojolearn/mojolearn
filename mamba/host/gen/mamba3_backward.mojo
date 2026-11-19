@@ -1783,14 +1783,26 @@ def mamba3_backward_s17_state_into(
     mamba3_s17_reverse_state_host(d_direct.unsafe_ptr(),d_total.unsafe_ptr(),d_initial.unsafe_ptr(),d_y.unsafe_ptr(),q.unsafe_ptr(),dacs.unsafe_ptr(),Int32(b),Int32(l),Int32(dims.nheads),Int32(qs),grid_dim=(_grid(cells),1,1),block_dim=(M3_BWD_TPB,1,1))
 
 
-#: lane/fx-mamba3-s17-fold (2026-11-18): -D MOJOLEARN_MAMBA3_FAST_S17_TAIL_TREE,
-#: default OFF, A/B OWED (bench/results/paper_compare/owed-pre0867.json
-#: "mamba3-s17-tail-tree"; docs/apple-fast/EXPERIMENTS.md).
-#: The chunk-end `add` term of `d_dacs_rec` is today ONE serial chain per
+#: lane/fx-mamba3-s17-fold (2026-11-18): MOJOLEARN_MAMBA3_FAST_S17_TAIL_TREE,
+#: PROMOTED 2026-11-19 (lane fx-verdicts3): the lane chains and the tree are
+#: the default on every column and the host column together;
+#: `-D MOJOLEARN_MAMBA3_FAST_S17_TAIL_TREE_OFF` restores the serial chain (the
+#: old opt-in name is refused, core/experiment_guards_neural.mojo).
+#: Evidence: A/B round 1, NVIDIA L40S (host bd9c355c19c0, 14-core cgroup),
+#: wheel 0c68d6cd27 and its B set, base and arm back to back in ONE pod job
+#: (nvc1-0006, tag nvc-ab-20261119T125554Z-6f7afc), one scored run per arm:
+#: samba-train-step bytes 50.37 -> 38.33 ms (0.76; warm-up 63.7 -> 54.4; the
+#: same row's base in two other pairs of the job: 49.15, 50.74). Quality:
+#: loss_first_step 5.6401519775 both, loss_last_step 4.80524206 -> 4.80524111
+#: (one float32 step of a reordered sum). The digest moves, as designed.
+#: General mechanism: lanes = M3_D_STATE, the contract's tree; no shape key.
+#: Limits: one row, NVIDIA only (AGENTS.md part 8). OWED (does not hold the
+#: flip): driver row mamba3-s17-tail-tree-sizes against the _OFF arm.
+#: The chunk-end `add` term of `d_dacs_rec` was ONE serial chain per
 #: (batch, chunk, head): (qs + 1) x M3_HEADDIM x M3_D_STATE fused steps on
 #: thread 0 (532,480 at qs = 64), whatever stages its operands (the shared
-#: and pipe kernels below re-stage the same chain). Under the define the
-#: chain is M3_D_STATE independent lane chains and one tree:
+#: and pipe kernels below re-stage the same chain, now only under _OFF). The
+#: default is M3_D_STATE independent lane chains and one tree:
 #:   lane n (`_m3_s17_tail_lane`), from +0.0, with the chain's own step
 #:     `acc = ftz(identical_mul_add(carry[p][n], term, acc))`: the token
 #:     terms j ascending then p ascending (term = v[j][p] * k[j][n] * de_j,
@@ -1800,13 +1812,13 @@ def mamba3_backward_s17_state_into(
 #:     tree of gemm/IDENTICAL_FP32_CONTRACT.md 7.2 (`_m3_s17_tail_tree`:
 #:     adjacent pairing, odd tail carried, `ftz(ftz(x) + ftz(y))` nodes);
 #:   `d_dacs_rec = ftz(d_dacs_rec + tree)`, as before.
-#: BITS CHANGE under the define (the same terms summed in another order), on
+#: BITS CHANGED with the promotion (the same terms summed in another order), on
 #: every column together: the device kernel `mamba3_s17_tail_tree_kernel` and
 #: the host column's `mamba3_s17_operands_kernel` both call the two helpers
 #: below, so there is one spelling of the order and no vendor branch. A
 #: single-chunk pass (l <= qs) carries zeros, so its words do not move.
 #: mamba/IDENTICAL_MAMBA3_CONTRACT.md "Backward S17 chunk-end tail".
-comptime M3_S17_TAIL_TREE = is_defined["MOJOLEARN_MAMBA3_FAST_S17_TAIL_TREE"]()
+comptime M3_S17_TAIL_TREE = not is_defined["MOJOLEARN_MAMBA3_FAST_S17_TAIL_TREE_OFF"]()
 
 
 @always_inline
@@ -2103,7 +2115,7 @@ def mamba3_backward_s17_operands_into(ctx:DeviceContext,mut dq:DeviceBuffer[DTyp
         # TOMBSTONE: MOJOLEARN_IDN_M3_S17_TAIL_DBUF launch (LOSER avg 1.33x) deleted 2026-10-11 by b9e2282b2; code recoverable at b9e2282b2^.
         # Restore: git apply experiments/removed/MOJOLEARN_IDN_M3_S17_TAIL_DBUF.patch
         comptime if M3_S17_TAIL_TREE:
-            # -D MOJOLEARN_MAMBA3_FAST_S17_TAIL_TREE (default off, A/B owed): per-lane folds and the 7.2 tree; bits change on every column together
+            # the default since 2026-11-19 (MOJOLEARN_MAMBA3_FAST_S17_TAIL_TREE promoted; _OFF: the serial chain below): per-lane folds and the 7.2 tree, every column together
             var _l39_a0 = ddc.unsafe_ptr()
             var _l39_a1 = k.unsafe_ptr()
             var _l39_a2 = v.unsafe_ptr()

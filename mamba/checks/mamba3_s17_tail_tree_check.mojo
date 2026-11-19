@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """HOST CHECK: the Mamba-3 backward S17 chunk-end tail (`d_dacs_rec`) of the
 host column against a float64 restatement of the same sum, on a three-chunk
-row with a partial last chunk, and (under
--D MOJOLEARN_MAMBA3_FAST_S17_TAIL_TREE) the tail's tree against the GEMM
+row with a partial last chunk, and (in the default build; not under
+-D MOJOLEARN_MAMBA3_FAST_S17_TAIL_TREE_OFF) the tail's tree against the GEMM
 contract's own fold.
 
 Why it exists: the stored-word checks of the Mamba-3 backward
@@ -10,8 +10,8 @@ Why it exists: the stored-word checks of the Mamba-3 backward
 next chunk's carried state is zero and the tail is +0.0 on every arm, so they
 cannot see the tail's order. This check runs l > qs.
 
-What it requires, in either build (define off: the serial chain; define on:
-lane folds and the tree):
+What it requires, in either build (the default: lane folds and the tree;
+_OFF: the serial chain):
 
   1. every `d_dacs_rec` cell is within `S17_TOL` x (the sum of the absolute
      terms) of the float64 sum of the same terms: the same mathematics, a
@@ -19,7 +19,7 @@ lane folds and the tree):
   2. a non-chunk-end token's cell and the last chunk's cells carry no tail
      (the float64 tail is exactly zero there);
 
-and under the define only:
+and in the default build only:
 
   3. `_m3_s17_tail_tree` returns the bits of
      `gemm/host/gemm_oracle.mojo::fold_balanced_tree` (contract 7.2) on
@@ -30,7 +30,7 @@ words can be read beside a device dump of the same operands. No GPU.
 Serial by nature: one row of 20 cells, under a second; nothing to split.
 
     mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings mamba/checks/mamba3_s17_tail_tree_check.mojo
-    mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -D MOJOLEARN_MAMBA3_FAST_S17_TAIL_TREE -I . -I bindings mamba/checks/mamba3_s17_tail_tree_check.mojo
+    mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -D MOJOLEARN_MAMBA3_FAST_S17_TAIL_TREE_OFF -I . -I bindings mamba/checks/mamba3_s17_tail_tree_check.mojo
 
 Exit 1 on any failure.
 """

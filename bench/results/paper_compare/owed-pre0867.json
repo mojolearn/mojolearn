@@ -648,7 +648,8 @@
   "mamba3-s17-tail-tree": {
    "define": "MOJOLEARN_MAMBA3_FAST_S17_TAIL_TREE",
    "status": "define in code (autograd/kernels/mamba3.mojo M3_S17_TAIL_TREE, mamba3_s17_tail_tree_kernel; mamba/host/gen/mamba3_backward.mojo, the same source through tools/mamba_host_gen.py): B = the Mamba-3 backward S17 chunk-end tail of d_dacs_rec as 128 lane chains ((qs + 1) x 64 steps each, j then p ascending, then the state term) folded by the fixed balanced tree of gemm/IDENTICAL_FP32_CONTRACT.md 7.2, one barrier, no operand staging; A = the one serial chain of (qs + 1) x 64 x 128 steps on thread 0 (the pipe kernel, or the shared kernel where its page does not fit). BITS CHANGE under B for any sequence longer than one chunk (the same terms in another order), on the device and the host column together; equal words for l <= 64. Contract: mamba/IDENTICAL_MAMBA3_CONTRACT.md 'Backward S17 chunk-end tail'",
-   "owed": "RUN"
+   "owed": "DECIDED",
+   "evidence": "A/B round 1 2026-11-19, NVIDIA L40S host bd9c355c19c0 (14-core cgroup), wheel 0c68d6cd27 and its B set, base and arm back to back in one pod job (nvc1-0006, tag nvc-ab-20261119T125554Z-6f7afc; ~/mojolearn-evidence/measure-candidate/build-0c68d6cd27/ab1/x/, tables ~/mojolearn-evidence/briefs-20261118/fx-verdicts3/tab-<arm>.txt), one scored run per arm: samba-train-step 50.37 -> 38.33 ms (0.76); loss_first_step equal, loss_last_step 4.80524206 -> 4.80524111 (a reordered sum); digest moves as designed; PROMOTED to the default on every column and the host column (lane fx-verdicts3), MOJOLEARN_MAMBA3_FAST_S17_TAIL_TREE_OFF restores the serial chain; the old define is refused"
   },
   "llama-kv-stride-cap": {
    "define": "MOJOLEARN_LLAMA_FAST_KV_STRIDE_CAP",
@@ -779,6 +780,11 @@
   "mamba-decode-stage-arena-off": {
    "define": "MOJOLEARN_MAMBA_FAST_DECODE_STAGE_ARENA_OFF",
    "status": "define in code (autograd/block_step_ops.mojo MAMBA_FAST_DECODE_STAGE_ARENA): B = per-token mamba_zeros stages parked and freed at the wait and rezero's 33 fills (the default before 2026-11-19); A = one held arena, one fill a token, default since 2026-11-19 (lane fx-verdicts3). Same bits on both arms. Owed to re-time (the first pair carried 8 % drift on its control) and for the neighbouring and non-board shapes",
+   "owed": "RUN"
+  },
+  "mamba3-s17-tail-tree-off": {
+   "define": "MOJOLEARN_MAMBA3_FAST_S17_TAIL_TREE_OFF",
+   "status": "define in code (autograd/kernels/mamba3.mojo M3_S17_TAIL_TREE; mamba/host/gen/mamba3_backward.mojo, the same source): B = the one serial chain of the S17 chunk-end tail (the pipe kernel, or the shared kernel where its page does not fit; the default before 2026-11-19); A = 128 lane chains and the contract 7.2 tree, default since 2026-11-19 (lane fx-verdicts3). Different bit versions for sequences longer than one chunk. Owed for the neighbouring and non-board sizes; when timed, the pipe and shared tail kernels are deleted with the four tombstone parts",
    "owed": "RUN"
   }
  },
@@ -3913,12 +3919,12 @@
    "arms": [
     "candidate",
     "prior",
-    "mamba3-s17-tail-tree"
+    "mamba3-s17-tail-tree-off"
    ],
    "b_arms": [
-    "mamba3-s17-tail-tree"
+    "mamba3-s17-tail-tree-off"
    ],
-   "decides": "SambaStack.train_step, candidate (A) against the B wheel set, tools/measure_owed_driver.py samba_train_step, each line with its loss: mamba3-only-partial-chunk is the Mamba-3 backward alone at a neighbouring shape (B 4, L 300 = 4 chunks and a partial fifth, d_model 256); samba-6-layer is a non-board model size; mamba3-only-one-chunk is the control where the carried state is zero, so B's loss must equal A's bit for bit and the time shows the tail's fixed cost. B must not be slower on any case and the losses must agree to float32 rounding of a reordered sum (equal on the one-chunk case)"
+   "decides": "after the promotion of 2026-11-19 (lane fx-verdicts3; samba-train-step 50.37 -> 38.33 ms): SambaStack.train_step, the candidate (the tree, A) against the B wheel set (the serial chain, MOJOLEARN_MAMBA3_FAST_S17_TAIL_TREE_OFF), tools/measure_owed_driver.py samba_train_step, each line with its loss: mamba3-only-partial-chunk is the Mamba-3 backward alone at a neighbouring shape (B 4, L 300 = 4 chunks and a partial fifth, d_model 256); samba-6-layer is a non-board model size; mamba3-only-one-chunk is the control where the carried state is zero, so the two arms' losses must be equal bit for bit and the time shows the tail's fixed cost. Keep the tree unless the chain is faster on a case; the losses must agree to float32 rounding of a reordered sum. When the tree holds, the pipe and shared tail kernels are deleted with the four tombstone parts"
   },
   {
    "id": "llama-kv-stride-cap-rows",

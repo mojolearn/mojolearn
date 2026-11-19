@@ -483,10 +483,12 @@ with every product `ftz(identical_mul(...))` in the bracketing shown and every
 accumulation step `acc = ftz(identical_mul_add(carry[p][n], term, acc))`, then
 `d_dacs_rec = ftz(d_dacs_rec + tail)`.
 
-- **Default order.** ONE chain from `+0.0`: the token terms `j` ascending,
+- **Serial order (`-D MOJOLEARN_MAMBA3_FAST_S17_TAIL_TREE_OFF`; the default before 2026-11-19).** ONE chain from `+0.0`: the token terms `j` ascending,
   then `p` ascending, then `n` ascending; then the state terms `p` ascending,
   `n` ascending. `(Q + 1) * P * N` serial steps (532,480 at `Q = 64`).
-- **Arm `-D MOJOLEARN_MAMBA3_FAST_S17_TAIL_TREE` (default off, A/B owed).**
+- **Default order since 2026-11-19 (the arm `MOJOLEARN_MAMBA3_FAST_S17_TAIL_TREE`, promoted on the NVIDIA L40S A/B:
+  samba-train-step 50.37 -> 38.33 ms, loss equal to one float32 step). "The default" in the rest of this item
+  names the serial order above.**
   `N` lane chains and one tree. Lane `n`, from `+0.0`, takes the terms with
   that `n` in the default chain's own order: token terms `j` ascending then
   `p` ascending, then the state terms `p` ascending (`(Q + 1) * P` steps).
