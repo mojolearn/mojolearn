@@ -194,8 +194,12 @@ comptime GEMM_LEAF_PTR_KS = GEMM_KPACK_KS
 comptime GEMM_LEAF_PTR_FS_WIDE = 4 if TARGET_COLUMN == COLUMN_NVIDIA else GEMM_KPACK_FS
 comptime GEMM_LEAF_PTR_FS_SMALL = GEMM_KPACK_FS
 #: The column's block floor: fewer packed tiles than this leave SMs / CUs idle (`GEMM_TILE_MIN_BLOCKS_DEFAULT`,
-#: measured per column for the neural tiles: 192 on the L40S's 142 SMs at two blocks an SM, 1024 on the MI325X's
-#: 304 CUs). The comptime default, so a route rule reads no process slot per call.
+#: measured per column for the neural tiles: 192 on the L40S's 142 SMs, which is 1.35 blocks an SM (an earlier
+#: comment here said "two blocks an SM"; 2 x 142 = 284, so that was wrong), 1024 on the MI325X's 304 CUs). The
+#: comptime column constant, so the packed route's rule reads no process slot per call. The shipped tile
+#: step-down reads the floor scaled by the device's SM count (`gemm_nv_block_floor`,
+#: gemm/checks/gemm_identical.mojo: equal to this constant from 95 to 142 SMs, so on the L40S and the A100);
+#: this default-off route keeps the constant until its owed A/B, whose row names the SM count it ran on.
 comptime GEMM_LEAF_PTR_MIN_BLOCKS = GEMM_TILE_MIN_BLOCKS_DEFAULT
 
 

@@ -4364,7 +4364,8 @@ def gemm_split_cells_cap() -> Int:
 #: 0.24 ms a layer, o_proj 0.40 -> 0.09, the MLP 1.22 -> 0.70 at 1024;
 #: every digest and loss equal. So the AMD column's default is 1024 (the
 #: 4096^3 gemm cell, 1,024 tiles of 128 x 128, is at the boundary and
-#: keeps its tile). NVIDIA uses 192 (lane/neural-pass62, below); Apple keeps
+#: keeps its tile). NVIDIA uses 192 on the L40S (lane/neural-pass62, below),
+#: scaled by the device's SM count (`gemm_nv_block_floor`); Apple keeps
 #: 0 (off).
 comptime GEMM_TILE_MIN_BLOCKS_DEFAULT = (
     1024 if TARGET_COLUMN == COLUMN_AMD else
@@ -4488,9 +4489,58 @@ def gemm_tile_short_k() -> Int:
         return GEMM_TILE_SHORT_K_DEFAULT
 
 
+#: THE NVIDIA BLOCK FLOOR FROM THE DEVICE (fx-leftovers-product, 2026-11-19;
+#: review-generality "product unknown"). The floor trades tile width for SM
+#: fill, so the right value scales with the SM count (the grid note above
+#: `IDN_GEMM_TILE_MIN_BLOCKS`). It was the constant 192 on every NVIDIA part,
+#: measured on one, the L40S (lane/neural-pass62): 192 blocks on its 142 SMs
+#: is 192 / 142 = 1.35 blocks an SM. (A comment in gemm/neural_dispatch.mojo
+#: called that "two blocks an SM"; 2 x 142 is 284, the arithmetic was wrong.)
+#: The floor is now that measured ratio times the device's reported SM count,
+#: rounded up to a whole 64 blocks:
+#:     floor(sms) = roundup64(ceil(sms * 192 / 142))
+#: The 64-block step is chosen so the measured part keeps its measured value
+#: exactly (142 SMs -> 192) and so does every part within a third of it:
+#: 95 to 142 SMs give 192 (A100 108, RTX 4090 128, H100 132), 143 to 189
+#: give 256, 48 to 94 give 128. No route changes on the L40S or on sm_80's
+#: A100. Parts outside 95-142 SMs get a floor nobody has timed (as 192 was
+#: untimed there): re-time owed on a part of another SM count.
+#: ONE READ, HELD: the count is read once per process, inside the one-time
+#: fill of the floor's slot below (a default-device `DeviceContext` attribute
+#: read), never per call; where it cannot be read the floor stays 192. The
+#: env override and the build define still win. An execution plan only: every
+#: tuned plan computes the same leaves and folds, so no bit depends on it.
+comptime GEMM_NV_FLOOR_REF_SMS = 142
+comptime GEMM_NV_FLOOR_REF_BLOCKS = 192
+
+
+def gemm_nv_block_floor(sms: Int) -> Int:
+    """The NVIDIA column's block floor for a device of `sms` multiprocessors
+    (the rule above); the column default when the count is unknown."""
+    if sms <= 0:
+        return GEMM_TILE_MIN_BLOCKS_DEFAULT
+    var scaled = (sms * GEMM_NV_FLOOR_REF_BLOCKS + GEMM_NV_FLOOR_REF_SMS - 1) // GEMM_NV_FLOOR_REF_SMS
+    return ((scaled + 63) // 64) * 64
+
+
+def _gemm_device_sms() -> Int:
+    """The default device's reported multiprocessor count, -1 when it cannot
+    be read. Called once per process (the floor's one-time fill)."""
+    try:
+        var ctx = DeviceContext()
+        var sms = -1
+        sms = ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT)
+        _ = ctx
+        return sms
+    except:
+        return -1
+
+
 def gemm_tile_min_blocks() -> Int:
     """The tuned tiles' minimum block count: MOJOLEARN_GEMM_TILE_MIN_BLOCKS
-    when set (read once per process), else GEMM_TILE_MIN_BLOCKS_DEFAULT.
+    when set (read once per process), else the column's floor: on NVIDIA
+    `gemm_nv_block_floor` of the device's SM count (read once, in the same
+    one-time fill), elsewhere GEMM_TILE_MIN_BLOCKS_DEFAULT.
     `-D MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS` wins over both when defined."""
     comptime if IDN_GEMM_TILE_MIN_BLOCKS >= 0:
         comptime assert (
@@ -4505,6 +4555,9 @@ def gemm_tile_min_blocks() -> Int:
             var blocks = GEMM_TILE_MIN_BLOCKS_DEFAULT
             if v != "":
                 blocks = Int(v)
+            else:
+                comptime if TARGET_COLUMN == COLUMN_NVIDIA:
+                    blocks = gemm_nv_block_floor(_gemm_device_sms())
             if blocks < 0:
                 blocks = 0
             p[].blocks = blocks
