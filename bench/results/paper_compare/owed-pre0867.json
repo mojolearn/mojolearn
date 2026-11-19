@@ -626,7 +626,8 @@
   "mamba-decode-stage-arena": {
    "define": "MOJOLEARN_MAMBA_FAST_DECODE_STAGE_ARENA",
    "status": "define in code (autograd/block_step_ops.mojo MAMBA_FAST_DECODE_STAGE_ARENA; _m2_decode_views, _m3_decode_views, _run_m3 hold): B = a Mamba-2 / Mamba-3 decode token (L = 1 run) takes its 28 / 33 stages as views of ONE arena held by the resident entry, one zero fill of the used prefix per token, no stage allocation or free per token; the held Mamba-3 L > 1 stages (Samba inference, and under B also the per-call keep_stages program) are views of one held arena re-zeroed with one fill; A = the default, per-token mamba_zeros stages parked and freed at the wait, and rezero's 33 fills. Default off; lane fx-mamba-decode-arena (2026-11-18)",
-   "owed": "RUN"
+   "owed": "DECIDED",
+   "evidence": "A/B round 1 2026-11-19, NVIDIA L40S host bd9c355c19c0 (14-core cgroup), wheel 0c68d6cd27 and its B set, base and arm back to back in one pod job (nvc1-0006, tag nvc-ab-20261119T125554Z-6f7afc; ~/mojolearn-evidence/measure-candidate/build-0c68d6cd27/ab1/x/, tables ~/mojolearn-evidence/briefs-20261118/fx-verdicts3/tab-<arm>.txt), one scored run per arm: digests and quality equal on all 6 cells; arm/base mamba3-decode 0.80, mamba2-decode 0.84, samba-decode 0.92, mamba1-decode 0.92 (the control: about 8 % pair drift toward the arm; net mamba3 0.87, mamba2 0.91), mamba3-forward 1.01, samba-forward 0.99; PROMOTED to the default (lane fx-verdicts3), MOJOLEARN_MAMBA_FAST_DECODE_STAGE_ARENA_OFF restores per-token stages; the old define is refused"
   },
   "lmhead-gemm-panel": {
    "define": "MOJOLEARN_LMHEAD_FAST_GEMM_PANEL",
@@ -773,6 +774,11 @@
   "lmhead-gemm-panel-off": {
    "define": "MOJOLEARN_LMHEAD_FAST_GEMM_PANEL_OFF",
    "status": "define in code (training/chunked_lm_head_panel_math.mojo LMHEAD_FAST_GEMM_PANEL): B = the scalar serial profile of the chunked LM head (the default before 2026-11-19); A = GEMM panels and tree folds, the profile since 2026-11-19 (lane fx-verdicts3). The two arms are different bit versions. Owed for the neighbouring and non-board shapes; when timed, the scalar profile is deleted with the four tombstone parts",
+   "owed": "RUN"
+  },
+  "mamba-decode-stage-arena-off": {
+   "define": "MOJOLEARN_MAMBA_FAST_DECODE_STAGE_ARENA_OFF",
+   "status": "define in code (autograd/block_step_ops.mojo MAMBA_FAST_DECODE_STAGE_ARENA): B = per-token mamba_zeros stages parked and freed at the wait and rezero's 33 fills (the default before 2026-11-19); A = one held arena, one fill a token, default since 2026-11-19 (lane fx-verdicts3). Same bits on both arms. Owed to re-time (the first pair carried 8 % drift on its control) and for the neighbouring and non-board shapes",
    "owed": "RUN"
   }
  },
@@ -3633,9 +3639,9 @@
    "rows": "full",
    "vendor": "nvidia",
    "b_arms": [
-    "mamba-decode-stage-arena"
+    "mamba-decode-stage-arena-off"
    ],
-   "decides": "keep A (the default, per-token stages) unless B is faster at equal quality on the NVIDIA L40S, base and arm back to back in one job; then B becomes the default with a _OFF define. Digests must not move on any cell (same kernels, launch order, input bytes and zeros). mamba1-decode is the control (its L = 1 stages are already resident; no code path of it changes): it must not move. Expected from the arithmetic: mamba2-decode and mamba3-decode -400 ms or more each, samba-decode -200 ms or more; mamba3-forward and samba-forward (median of 20) decide the held-arena half. Before a flip time also a neighbouring shape (d_model 256, B 4) and a non-board model (a 6-layer Samba at L 300) (no dimension targeting)"
+   "decides": "after the promotion of 2026-11-19 (lane fx-verdicts3; mamba3-decode 0.80, mamba2-decode 0.84 with the control mamba1-decode at 0.92): keep the arena (the candidate) unless per-token stages (B, MOJOLEARN_MAMBA_FAST_DECODE_STAGE_ARENA_OFF) are faster at equal digests on the NVIDIA L40S, base and arm back to back in one job. mamba1-decode is the control (no code path of it changes): its ratio is the pair drift and the other rows are read net of it. Time also a neighbouring shape (d_model 256, B 4) and a non-board model (a 6-layer Samba at L 300) (no dimension targeting). When the candidate holds, the per-token path is deleted with the four tombstone parts"
   },
   {
    "id": "lmhead-gemm-panel-rows",

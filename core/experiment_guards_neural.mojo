@@ -1091,6 +1091,9 @@ def _check_configuration() -> Bool:
     # MOJOLEARN_LMHEAD_FAST_GEMM_PANEL (training/chunked_lm_head_panel_math.mojo): promoted to the profile of the
     # chunked LM head on every column and the host column (bits change together); the old opt-in name is refused.
     comptime assert not is_defined["MOJOLEARN_LMHEAD_FAST_GEMM_PANEL"](), "promoted 2026-11-19 (lane/fx-verdicts3, A/B round 1 NVIDIA L40S, wheel 0c68d6cd27, job nvc-ab-20261119T125554Z-6f7afc, one run per arm, train-chunked-lm-head-loss 33,016.9 -> 284.5 ms, FP64 differences smaller on loss and both gradients; bits change on every column together): GEMM panels and tree folds are the chunked LM head profile; drop -D MOJOLEARN_LMHEAD_FAST_GEMM_PANEL, use -D MOJOLEARN_LMHEAD_FAST_GEMM_PANEL_OFF for the scalar serial profile"
+    # MOJOLEARN_MAMBA_FAST_DECODE_STAGE_ARENA (autograd/block_step_ops.mojo): promoted to the default; the old opt-in
+    # name is refused so a stale build line does not silently mean the default.
+    comptime assert not is_defined["MOJOLEARN_MAMBA_FAST_DECODE_STAGE_ARENA"](), "promoted 2026-11-19 (lane/fx-verdicts3, A/B round 1 NVIDIA L40S, wheel 0c68d6cd27, job nvc-ab-20261119T125554Z-6f7afc, one run per arm, digests equal on 6 cells, mamba3-decode 0.80, mamba2-decode 0.84, control mamba1-decode 0.92): a Mamba-2 / Mamba-3 decode token takes its stages as views of one held arena; drop -D MOJOLEARN_MAMBA_FAST_DECODE_STAGE_ARENA, use -D MOJOLEARN_MAMBA_FAST_DECODE_STAGE_ARENA_OFF for per-token stages"
     # ---- end lane fx-verdicts3
     return True
 

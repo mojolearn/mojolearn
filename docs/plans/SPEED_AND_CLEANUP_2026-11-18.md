@@ -33,7 +33,7 @@ Each is built as a B arm from its lane branch against the build above and merges
 
 | Arm | Rows | Estimate (not measured) | Bits |
 |---|---|---|---|
-| `MOJOLEARN_MAMBA_FAST_DECODE_STAGE_ARENA` | mamba2/3-decode, samba-decode | -200 to -600 ms a row | same |
+| `MOJOLEARN_MAMBA_FAST_DECODE_STAGE_ARENA` PROMOTED 2026-11-19 (mamba3-decode 0.80, mamba2-decode 0.84, control 0.92; `_OFF` restores) | mamba2/3-decode, samba-decode | -200 to -600 ms a row | same |
 | `MOJOLEARN_LMHEAD_FAST_GEMM_PANEL` (door, op and oracle) PROMOTED 2026-11-19 (33,017 -> 284.5 ms, L40S; `_OFF` restores) | chunked LM head, 33 s | to about 1-2 s | change, all columns |
 | `MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK` | transformer-decode, causal-lm-generate | -60 to -230 ms a row | same |
 | `MOJOLEARN_LLAMA_FAST_KV_STRIDE_CAP` (lane open) | transformer decode, grows with length | -100 to -170 ms | may change |
