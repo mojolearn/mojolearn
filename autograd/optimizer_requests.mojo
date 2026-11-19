@@ -28,7 +28,17 @@ struct OpsOptimizerRequest(Copyable, ImplicitlyCopyable, Movable):
 
 
 def ops_optimizer_codes(kind: String, schedule: String) raises -> Tuple[Int, Int]:
+    # sequence/ops.mojo OPT_*: sgd 0, adam 1, adamw 2, lion 7, adamax 8, nadam 9
+    # (lane fx-ops-session-blocks, 2026-11-18: the kinds whose whole
+    # configuration is this request's fields; RMSprop 3 and Adagrad 4 need
+    # alpha / centered / lr_decay, which the request does not carry).
     var kind_code = 0 if kind == "sgd" else (1 if kind == "adam" else (2 if kind == "adamw" else -1))
+    if kind == "lion":
+        kind_code = 7
+    elif kind == "adamax":
+        kind_code = 8
+    elif kind == "nadam":
+        kind_code = 9
     var schedule_code = 0 if schedule == "constant" else (1 if schedule == "step" else (2 if schedule == "exponential" else -1))
     if kind_code < 0 or schedule_code < 0:
         raise Error("ValueError: invalid optimizer kind or schedule")

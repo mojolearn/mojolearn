@@ -143,6 +143,16 @@ comptime _SOP_LOG_LOSS = 131
 comptime _SOP_ROC_AUC = 132
 # lane x1: an uploaded tensor declared carried state (OpsSession.declare_state)
 comptime _SOP_STATE = 133
+# lane fx-ops-session-blocks (2026-11-18): the block ops' public names. The
+# two block makers pack a block's weights, zero state and state words
+# (OpsSession.upload_block_grad); the two steps run OPS_M{1,2,3}_STEP 81-83 /
+# OPS_ATTN_STEP 84; small_mlp is OPS_SMALL_MLP 88, lm_head_loss OPS_LM_HEAD_V2 87.
+comptime _SOP_MAMBA_BLOCK = 134
+comptime _SOP_ATTENTION_BLOCK = 135
+comptime _SOP_MAMBA_STEP = 136
+comptime _SOP_ATTENTION_STEP = 137
+comptime _SOP_SMALL_MLP = 138
+comptime _SOP_LM_HEAD_LOSS = 139
 
 
 struct _SessionOpCodes(Defaultable, Movable):
@@ -283,10 +293,16 @@ struct _SessionOpCodes(Defaultable, Movable):
         self.codes["log_loss"] = _SOP_LOG_LOSS
         self.codes["roc_auc"] = _SOP_ROC_AUC
         self.codes["state"] = _SOP_STATE
+        self.codes["mamba_block"] = _SOP_MAMBA_BLOCK
+        self.codes["attention_block"] = _SOP_ATTENTION_BLOCK
+        self.codes["mamba_step"] = _SOP_MAMBA_STEP
+        self.codes["attention_step"] = _SOP_ATTENTION_STEP
+        self.codes["small_mlp"] = _SOP_SMALL_MLP
+        self.codes["lm_head_loss"] = _SOP_LM_HEAD_LOSS
 
 
 # One table per process (identical contents in every extension that links this file).
-comptime _SESSION_OP_CODES = SharedSlot[_SessionOpCodes, "MojolearnSessionOpCodesV2"]
+comptime _SESSION_OP_CODES = SharedSlot[_SessionOpCodes, "MojolearnSessionOpCodesV3"]
 
 
 def _session_op_code(name: String) raises -> Int:

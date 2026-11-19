@@ -62,7 +62,7 @@ address. The eager words are the caller-array form's: the same int32 words
 reach the same Tape.embedding and rankn_take kernels."""
 from std.memory import bitcast
 from sequence.exec_trait import Exec
-from sequence.ops import FP, Args, OP_FILL, OP_COPY, OPT_SGD, OPT_ADAM, OPT_ADAMW
+from sequence.ops import FP, Args, OP_FILL, OP_COPY, OPT_SGD, OPT_ADAM, OPT_ADAMW, OPT_LION, OPT_ADAMAX, OPT_NADAM
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, identical_div
 from autograd.tape import Tape, Tensor, IdsHandle
 from autograd.ops import RELU, SIGMOID, TANH, SOFTMAX, ADD, SUBTRACT, MULTIPLY, DIVIDE, AXIS_ALL, AXIS_ROWS, AXIS_COLS
@@ -694,6 +694,12 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
 
     def upload_block(mut self, code: Int, ints: List[Int], part: Int, srcs: List[CastIn],
                      words: List[Int]) raises -> Int:
+        """`upload_block_grad` without a gradient: what every model program
+        packs its blocks with."""
+        return self.upload_block_grad(code, ints, part, srcs, words, False)
+
+    def upload_block_grad(mut self, code: Int, ints: List[Int], part: Int, srcs: List[CastIn],
+                          words: List[Int], requires_grad: Bool) raises -> Int:
         """One session tensor holding `part` of a block for step op `code`
         (autograd/block_step_ops.mojo): BLOCK_PART_WEIGHTS packs the
         weights `srcs` (one array per piece, `block_weight_sizes` order, an
@@ -701,7 +707,18 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         (1, n) upload; BLOCK_PART_STATE packs the float state pieces the
         same way and declares the tensor state; BLOCK_PART_WORDS makes the
         (1, k) int32-word state from `words`. Each piece is cast into its
-        slot on the executor (upload_cast); the gaps between slots are zero."""
+        slot on the executor (upload_cast); the gaps between slots are zero.
+        `requires_grad` (lane fx-ops-session-blocks, 2026-11-18: weights
+        only, a recording session only) makes the packed weights a trainable
+        leaf: a recorded step op (`_block_step`) is a custom node over
+        [x, weights], so `backward` leaves the block's weight gradients in
+        this tensor's gradient at the same `block_offsets` slots (the gaps
+        zero) and `step` updates the packed weights in place."""
+        if requires_grad:
+            if part != BLOCK_PART_WEIGHTS:
+                raise Error("ValueError: ops: upload_block: only a block's weights take a gradient")
+            if not self.tape.is_recording():
+                raise Error("ops: requires_grad needs a recording session (Session(record=True))")
         if part == BLOCK_PART_WORDS:
             var k = block_int_words(code)
             if k < 1 or len(words) != k:
@@ -745,8 +762,8 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         except err:
             self.ex.free(buf)
             raise err
-        var t = self.tape.variable(self.ex, buf, 1, total, False)
-        var h = self._add(t, Int(buf), False, 0)
+        var t = self.tape.variable(self.ex, buf, 1, total, requires_grad)
+        var h = self._add(t, Int(buf), requires_grad, 0)
         if part == BLOCK_PART_STATE:
             self.buffer_kind[Int(buf)] = OPS_BUFFER_STATE
         return h
@@ -1140,20 +1157,28 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
     def optimizer(mut self, ints: List[Int], fs: List[Float32]) raises -> Int:
         """A new optimizer; returns its id (>= 1).
 
-        ints = [kind (OPT_SGD, OPT_ADAM or OPT_ADAMW), nesterov, schedule
+        ints = [kind (OPT_SGD, OPT_ADAM, OPT_ADAMW, OPT_LION, OPT_ADAMAX or
+        OPT_NADAM), nesterov, schedule
         (autograd/model.mojo SCHED_*), step size]; fs = [lr, momentum,
         beta1, beta2, eps, weight_decay, gamma] and optionally an eighth,
         SGD's dampening (torch.optim.SGD; 0 when absent). The configuration
         is packed as Sequential.compile packs it (sgd: f1 momentum, f2 0,
         f7 dampening; adam and adamw: f1 beta1, f2 beta2; f7 0), so the
-        update's arguments are model_fit's words."""
+        update's arguments are model_fit's words. Lion, Adamax and NAdam
+        pack as adam does (f1 beta1, f2 beta2); NAdam's f7 is torch's
+        default momentum_decay 0.004 with coupled weight decay."""
         return self.optimizer(ops_optimizer_request(ints, fs))
 
     def optimizer(mut self, request: OpsOptimizerRequest) raises -> Int:
         """Create an optimizer from one typed native configuration snapshot."""
         var kind = request.kind
-        if kind != OPT_SGD and kind != OPT_ADAM and kind != OPT_ADAMW:
-            raise Error("ops: the optimizer must be sgd, adam or adamw")
+        # Lane fx-ops-session-blocks (2026-11-18): Lion, Adamax and NAdam are
+        # OP_OPT kinds (sequence/ops.mojo op_opt) whose whole configuration
+        # is this request's fields; `step_lr`, `optimizer_slots` and the
+        # state records below already serve every kind.
+        if (kind != OPT_SGD and kind != OPT_ADAM and kind != OPT_ADAMW and kind != OPT_LION
+                and kind != OPT_ADAMAX and kind != OPT_NADAM):
+            raise Error("ops: the optimizer must be sgd, adam, adamw, lion, adamax or nadam")
         var lr = request.lr
         var momentum = request.momentum
         var beta1 = request.beta1
@@ -1190,7 +1215,11 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         var f1 = momentum if kind == OPT_SGD else beta1
         var f2 = Float32(0) if kind == OPT_SGD else beta2
         var flags = 1 if nesterov else 0
-        var cfg = optimizer_config_packed(kind, flags, f1, f2, eps, wd, dampening, lr)
+        # f7: SGD's dampening; NAdam's momentum_decay, torch's default
+        # (0.004 as a Float32 word, optimizer_config's own default); nothing
+        # else reads it.
+        var f7 = Float32(0.004) if kind == OPT_NADAM else dampening
+        var cfg = optimizer_config_packed(kind, flags, f1, f2, eps, wd, f7, lr)
         var sched_step = request.step_size if sched == SCHED_STEP else 1
         self.opts.append(_OpsOptimizer(cfg, sched, sched_step, gamma, 0))
         # Failed control-checkpoint restore pops opts before its caller retires
