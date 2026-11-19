@@ -187,6 +187,8 @@ def dispatch(wheel_dir, ref="", commit="", dry=False, days=2, census=None, recor
     url = upload_wheel(wheel, key, days)
     argv = ["gh", "workflow", "run", WORKFLOW, "--ref", ref, "-f", f"ref={commit}", "-f", f"wheel_url={url}",
             "-f", f"wheel_name={wheel.name}", "-f", f"wheel_sha256={digest}", "-f", f"token={token}"] + census_args
+    if getattr(args, "python", None):   # the workflow's own input (default: the release CPU column's)
+        argv += ["-f", f"python={args.python}"]
     p = subprocess.run(argv, cwd=ROOT, capture_output=True, text=True)
     if p.returncode != 0:
         raise SystemExit(f"verify smoke: gh workflow run failed: {(p.stderr or p.stdout).strip()[-400:]}")
@@ -213,6 +215,7 @@ def main(argv=None):
     ap.add_argument("--families", default="0x7ffffff", help="fast-trial: trial mask of door families")
     ap.add_argument("--exact-families", default="", help="fast-trial: a second trial with exactly this set")
     ap.add_argument("--shards", type=int, default=1, help="fast-trial: matrix runners")
+    ap.add_argument("--python", default=None, help="verify-smoke only: the Python version to install the wheel under (e.g. 3.10)")
     ap.add_argument("--tests-from", choices=("source", "tooling"), default="source",
                     help="fast-trial: run the wheel commit's test file (source) or --ref's copy (tooling)")
     a = ap.parse_args(argv)
