@@ -6,7 +6,8 @@ ROOT=Path(__file__).resolve().parents[1]
 def test_small_mlp_runs_one_captured_program():
     src=(ROOT/'bindings/small_mlp_native_door.mojo').read_text()
     operation=src.split('def _mode_entries(')[1].split('def _mode_name(')[0]
-    assert '"small_mlp_program"' in operation
+    # The door reads through held keys (bindings/small_mlp_keys_unpack.mojo).
+    assert 'nk[].k_small_mlp_program' in operation
     assert 'MlpOperationMetadata(entries, String(py=mode))' in operation
     code='\n'.join(line for line in src.splitlines() if not line.lstrip().startswith('#'))
     for gone in ('mlp_train_step', 'mlp_resident_', 'small_mlp_api_v1', 'neural_descriptor_execute'):
