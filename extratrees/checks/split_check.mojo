@@ -99,7 +99,7 @@ def reduce_in_order(candidates: List[Split], stride: Int) -> Split:
     return best^
 
 
-def main() raises:
+def run_checks() raises:
     var n = 233  # prime, so every stride below is coprime with it
     var candidates = make_candidates(n, 0xC0FFEE)
 
