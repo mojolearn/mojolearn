@@ -158,6 +158,9 @@ def connect(package):
     _backend.default_mode()
     if _backend._CPU_ONLY is None:
         _backend._layout()
+    # Decide, once and here at import, which set answers the name `fast`
+    # (`_backend._FAST_ANSWER`); set_numeric_mode() reads the stored answer.
+    _backend.fast_answer()
     _CONTEXT = dict(backend_fields=vars(_backend), plans=_plans(),
                     selected_mode=_native_entry(_backend.canonical_loaded("_mojolearn_gbdt"), "gbdt_numeric_mode"),
                     mode_codes=dict(_backend._CODE_MODE),

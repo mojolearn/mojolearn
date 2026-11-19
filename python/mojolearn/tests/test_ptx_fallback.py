@@ -132,6 +132,8 @@ class Install(unittest.TestCase):
         B._SPLIT = B._BASELINE_SELECTION = B._BASELINE_ROOT = None
         B._BASELINE_FILES = {}
         B._SELECTED = B._CPU_ONLY = B._DEFAULT_MODE = None
+        B._FAST_ANSWER = B._DEFAULT_NAME = None
+        B._FAST_ANSWER_DECIDED = False
         B._SETS.clear()
 
     def layout(self, mode, **env):

@@ -417,6 +417,93 @@ def _identical_only_reason(name):
 _MODE_CODE = {"fast": 0, "identical": 1}
 _CODE_MODE = {v: k for k, v in _MODE_CODE.items()}
 
+# ===================================================================
+# THE NAME `fast` ON AN INSTALL WITHOUT A FAST SET (lane fx-fast-selector)
+# ===================================================================
+# `fast` is `identical` with named relaxations switched on (AGENTS.md part 2,
+# "`fast` is reopened"). Off Apple no relaxation is measured yet, so no fast
+# set is built: the release builds `identical` only. Until one exists, the
+# PROCESS DEFAULT named `fast` (MOJOLEARN_NUMERIC_MODE=fast, or
+# `set_numeric_mode("fast")`) is answered by the identical set there: the same
+# binaries, so the results are the identical set's and `fast` is never slower
+# than `identical`. `fast` promises no bits, so that answer is valid.
+#
+# The decision is made ONCE, at selection, and never per call: `_SELECTED` and
+# `_DEFAULT_MODE` hold the SET that runs ('identical'), which is the word every
+# compiled door reads, so no door, table or kernel sees a new word or branch.
+# `_DEFAULT_NAME` keeps the name the user chose, and only `numeric_mode()` and
+# `set_numeric_mode()` read it back. `runtime_report()` keeps reporting the
+# set that is loaded.
+#
+# What does NOT change: Apple (its `fast` set, or its refusal when none is
+# built); a non-Apple install that does carry fast binaries (the historical
+# 'fast identical' layout, kept for reproduction) still loads them; a
+# per-estimator `numeric_mode='fast'` still names the fast set and is refused
+# where none is built, because that word is read by each family's compiled
+# door (about 300 sites) and is not a selection.
+#
+# THE SECOND STEP (inert today). When a relaxation is measured on a vendor, a
+# second set is built for it with `-D MOJOLEARN_MODE_FAST_ROWS`
+# (`core/package_profile.mojo`) into the fast tier directory `tier_dir("fast")`
+# of that vendor. `_fast_set_present()` then finds it and `fast_answer()`
+# returns None, so the name `fast` selects that set through the unchanged
+# two-set code below. Nothing else in this file moves.
+
+#: The set that answers the NAME 'fast' when it is not its own set:
+#: 'identical' off Apple on an install with no fast binaries, else None.
+#: Written once by `fast_answer()`.
+_FAST_ANSWER = None
+_FAST_ANSWER_DECIDED = False
+
+#: The name the user chose for the process default when it differs from the
+#: set that runs (`_DEFAULT_MODE`): 'fast' while the identical set answers
+#: it, else None.
+_DEFAULT_NAME = None
+
+
+def _fast_set_present():
+    """Whether this install carries any binary of the fast tier."""
+    if _CPU_ONLY is not None:
+        return False
+    try:
+        directory = tier_dir("fast")
+    except (ImportError, AttributeError):
+        return False
+    # glue: import-time file presence over the fixed binding names
+    return any(_merged.binding_exists(directory, name) for name in _MODULES)
+
+
+def fast_answer(present=None):
+    """The set that answers the name 'fast' in place of a fast set, decided
+    once per process: 'identical' off Apple when no fast set is installed,
+    None where 'fast' names its own set (or is refused, as on Apple)."""
+    global _FAST_ANSWER, _FAST_ANSWER_DECIDED
+    if not _FAST_ANSWER_DECIDED:
+        if sys.platform == "darwin":
+            _FAST_ANSWER = None
+        elif _fast_set_present() if present is None else present:
+            _FAST_ANSWER = None
+        else:
+            _FAST_ANSWER = "identical"
+        _FAST_ANSWER_DECIDED = True
+    return _FAST_ANSWER
+
+
+def _answered(mode, present=None):
+    """The set to load for the process default named `mode`; records the
+    name when another set answers it."""
+    global _DEFAULT_NAME
+    if mode == "fast" and fast_answer(present) is not None:
+        _DEFAULT_NAME = mode
+        return _FAST_ANSWER
+    _DEFAULT_NAME = None
+    return mode
+
+
+def default_name():
+    """The name of the process default as the user chose it."""
+    return _DEFAULT_NAME or default_mode()
+
 
 # ===================================================================
 # THE VENDOR AXIS. See the module docstring, "THE VENDOR AXIS".
@@ -2150,6 +2237,12 @@ def select():
     # 2615 turns it into by-name stubs only when the CPU binding is built.
     try:
         ident_dir = tier_dir(mode)
+        # The name `fast` on a non-Apple install with no fast set: the
+        # identical set answers it (see `_FAST_ANSWER`). Decided here, once.
+        answered = _answered(mode)
+        if answered != mode:
+            mode = answered
+            ident_dir = tier_dir(mode)
     except GpuPluginError:
         # A GPU box without its plugin, or a mismatched plugin: never the
         # CPU-only set (see GpuPluginError).
@@ -2158,7 +2251,9 @@ def select():
         if not host_binding_built():
             raise
         _refuse_cpu_on_gpu_box(str(exc))
-        return _select_cpu_only(pkg, mode, str(exc))
+        # No GPU set at all, so no fast set: off Apple the CPU bindings
+        # (identical only) answer the name `fast` too.
+        return _select_cpu_only(pkg, _answered(mode, False), str(exc))
     if mode == "fast" and ident_dir == pkg_dir:
         # FAST USED TO RETURN HERE, INSTALLING NOTHING, and that made it the
         # ONLY tier that cannot survive a partial build. An upper tier gets a
@@ -2514,11 +2609,18 @@ def set_default_mode(mode):
     >>> import mojolearn
     >>> previous = mojolearn.set_numeric_mode("identical")
     """
-    global _DEFAULT_MODE
-    mode = (default_mode() if mode is None else mode).strip().lower()
+    global _DEFAULT_MODE, _DEFAULT_NAME
+    prev = default_name()
+    mode = (prev if mode is None else mode).strip().lower()
+    # The name `fast` where the identical set answers it (`_FAST_ANSWER`):
+    # the set is loaded and becomes the default; the name is kept for
+    # `numeric_mode()`.
+    name = None
+    if mode == "fast" and fast_answer() is not None:
+        name, mode = mode, _FAST_ANSWER
     load_set(mode)
-    prev = default_mode()
     _DEFAULT_MODE = mode
+    _DEFAULT_NAME = name
     return prev
 
 
@@ -2760,7 +2862,9 @@ def numeric_mode():
                 f"but the selector loaded the {loaded} set -- a binary is in "
                 "the wrong directory; rebuild both sets"
             )
-    return loaded
+    # The check above reads the set that runs; the answer is the name the
+    # user chose for it (`_DEFAULT_NAME`, 'fast' answered by the identical set).
+    return _DEFAULT_NAME or loaded
 
 
 # 'metal', 'cuda' or 'hip': the accelerator API of the binaries this
