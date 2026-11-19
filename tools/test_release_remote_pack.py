@@ -437,7 +437,10 @@ class ArmOnGithubPackedBase(unittest.TestCase):
             [line] = release_reuse.payload_runtime_mismatches(rebuilt)
             self.assertIn("libMojolearnMath.so: got", line)
             self.assertIn("payload " + leg_built[:12], line)
-        self.assertIn("payload_runtime_mismatches", (TOOLS / "release.py").read_text())
+        text = (TOOLS / "release.py").read_text()
+        self.assertIn("payload_runtime_mismatches", text)
+        # the pack hands the legs' helper to the packer (the source's portable_math/wheel.py rebuilt it on Linux)
+        self.assertIn('args += ["--portable-math-helper", str(helpers[0])]', text)
 
     def test_host_rows_run_the_host_owner_leg_beside_other_legs(self):
         import release_reuse as R

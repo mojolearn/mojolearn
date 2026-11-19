@@ -4051,6 +4051,17 @@ class Release(release_identity_wheels.IdentityOnWheels):
                 # shipped source from the candidate's checkout: the retained-host-composition route above, unchanged
                 args += ["--source-root", src]
                 pack_cwd = ROOT
+        # THE LEGS' libMojolearnMath.so, on every packing host: without --portable-math-helper the packer's
+        # portable_math/wheel.py (the SOURCE's copy) rebuilds it with the packing host's `cc` on Linux and keeps the
+        # set's file on the Mac. 2026-11-19: the ubuntu-24.04 pack runner (GCC 13.3) shipped 9b82408bae1d where the
+        # legs (GCC 11.4) built 35c849364120, the bytes LINUX_PAYLOAD records, and release_reuse refused every arm.
+        # (each set's arch directories carry one, built by the same leg image; given only when they all agree)
+        helpers = sorted(h for s_ in sets for h in Path(s_).glob("*/.libs/libMojolearnMath.so") if h.is_file())
+        if helpers and not self.dry and len({sha256(h) for h in helpers}) == 1:
+            args += ["--portable-math-helper", str(helpers[0])]
+        elif helpers and not self.dry:
+            self.say("  the sets' libMojolearnMath.so differ; the packer's own rule applies (the payload check below "
+                     "refuses a mismatch): " + ", ".join(f"{h} {sha256(h)[:12]}" for h in helpers))
         args += ["--out", dist]
         # the vendor wheel's README says which native set ships unsmoked (no Hopper box held)
         unsmoked = sorted(self.smoke_notes("nvidia"))
