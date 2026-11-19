@@ -95,6 +95,10 @@ FLAGS (per recipe; a recipe can carry several)
   HOST-STALL     the new cell's scored calls spent more than half their wall in system time (host_usage, getrusage:
                  page faults through direct reclaim or THP compaction, lane fx-harness 2026-11-18); a REGRESSION is
                  replaced by it (shown, not counted); the worker's NUMA node is shown beside it
+  NUMA-MIXED     the new cell's worker and its baseline cell's worker ran on different NUMA nodes and neither was
+                 bound (worker_numa.node_now, placement node none; lane fx-cagra-taxi 2026-11-19: algos/cagra fit is
+                 5-7 s slower on the node that is not the GPU's, on byte-identical code, and a same-pod pair job read
+                 one such cell as a 2.54x regression). REGRESSION and FASTER are replaced by it (shown, not counted)
   SCORING-MIXED  the new time and an on-box column it is divided by were taken under different small-row rules
                  (tools/bench_board_small_rows.py: one is the median of 20 calls, the other one call, because their
                  first scored calls fell on either side of 10 ms); scoring_mixed names the columns. Shown, the ratio
@@ -1166,6 +1170,17 @@ def attach_box_state(row, new_races, stored_races, new_ds, stored_ds):
 
 
 HARNESS_CLOCK_REPLACES = ("FASTER", "SAME")
+NUMA_MIXED_REPLACES = ("REGRESSION", "FASTER")
+
+
+def unbound_node(cell):
+    """The NUMA node an UNBOUND worker of CELL was on when it recorded itself, else None (no record, bound by the
+    conductor, or node unknown)."""
+    wn = (cell or {}).get("worker_numa")
+    if not isinstance(wn, dict) or (wn.get("placement") or {}).get("node") is not None:
+        return None
+    node = wn.get("node_now")
+    return node if isinstance(node, int) and not isinstance(node, bool) else None
 
 
 def attach_cell_marks(row, new_races, base_races):
@@ -1199,6 +1214,11 @@ def attach_cell_marks(row, new_races, base_races):
         replaced = [f for f in row["flags"] if f in HARNESS_CLOCK_REPLACES]
         row["flags"] = [f for f in row["flags"] if f not in HARNESS_CLOCK_REPLACES] + ["HARNESS-CLOCK"]
         row["harness_clock"]["replaced"] = replaced or None
+    new_node, base_node = unbound_node(nc), unbound_node(bc)
+    if new_node is not None and base_node is not None and new_node != base_node:
+        replaced = [f for f in row["flags"] if f in NUMA_MIXED_REPLACES]
+        row["flags"] = [f for f in row["flags"] if f not in NUMA_MIXED_REPLACES] + ["NUMA-MIXED"]
+        row["numa_mixed"] = {"new": new_node, "baseline": base_node, "replaced": replaced or None}
     return row
 
 
@@ -1719,7 +1739,9 @@ def render_summary(res, top=8):
     for flag, what in (("HARNESS-CLOCK", "timed under another harness-clock revision than the baseline; FASTER and "
                                          "SAME not counted"),
                        ("HOST-STALL", "system time above half the wall in the scored calls; not counted as "
-                                      "REGRESSION")):
+                                      "REGRESSION"),
+                       ("NUMA-MIXED", "the two workers ran unbound on different NUMA nodes; not counted as "
+                                      "REGRESSION or FASTER")):
         marked = marked_rows(res, flag)
         if marked:
             out.append("%s %d rows (%s)" % (flag, len(marked), what))
@@ -1730,7 +1752,8 @@ def render_summary(res, top=8):
                                      "; worker node %s" % (r.get("worker_numa") or {}).get("node_now")
                                      if r.get("worker_numa") else "") for r in marked[:top]]
     timed_rows = [r for r in rows if number(r.get("ratio")) and "BOX-STATE" not in r["flags"]
-                  and "HARNESS-CLOCK" not in r["flags"] and "HOST-STALL" not in r["flags"]]
+                  and "HARNESS-CLOCK" not in r["flags"] and "HOST-STALL" not in r["flags"]
+                  and "NUMA-MIXED" not in r["flags"]]
     if timed_rows:
         rs = sorted(r["ratio"] for r in timed_rows)
         geo = 1.0

@@ -166,18 +166,74 @@ def gpu_numa_node():
     return n
 
 
+CGROUP_ROOT = "/sys/fs/cgroup"
+PROC_CGROUP = "/proc/self/cgroup"
+
+
+def _quota_cores(quota, period):
+    """Whole cores (rounded up) of one quota/period pair, or None ('max', -1, empty or unreadable)."""
+    try:
+        q, p = int(quota), int(period)
+    except (TypeError, ValueError):
+        return None
+    return -(-q // p) if q > 0 and p > 0 else None
+
+
+def _cgroup_dirs(root, rel):
+    """ROOT and every directory of REL below it ('' or '/' is the root alone)."""
+    out, at = [root], root
+    for part in (rel or "").split("/"):
+        if part and part != "..":
+            at = os.path.join(at, part)
+            out.append(at)
+    return out
+
+
+def cgroup_quota_cores():
+    """The CPU quota of this process's cgroup in whole cores (rounded up), or None when there is none: cgroup v2
+    `cpu.max`, and cgroup v1 `cpu.cfs_quota_us` / `cpu.cfs_period_us`, each read at the mount root and along the
+    process's own cgroup path (/proc/self/cgroup), taking the tightest. The same rule as the product's
+    core/host_predict_threads.mojo `_cgroup_cpu_quota` and tools/ops/host_probe.py `cgroup_cores`.
+
+    FAIRNESS FIX (2026-11-19, lane fx-cagra-taxi): this read cgroup v2's root `cpu.max` only. On the RunPod L40S pod
+    bd9c355c19c0 the quota is cgroup v1 (host_probe: cgroup_cores 14), so the allocation read as the affinity (128),
+    plan() answered "node 1 holds 64 of the allocation's 128 cores" and bound nothing: every worker started on
+    whichever node the scheduler chose. algos/cagra fit loses 5-7 s when its worker is on the node that is not the
+    GPU's (7 of 7 recorded cells: node 0 11,083 / 11,382 ms taxi and 18,709 ms istella; node 1 4,480 ms taxi and
+    13,748 / 13,838 ms istella, across wheels d95f805cce, d3549c756b and 444367af36 whose cagra code objects are
+    byte-identical), which the same-pod pair job nvc-tg-20261119T140227Z-feb7a5 read as a 2.54x regression of the
+    newer wheel."""
+    v2_rel, v1_rel = "", ""
+    for line in (_read(PROC_CGROUP) or "").splitlines():
+        parts = line.split(":", 2)
+        if len(parts) < 3:
+            continue
+        if parts[0] == "0" and parts[1] == "":
+            v2_rel = parts[2]
+        elif "cpu" in parts[1].split(","):
+            v1_rel = parts[2]
+    found = []
+    for d in _cgroup_dirs(CGROUP_ROOT, v2_rel):
+        words = (_read(os.path.join(d, "cpu.max")) or "").split()
+        if len(words) >= 2:
+            found.append(_quota_cores(words[0], words[1]))
+    for d in _cgroup_dirs(os.path.join(CGROUP_ROOT, "cpu"), v1_rel):
+        found.append(_quota_cores(_read(os.path.join(d, "cpu.cfs_quota_us")),
+                                  _read(os.path.join(d, "cpu.cfs_period_us"))))
+    found = [n for n in found if n]
+    return min(found) if found else None
+
+
 def allocation_cores():
-    """The cores this process may use: the cgroup v2 CPU quota (rounded up), else its affinity; None if unknown."""
+    """The cores this process may use: its cgroup CPU quota (`cgroup_quota_cores`, v2 or v1), capped by its
+    affinity; its affinity when there is no quota; None if unknown."""
     try:
         aff = len(os.sched_getaffinity(0))
     except (AttributeError, OSError):
         aff = None
-    q = _read("/sys/fs/cgroup/cpu.max")
-    if q:
-        quota, _, period = q.partition(" ")
-        if quota != "max" and period.isdigit() and int(period) > 0:
-            n = -(-int(quota) // int(period))
-            return min(n, aff) if aff else n
+    n = cgroup_quota_cores()
+    if n:
+        return min(n, aff) if aff else n
     return aff
 
 

@@ -124,3 +124,62 @@ def test_usage_summary_flags_a_host_stall():
     calm = NP.delta(a, types.SimpleNamespace(ru_stime=1.1, ru_utime=1.7, ru_minflt=20, ru_majflt=0), 750.0)
     assert NP.summarize([calm])["host_stall"] is False
     assert NP.phase_summary([{"fit": [d], "infer": None}], "infer") is None
+
+
+def _cgroup_tree(tmp_path, monkeypatch, proc, files, affinity=128):
+    root = tmp_path / "cgroup"
+    for rel, text in files.items():
+        f = root / rel
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(text)
+    root.mkdir(exist_ok=True)
+    p = tmp_path / "proc_self_cgroup"
+    p.write_text(proc)
+    monkeypatch.setattr(NP, "CGROUP_ROOT", str(root))
+    monkeypatch.setattr(NP, "PROC_CGROUP", str(p))
+    monkeypatch.setattr(NP.os, "sched_getaffinity", lambda pid: set(range(affinity)), raising=False)
+
+
+def test_allocation_reads_a_cgroup_v1_quota(tmp_path, monkeypatch):
+    # lane fx-cagra-taxi (2026-11-19): the RunPod L40S pod's quota is cgroup v1 (14 cores of 128 visible). Only v2's
+    # root cpu.max was read, the allocation read as 128, and no worker was bound to the GPU's node.
+    _cgroup_tree(tmp_path, monkeypatch, "5:cpu,cpuacct:/\n1:name=systemd:/\n",
+                 {"cpu/cpu.cfs_quota_us": "1400000\n", "cpu/cpu.cfs_period_us": "100000\n"})
+    assert NP.cgroup_quota_cores() == 14 and NP.allocation_cores() == 14
+
+
+def test_allocation_reads_v2_root_own_path_and_no_quota(tmp_path, monkeypatch):
+    _cgroup_tree(tmp_path, monkeypatch, "0::/\n", {"cpu.max": "2750000 100000\n"})
+    assert NP.allocation_cores() == 28                      # rounded up
+    _cgroup_tree(tmp_path, monkeypatch, "0::/kubepods/pod1\n",
+                 {"cpu.max": "max 100000\n", "kubepods/cpu.max": "max 100000\n",
+                  "kubepods/pod1/cpu.max": "800000 100000\n"})
+    assert NP.cgroup_quota_cores() == 8                     # the limit sits on the leaf, not the mount root
+    _cgroup_tree(tmp_path, monkeypatch, "0::/\n", {"cpu.max": "max 100000\n"}, affinity=32)
+    assert NP.cgroup_quota_cores() is None and NP.allocation_cores() == 32
+    _cgroup_tree(tmp_path, monkeypatch, "4:cpu,cpuacct:/\n",
+                 {"cpu/cpu.cfs_quota_us": "-1\n", "cpu/cpu.cfs_period_us": "100000\n"}, affinity=32)
+    assert NP.cgroup_quota_cores() is None and NP.allocation_cores() == 32
+    _cgroup_tree(tmp_path, monkeypatch, "0::/\n", {"cpu.max": "6400000 100000\n"}, affinity=16)
+    assert NP.allocation_cores() == 16                      # never above the affinity
+
+
+def test_v1_quota_binds_the_workers_to_the_gpu_node(tmp_path, monkeypatch):
+    # the pod of the pair job: 14 quota cores, the GPU's node holds 16 of the 32 visible: bound, no core lost
+    root = tmp_path / "node2"
+    for n, cpus in ((0, "0-15"), (1, "16-31")):
+        d = root / ("node%d" % n)
+        d.mkdir(parents=True)
+        (d / "cpulist").write_text(cpus + "\n")
+        (d / "meminfo").write_text("Node %d MemTotal: 419430400 kB\nNode %d MemFree: 209715200 kB\n" % (n, n))
+    monkeypatch.setattr(NP, "NODE_ROOT", str(root))
+    monkeypatch.setattr(NP, "mems_allowed", lambda: {0, 1})
+    monkeypatch.delenv(NP.BIND_ENV, raising=False)
+    monkeypatch.delenv(NP.MIN_FREE_ENV, raising=False)
+    monkeypatch.setattr(NP.shutil, "which", lambda name: "/usr/bin/" + name)
+    monkeypatch.setattr(NP, "_try_prefix", lambda how, timeout=20: None)
+    monkeypatch.setenv(NP.GPU_NODE_ENV, "1")
+    _cgroup_tree(tmp_path, monkeypatch, "5:cpu,cpuacct:/\n",
+                 {"cpu/cpu.cfs_quota_us": "1400000\n", "cpu/cpu.cfs_period_us": "100000\n"}, affinity=32)
+    p = NP.plan()
+    assert p["node"] == 1 and p["cpus"] == "16-31" and p["allocation_cores"] == 14
