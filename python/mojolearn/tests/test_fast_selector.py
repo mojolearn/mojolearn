@@ -442,7 +442,7 @@ ESTIMATOR_FAMILY = {
     "StandardScaler": "SCALER", "MinMaxScaler": "SCALER", "MaxAbsScaler": "SCALER", "RobustScaler": "SCALER",
     "PCA": "PCA", "IncrementalPCA": "IPCA", "TruncatedSVD": "TSVD", "KernelPCA": "KPCA", "NMF": "NMF",
     "PLSRegression": "PLS", "LinearRegression": "LINEAR", "Ridge": "LINEAR", "LogisticRegression": "LINEAR",
-    "ElasticNet": "LINEAR", "SGDClassifier": "LINEAR", "GaussianNB": "LINEAR", "KernelRidge": "KERNEL",
+    "ElasticNet": "LINEAR", "SGDClassifier": "LINEAR", "GaussianNB": "PREP", "KernelRidge": "KERNEL",
     "KNeighborsClassifier": "NEIGHBORS", "KNeighborsRegressor": "NEIGHBORS", "KMeans": "none",
     "GaussianMixture": "none", "SVC": "none",
 }

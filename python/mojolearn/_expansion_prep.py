@@ -1038,6 +1038,8 @@ class GaussianNB(_Classifier):
         the class frequencies in the training data.
     var_smoothing : float, default 1e-9
         Fraction of the largest feature variance added to every variance.
+    numeric_mode : {"fast", "identical"} or None, default None
+        Numeric mode; None uses the library default. ``'fast'`` is available on Apple GPUs only.
 
     Attributes
     ----------
@@ -1067,11 +1069,12 @@ class GaussianNB(_Classifier):
     >>> model = mojolearn.GaussianNB().fit(X, y)
     >>> model.predict(X[:5])
     """
-    _parameters = ("priors", "var_smoothing")
+    _parameters = ("priors", "var_smoothing", "numeric_mode")
 
-    def __init__(self, *, priors=None, var_smoothing=1e-9):
+    def __init__(self, *, priors=None, var_smoothing=1e-9, numeric_mode=None):
         self.priors = priors
         self.var_smoothing = var_smoothing
+        self.numeric_mode = numeric_mode
 
     def fit(self, X, y, sample_weight=None):
         return _CLS_CALL(self, "fit", (X, y, sample_weight), _CLS_CONTEXT)
