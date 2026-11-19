@@ -170,20 +170,32 @@ def test_workflow_shape():
     assert set(on) == {"workflow_dispatch"}  # manual only (light-checks.yml)
     inputs = on["workflow_dispatch"]["inputs"]
     assert inputs["filter"]["default"] == "*" and inputs["column"]["default"] == "cpu" and "ref" in inputs
-    assert set(wf["jobs"]) == {"plan", "host-parse", "device-parse", "build", "check", "summary"}
+    assert set(wf["jobs"]) == {"plan", "host-parse", "device-parse", "device-parse-triage", "device-parse-retry",
+                               "device-parse-verdict", "build", "check", "summary"}
     assert inputs["suite"]["default"] == "all"
     plan = "\n".join(s.get("run", "") for s in wf["jobs"]["plan"]["steps"])
     assert "merged_bindings.py plan --dir host --platform linux --byte-lm 0 --layout release" in plan
-    parse = "\n".join(s.get("run", "") for s in wf["jobs"]["host-parse"]["steps"])
-    assert "--emit llvm --no-optimization" in parse and "MOJOLEARN_COLUMN_CPU" in parse  # parse only, no codegen
-    assert "merged_bindings.py root" in parse and wf["jobs"]["host-parse"]["strategy"]["fail-fast"] is False
+    # one parse script for every parse job (lane fx-trees-device-parse, 2026-11-19), in the workflow's env
+    script = wf["env"]["PARSE_GROUP_SH"]
+    assert "--emit llvm --no-optimization" in script and "MOJOLEARN_COLUMN_CPU" in script  # parse only, no codegen
+    assert "merged_bindings.py root" in script and wf["jobs"]["host-parse"]["strategy"]["fail-fast"] is False
+    assert 'timeout -k 60 "$limit"' in script and '-j "$(nproc)"' in script  # a limit, never a lowered -j
+    assert "memory.peak" in script and "result-$KEY.txt" in script
+    for job in ("host-parse", "device-parse", "device-parse-retry"):
+        step = next(st for st in wf["jobs"][job]["steps"] if "PARSE_GROUP_SH" in st.get("run", ""))
+        assert step["timeout-minutes"] <= 30 and step["env"]["KIND"] == ("host" if job == "host-parse" else "device")
+        upload = wf["jobs"][job]["steps"][-1]
+        assert upload["if"] == "always()" and "out/*.txt" in upload["with"]["path"]
+    assert wf["jobs"]["device-parse"]["continue-on-error"] is True  # the verdict decides from the last attempt
+    assert "PARSE_SPLIT" in plan and "_mojolearn_native_trees" in plan
     assert wf["jobs"]["host-parse"]["name"].startswith("host-parse")  # tools/prebuild_check.py reads job names
     # device-parse (lane fx-build-tools, 2026-11-18): the identical device groups with the sm_89 column's flags
     assert "merged_bindings.py plan --dir identical --platform linux --byte-lm 1 --layout release" in plan
-    dev = "\n".join(s.get("run", "") for s in wf["jobs"]["device-parse"]["steps"])
-    assert "--emit llvm --no-optimization" in dev and "--target-accelerator sm_89" in dev
-    assert "MOJOLEARN_COLUMN_NVIDIA" in dev and "MOJOLEARN_NUMERIC_IDENTICAL=1" in dev
+    assert "--target-accelerator sm_89" in script
+    assert "MOJOLEARN_COLUMN_NVIDIA" in script and "MOJOLEARN_NUMERIC_IDENTICAL=1" in script
     assert wf["jobs"]["device-parse"]["name"].startswith("device-parse")  # tools/prebuild_check.py reads job names
+    assert wf["jobs"]["device-parse-retry"]["name"].startswith("device-parse retry ")
+    assert not wf["jobs"]["device-parse-verdict"]["name"].startswith(("host-parse", "device-parse"))
     build = "\n".join(s.get("run", "") for s in wf["jobs"]["build"]["steps"])
     assert "mojo build" in build and "run_$IN_COLUMN.mojo" in build and "MOJOLEARN_COLUMN_CPU=1" in build
     run = "\n".join(s.get("run", "") for s in wf["jobs"]["check"]["steps"])
@@ -214,3 +226,19 @@ def test_gpu_job_uses_every_core_unless_memory_says_fewer(tmp_path):
     got = subprocess.run(["bash", "-c", f"RES={res}\n{peak}\necho $peak_kb"], capture_output=True, text=True, timeout=30)
     assert got.stdout.strip() == "1719664", got.stdout + got.stderr     # the largest check, never the build
     assert 'busy_sampler "$RES/busy_cores_build.txt"' in text and "BUSY build:" in text
+
+
+def test_prebuild_counts_a_parse_group_by_its_last_attempt():
+    spec = importlib.util.spec_from_file_location("prebuild_check", ROOT / "tools/prebuild_check.py")
+    pc = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(pc)
+    jobs = [{"name": "host-parse _h", "conclusion": "success"},
+            {"name": "device-parse _t_p1of2 sm_89", "conclusion": "failure"},
+            {"name": "device-parse _t_p2of2 sm_89", "conclusion": "success"},
+            {"name": "device-parse retry _t_p1of2 sm_89", "conclusion": "success"},
+            {"name": "device-parse _n sm_89", "conclusion": "failure"},
+            {"name": "parse-verdict device", "conclusion": "success"}]
+    last = pc.parse_group_jobs(pc.host_parse_jobs({"jobs": jobs}))
+    assert sorted(j["name"] for j in last) == ["device-parse _n sm_89", "device-parse _t_p2of2 sm_89",
+                                               "device-parse retry _t_p1of2 sm_89", "host-parse _h"]
+    assert [j["name"] for j in last if j["conclusion"] != "success"] == ["device-parse _n sm_89"]
