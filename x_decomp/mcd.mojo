@@ -87,6 +87,32 @@ from x_decomp.kit import Kit, Mat, OP_ABS, OP_LOGS, OP_MUL, OP_RECIP, OP_SCALE, 
 # promotes B only with Jaccard not lower, and AGENTS.md never trades quality for speed; a decision for Andrew.
 comptime IDN_MCD_CHOL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_IDN_MCD_CHOL"]()
 
+# Experiment MOJOLEARN_MCD_FAST_LOCKSTEP (lane fx-board-covariance-nb, 2026-11-19; default OFF, A/B owed: owed row
+# mcd-lockstep in bench/results/paper_compare/owed-pre0867.json, docs/apple-fast/EXPERIMENTS.md). IDENTICAL, GPU
+# columns only; the host column and every word are unchanged (no bit change on any column).
+# Cause it addresses: the resident search (x_decomp/kit_device.mojo `DMcd.select_random` / `select_init`) runs its
+# candidates ONE AT A TIME, and every C-step of every candidate waits once for its log determinant and runs its
+# narrow pinvh as a one-block Jacobi with a batch of one, so the device works on one d x d problem at a time: about
+# 1,650 log-determinant waits and 1,100 single-block eigen solves a fit whatever the row count (the plan's 500 random
+# trials x up to 3, 50 merged candidates, 10 final ones). That is the cost the Cholesky C-step (IDN_MCD_CHOL above)
+# removes by changing the math (and the support: Jaccard 0.9636 -> 0.9258 on its A/B). This arm keeps the LU + Jacobi
+# pinvh math and the words and changes only the ORDER OF LAUNCHES: the candidates of one `select_random` /
+# `select_init` call take each C-step together. Per round: one batched Jacobi launch over every still-running
+# candidate's covariance (`DevExec._eigh_batch_enq`, one block a candidate: the same kernel and words as the batch of
+# one), each candidate's distances, selection, gather, mean, covariance and LU enqueued, then ONE wait for all their
+# log determinants. Candidates are independent (a trial's draws are its own Philox stream, numbered in trial order
+# as before), so each candidate's values are the serial loop's values. Applies up to XD_EIGH_ONE_BLOCK_N columns (the
+# one-block solve's bound: above it the Jacobi is multi-block and already fills the device); `select_init_best` (ten
+# candidates, support rows and distances kept whole) stays the serial loop.
+# Estimate (not measured): taxi-like fits (d 11-16, positive definite) lose most of the 2.8 s that separates the two
+# C-steps on the L40S (ab1: 6199 vs 3422 ms) plus the per-C-step waits of the other half. Time beside the board rows:
+# a neighbouring shape (300,000 x 16 rows of random float32 with 5 percent outliers) and a non-board dataset
+# (covtype's 10 continuous columns). Apple: a round enqueues up to trials x about 60 launches before its wait; the
+# Apple column is not timed (AGENTS.md part 8) and must be smoke-run before any promotion.
+comptime MCD_LOCKSTEP = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_MCD_FAST_LOCKSTEP"]() and not IDN_MCD_CHOL
+)
+
 #: `_expansion_decomp._F32_EPS` and the `logs` floor `_slogdet` passes
 comptime _F32_EPS: Float64 = 1.1920928955078125e-07
 comptime _FLT_MIN: Float64 = 1.1754943508222875e-38

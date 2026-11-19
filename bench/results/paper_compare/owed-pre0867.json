@@ -747,6 +747,11 @@
    "define": "MOJOLEARN_GEMM_FAST_MATRIX_UNITS=3 (with MOJOLEARN_MODE_FAST_ROWS)",
    "status": "define in code (gemm/fast_matrix_units.mojo GEMM_FAST_MATRIX_UNITS_ALL): B1 plus the neural-dispatch callers that closed the vendor route (Llama stage projections, CNN linear, MoE grouped)",
    "owed": "RUN"
+  },
+  "mcd-lockstep": {
+   "define": "MOJOLEARN_MCD_FAST_LOCKSTEP",
+   "status": "define in code (x_decomp/mcd.mojo MCD_LOCKSTEP; x_decomp/kit_device.mojo DMcd.select_lockstep), written 2026-11-19 by lane fx-board-covariance-nb, NOT COMPILED: B = MinCovDet / EllipticEnvelope IDENTICAL with the candidates of one select_random / select_init call taking each C-step together (one batched one-block Jacobi launch and one log-determinant wait a round, up to XD_EIGH_ONE_BLOCK_N columns); A = one candidate at a time (a wait and a batch-of-one Jacobi per C-step). Same LU + Jacobi pinvh math and the same words on every column (digests must be equal between the arms; the host column is untouched)",
+   "owed": "RUN"
   }
  },
  "rows": [
@@ -4915,6 +4920,21 @@
     "loss per step for all 200 steps (divergence check), held-out loss"
    ],
    "decides": "training with TF32 products does not diverge where FP32 does not: the B loss curve stays within 0.05 relative of A at every recorded step and the held-out loss within 0.05 relative"
+  },
+  {
+   "id": "mcd-lockstep",
+   "source": "fx-board-covariance-nb (2026-11-19): full board d3549c756b vs stored 0.8.55, min-cov-det taxi fit 6583 <- 3426 ms and elliptic-envelope taxi fit 6519 <- 3433 ms; 0.8.55 ran the Cholesky C-step (held on quality, row mcd-chol)",
+   "kind": "ab",
+   "lane": [
+    "min-cov-det",
+    "elliptic-envelope"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "b_arms": [
+    "mcd-lockstep"
+   ],
+   "decides": "B is promoted when the digests equal A's on every cell (the arm changes launch order and waits only; a digest difference is a bug in the arm, not a trade) and the taxi fits are faster on the NVIDIA L40S with istella not slower (istella is 220 columns, above the one-block bound: the arm does not engage there and must read the same). Also time a neighbouring shape (300,000 x 16 random float32 rows with 5 percent outliers) and a non-board dataset (covtype's 10 continuous columns). Before promotion: one Apple smoke (a round enqueues up to trials x about 60 launches before its wait) and checks/mcd_step_cost_check.mojo on the B build. On promotion the serial select_random / select_init bodies below XD_EIGH_ONE_BLOCK_N columns are the old path and are deleted with the four tombstone parts"
   }
  ]
 }
