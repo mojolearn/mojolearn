@@ -31,7 +31,6 @@ from bindings.py_balanced import py_item
 
 def xcnn_tensor_operation(owner: PythonObject, operation: String, args: PythonObject,
                            context: PythonObject) raises -> PythonObject:
-    var nk = xcnn_keys()
     if operation == "tensor_finalize":
         # fx-cnn-layers (2026-11-18): tested first and without the builtins
         # read. Every output tensor a layer call returns is released through
@@ -75,6 +74,7 @@ def xcnn_tensor_operation(owner: PythonObject, operation: String, args: PythonOb
         if xcnn_device_io_off(entries, context):
             return array
         return xcnn_wrap(entries, array, context)
+    var nk = xcnn_keys()
     if operation == "tensor_new" or operation == "tensor_new_out" or operation == "tensor_wrap":
         if owner is not py_item(context, nk[].k_xcnn_tensor_class):
             raise Error("TypeError: CNN tensor allocation requires the connected class")

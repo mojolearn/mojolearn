@@ -121,8 +121,8 @@ def _graph_cached_set(layer: PythonObject, value: PythonObject, context: PythonO
     """`layer.cached = value`: store the word and drop the graph cache, so
     the next forward misses and keys the graph under the new setting (the
     forward never reads the attribute on a hit)."""
-    var nk = xcnn_keys()
     var fields = _fields(layer)
+    var nk = xcnn_keys()
     py_setitem(fields, nk[].k_cached, Bool(py=py_call(xcnn_builtins().bool, value)))
     py_setitem(fields, nk[].k__gcache, PythonObject(None))
     return PythonObject(None)
@@ -341,8 +341,8 @@ def _graph_pack(calls: GraphDoorCalls, v: GraphViews) raises -> PythonObject:
 
 
 def _graph_admit(g: PythonObject, context: PythonObject) raises:
-    var nk = xcnn_keys()
     neural_string_keys(g)
+    var nk = xcnn_keys()
     neural_plain_value(py_item(g, nk[].k_n), 0, PythonObject(None))
     neural_plain_value(py_item(g, nk[].k_nnz), 0, PythonObject(None))
     var n = Int(py=py_item(g, nk[].k_n))
@@ -403,13 +403,13 @@ def _gemm(entries: PythonObject, a: PythonObject, b2: PythonObject, m: Int, n: I
 def _spmm(entries: PythonObject, g: PythonObject, vals: PythonObject, h: PythonObject, mode: Int,
           context: PythonObject, transposed: Bool = False) raises -> PythonObject:
     """`g.spmm(binding, vals, h, mode)` (the forward view)."""
-    var nk = xcnn_keys()
     var hh = xcnn_f32(h, "h", context)
     var out = xcnn_host_f32(xcnn_shape(hh), context)
     var v = xcnn_host_f32([1], context) if vals is None or len(vals) == 0 else xcnn_f32(vals, "values", context)
     var a_v = xcnn_ptr(v)
     var a_h = xcnn_ptr(hh)
     var a_out = xcnn_ptr(out)
+    var nk = xcnn_keys()
     var a_csr = xcnn_ptr(py_item(g, nk[].k_csr_t) if transposed else py_item(g, nk[].k_csr_f))
     var n = Int(py=py_item(g, nk[].k_n))
     var cols = Int(py=hh.shape[1])
@@ -456,11 +456,11 @@ def _bias_rows(bias: PythonObject, rows: Int, cols: Int, context: PythonObject) 
 
 def _linear_forward(lin: PythonObject, x: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_Linear.forward(x)`."""
-    var nk = xcnn_keys()
     var fields = _linear_fields(lin, context)
     var entries = xcnn_entries(fields, context)
     var fx = _snapshot(x, "x", context)
     var shape = xcnn_shape(fx)
+    var nk = xcnn_keys()
     graph_run_check_linear_input(shape, Int(py=py_item(fields, nk[].k_in_features)))
     var values = _linear_weights(fields, context)
     var rows = shape[0]
@@ -535,8 +535,8 @@ def _graph_dev(layer: PythonObject, fields: PythonObject, entries: PythonObject,
                vals_f: PythonObject, vals_t: PythonObject, context: PythonObject) raises:
     """`_graph_dev(layer, b, dev, g, vals_f, vals_t)`: the resident CSR views
     and values of graph `g`, uploaded once per graph."""
-    var nk = xcnn_keys()
     var b = xcnn_builtins()
+    var nk = xcnn_keys()
     neural_plain_value(py_get(fields, nk[].k__gdev_for), 0, PythonObject(None))
     var tag = Python.tuple(py_call(b.id, g), py_call(b.id, dev))
     if Bool(py=py_get(fields, nk[].k__gdev_for) == tag) and py_get(fields, nk[].k__gdev_g) is g:
@@ -632,7 +632,6 @@ def _gcn_graph(fields: PythonObject, entries: PythonObject, n: Int, edge_index: 
     """`GCNConv._graph(n, edge_index, edge_weight)`: (g, vals). UNPACK the
     edge view and the weights' address; RUN x_cnn/graph_layer_run.mojo
     `gcn_graph_run`; PACK the cached record."""
-    var nk = xcnn_keys()
     var calls = GraphDoorCalls(entries, context)
     var edges = _edges_run(calls, edge_index, n)
     var weight = 0
@@ -640,6 +639,7 @@ def _gcn_graph(fields: PythonObject, entries: PythonObject, n: Int, edge_index: 
     if edge_weight is not None:
         weight_count = xcnn_size(xcnn_shape(edge_weight))
         weight = xcnn_ptr(edge_weight)
+    var nk = xcnn_keys()
     var gv = gcn_graph_run(calls, edges, n, weight, weight_count, Bool(py=py_item(fields, nk[].k_normalize)),
                            Bool(py=py_item(fields, nk[].k_add_self_loops)), Bool(py=py_item(fields, nk[].k_improved)),
                            xcnn_idn(entries, XCNN_F_GRAPH))
@@ -649,8 +649,8 @@ def _gcn_graph(fields: PythonObject, entries: PythonObject, n: Int, edge_index: 
 
 def _gcn_forward_dev(layer: PythonObject, fields: PythonObject, entries: PythonObject, x: PythonObject, g: PythonObject,
                      vals: PythonObject, context: PythonObject) raises -> PythonObject:
-    var nk = xcnn_keys()
     var n = Int(py=x.shape[0])
+    var nk = xcnn_keys()
     var f_out = Int(py=py_item(fields, nk[].k_out_channels))
     var d_in = Int(py=py_item(fields, nk[].k_in_channels))
     graph_run_check_x(xcnn_shape(x), d_in)
@@ -698,7 +698,6 @@ def _gcn_forward_dev(layer: PythonObject, fields: PythonObject, entries: PythonO
 
 
 def xcnn_gcn_forward(layer: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    var nk = xcnn_keys()
     var fields = _graph_layer_fields(layer, context)
     var entries = xcnn_entries(fields, context)
     var x = args[0]
@@ -711,6 +710,7 @@ def xcnn_gcn_forward(layer: PythonObject, args: PythonObject, context: PythonObj
     else:
         x = _snapshot(x, "x", context)
     var shape = xcnn_shape(x)
+    var nk = xcnn_keys()
     graph_run_check_graph_x(shape, Int(py=py_item(fields, nk[].k_in_channels)))
     if xcnn_is_t(x, context):
         x = xcnn_reshape_t(x, shape, context)
@@ -760,8 +760,8 @@ def xcnn_gcn_forward(layer: PythonObject, args: PythonObject, context: PythonObj
 def _sage_res_form(fields: PythonObject, entries: PythonObject) raises -> Bool:
     """`SAGEConv._res_form(b)` (RUN `graph_run_sage_res_form`): the
     configuration words are read only when the decision needs them."""
-    var nk = xcnn_keys()
     var mixed = xcnn_mixed(entries)
+    var nk = xcnn_keys()
     var project = Bool(py=py_item(fields, nk[].k_project)) if mixed else False
     if not mixed or project:
         return False
@@ -773,9 +773,9 @@ def _sage_res_form(fields: PythonObject, entries: PythonObject) raises -> Bool:
 
 def _sage_forward_dev(layer: PythonObject, fields: PythonObject, entries: PythonObject, x: PythonObject, g: PythonObject,
                       context: PythonObject) raises -> PythonObject:
-    var nk = xcnn_keys()
     var b = xcnn_builtins()
     var n = Int(py=x.shape[0])
+    var nk = xcnn_keys()
     var d_in = Int(py=py_item(fields, nk[].k_in_channels))
     var f_out = Int(py=py_item(fields, nk[].k_out_channels))
     graph_run_check_x(xcnn_shape(x), d_in)
@@ -858,7 +858,6 @@ def _sage_forward_dev(layer: PythonObject, fields: PythonObject, entries: Python
 
 
 def xcnn_sage_forward(layer: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    var nk = xcnn_keys()
     var fields = _graph_layer_fields(layer, context)
     var entries = xcnn_entries(fields, context)
     var x = args[0]
@@ -870,6 +869,7 @@ def xcnn_sage_forward(layer: PythonObject, args: PythonObject, context: PythonOb
     else:
         x = _snapshot(x, "x", context)
     var shape = xcnn_shape(x)
+    var nk = xcnn_keys()
     graph_run_check_graph_x(shape, Int(py=py_item(fields, nk[].k_in_channels)))
     if xcnn_is_t(x, context):
         x = xcnn_reshape_t(x, shape, context)
@@ -962,12 +962,12 @@ def _linear_fields(layer: PythonObject, context: PythonObject) raises -> PythonO
 
 
 def _linear_init(layer: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    var nk = xcnn_keys()
     neural_plain_value(args, 0, Python.dict(admission_context=context))
     var fields = _fields(layer)
     var d = _dimension(args[0], "in_features", context)
     var f = _dimension(args[1], "out_features", context)
     graph_run_check_features(d, f)
+    var nk = xcnn_keys()
     py_setitem(fields, nk[].k_in_features, d)
     py_setitem(fields, nk[].k_out_features, f)
     py_setitem(fields, nk[].k_numeric_mode, args[3])
@@ -1001,8 +1001,8 @@ def _linear_weights(fields: PythonObject, context: PythonObject) raises -> Pytho
 
 
 def _linear_backward(lin: PythonObject, gradient: PythonObject, context: PythonObject) raises -> PythonObject:
-    var nk = xcnn_keys()
     var fields = _linear_fields(lin, context)
+    var nk = xcnn_keys()
     if py_get(fields, nk[].k__x) is None:
         raise Error("RuntimeError: linear backward requires a prior forward")
     var x = _snapshot(py_item(fields, nk[].k__x), "x", context)
@@ -1037,7 +1037,6 @@ def _linear_backward(lin: PythonObject, gradient: PythonObject, context: PythonO
 
 
 def _graph_init(layer: PythonObject, args: PythonObject, sage: Bool, context: PythonObject) raises -> PythonObject:
-    var nk = xcnn_keys()
     neural_plain_value(args, 0, Python.dict(admission_context=context))
     var fields = _fields(layer)
     var d = _dimension(args[0], "in_channels", context)
@@ -1048,6 +1047,7 @@ def _graph_init(layer: PythonObject, args: PythonObject, sage: Bool, context: Py
     var seed0 = args[7] if sage else args[6]
     var seed = PythonObject(None) if seed0 is None else py_call(b.int, seed0)
     var stream = XseqStream(seed, context)
+    var nk = xcnn_keys()
     py_setitem(fields, nk[].k_in_channels, d)
     py_setitem(fields, nk[].k_out_channels, f)
     py_setitem(fields, nk[].k_numeric_mode, mode)
@@ -1093,8 +1093,8 @@ def _graph_init(layer: PythonObject, args: PythonObject, sage: Bool, context: Py
 
 
 def _graph_gradient(layer: PythonObject, gradient: PythonObject, context: PythonObject) raises -> PythonObject:
-    var nk = xcnn_keys()
     var fields = _graph_layer_fields(layer, context)
+    var nk = xcnn_keys()
     if py_get(fields, nk[].k__x) is None or py_get(fields, nk[].k__g) is None:
         raise Error("RuntimeError: graph backward requires a prior forward")
     _graph_admit(py_item(fields, nk[].k__g), context)
@@ -1119,11 +1119,11 @@ def _resident_saved(fields: PythonObject, entries: PythonObject, context: Python
 
 
 def _resident_ones(layer: PythonObject, entries: PythonObject, count: Int, context: PythonObject) raises -> PythonObject:
-    var nk = xcnn_keys()
     # Preserve the existing resident bias-gradient operand: upload only when
     # its allocation size changes, rather than adding an upload per backward.
     var n = max(count, 1)
     var dev = xcnn_dev(layer, entries, context)
+    var nk = xcnn_keys()
     var cached = py_get(py_item(xcnn_dev_fields(dev, context), nk[].k_h), nk[].k_ones)
     if cached is not None and Int(py=cached[1]) == n:
         return cached[0]
@@ -1224,8 +1224,8 @@ def _gcn_backward_host(fields: PythonObject, entries: PythonObject, g: PythonObj
     values and the tape: autograd/rules_graph.mojo `gcn_backward_autograd` on
     the GPU binding, autograd/rules_graph_host.mojo on the CPU binding), PACK
     the gradients."""
-    var nk = xcnn_keys()
     var n = xcnn_shape(g)[0]
+    var nk = xcnn_keys()
     var d = Int(py=py_item(fields, nk[].k_in_channels))
     var f = Int(py=py_item(fields, nk[].k_out_channels))
     var graph = py_item(fields, nk[].k__g)
@@ -1376,8 +1376,8 @@ def _sage_backward_host(fields: PythonObject, entries: PythonObject, g: PythonOb
     outputs; RUN x_cnn/graph_layer_run.mojo `sage_backward_host_run` (the
     tape over host arrays, autograd/graph_tape.mojo `sage_cfg`, its scratch
     native); PACK the gradients."""
-    var nk = xcnn_keys()
     var n = xcnn_shape(g)[0]
+    var nk = xcnn_keys()
     var d = Int(py=py_item(fields, nk[].k_in_channels))
     var f = Int(py=py_item(fields, nk[].k_out_channels))
     var graph = py_item(fields, nk[].k__g)

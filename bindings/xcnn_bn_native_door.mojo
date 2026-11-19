@@ -124,8 +124,8 @@ def _sync_running(fields: PythonObject, context: PythonObject) raises:
 def _running(fields: PythonObject, context: PythonObject) raises -> PythonObject:
     """`np.concatenate([running_mean_, running_var_]).astype(np.float32)`
     through the properties' read-back."""
-    var nk = xcnn_keys()
     _sync_running(fields, context)
+    var nk = xcnn_keys()
     var c = Int(py=py_item(fields, nk[].k_num_features))
     var r = xcnn_host_f32([2 * c], context)
     xcnn_put_f32(r, 0, py_item(fields, nk[].k_running_mean_), c, "running_mean_", context)
@@ -209,11 +209,11 @@ def _finish(fields: PythonObject, running: PythonObject, context: PythonObject) 
 def _forward_res(layer: PythonObject, fields: PythonObject, entries: PythonObject, xh: PythonObject, yh: PythonObject,
                  n: Int, c: Int, hw: Int, dev_y: Bool, context: PythonObject) raises -> PythonObject:
     """`_forward_res`: G3, the running statistics and aux resident."""
-    var nk = xcnn_keys()
     var dev = xcnn_dev(layer, entries, context)
     var prepared = _prep(fields, False, context)
     var aux = prepared[0]
     var batch_stats = Bool(py=prepared[2])
+    var nk = xcnn_keys()
     var k = 1 - Int(py=py_get(fields, nk[].k__aux_k, PythonObject(1)))
     var name = "aux" + String(k)
     var pend = py_get(fields, nk[].k__g_dev)
@@ -352,9 +352,9 @@ def _bn_forward_admitted(layer: PythonObject, fields: PythonObject, x: PythonObj
 
 def _bn_rows(fields: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
     """`BatchNorm2d._rows(X)` on the admitted fields."""
-    var nk = xcnn_keys()
     var a = xcnn_f32(source, "X", context)
     var s = xcnn_shape(a)
+    var nk = xcnn_keys()
     var declared = py_get(fields, nk[].k_input_shape)
     if len(s) == 2 and declared is not None:
         var dims = List[Int]()
@@ -377,8 +377,8 @@ def _shape_words(value: PythonObject, context: PythonObject) raises -> List[Int]
 
 
 def _backward_grads(fields: PythonObject, aux: PythonObject, c: Int, context: PythonObject) raises:
-    var nk = xcnn_keys()
     _set(fields, "_g_dev", PythonObject(None))
+    var nk = xcnn_keys()
     var affine = _truth(py_item(fields, nk[].k_affine))
     _set(fields, "grad_bias_", xcnn_slice_f32(aux, 2 + 3 * c, c, context) if affine else xcnn_host_f32([c], context))
     _set(fields, "grad_weight_", xcnn_slice_f32(aux, 2 + 4 * c, c, context) if affine else xcnn_host_f32([c], context))
@@ -425,8 +425,8 @@ def _backward_execute(layer: PythonObject, fields: PythonObject, entries: Python
 def xcnn_bn_backward_dev(layer: PythonObject, entries: PythonObject, xh: PythonObject,
                           gh: PythonObject, dxh: PythonObject, dev_dx: Bool,
                           context: PythonObject) raises:
-    var nk = xcnn_keys()
     var fields = _bn_admit(layer, context)
+    var nk = xcnn_keys()
     if py_get(fields, nk[].k__x3shape) is None:
         raise Error("RuntimeError: call forward before batch normalization backward")
     _backward_execute(layer, fields, entries, xh, gh, dxh, True, True, dev_dx, context)

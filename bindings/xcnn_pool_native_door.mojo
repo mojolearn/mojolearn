@@ -329,9 +329,9 @@ def xcnn_pool_forward(model: PythonObject, x: PythonObject, context: PythonObjec
 # ---------------------------------------------------------------- passive settings and backward
 
 def _pool_scalar(value: PythonObject, context: PythonObject) raises:
-    var nk = xcnn_keys()
     var b = xcnn_builtins()
     var cls = py_type(value)
+    var nk = xcnn_keys()
     if cls is not b.int and cls is not b.float and cls is not b.bool and not _one_of(cls, py_item(context, nk[].k_scalar_types)):
         raise Error("TypeError: pool settings require native numeric scalars, not Python conversion hooks")
 
@@ -377,9 +377,9 @@ def _pool_sequence(value: PythonObject, name: String, context: PythonObject) rai
 
 
 def _pool_pair(value: PythonObject, name: String, one: Bool, context: PythonObject) raises -> PythonObject:
-    var nk = xcnn_keys()
     var b = xcnn_builtins()
     var cls = py_type(value)
+    var nk = xcnn_keys()
     if cls is b.int or cls is b.float or cls is b.bool or _one_of(cls, py_item(context, nk[].k_scalar_types)):
         var a = _pool_int(value, context)
         return Python.tuple(0 if name == "padding" else 1, a) if one else Python.tuple(a, a)
@@ -600,8 +600,8 @@ def _dropout_words(fields: PythonObject, p: Float64, n: Int, c: Int, hw: Int, co
 
 def xcnn_dropout_forward(model: PythonObject, x: PythonObject, context: PythonObject) raises -> PythonObject:
     """`Dropout2d.forward(x)`."""
-    var nk = xcnn_keys()
     var fields = _fields(model)
+    var nk = xcnn_keys()
     var training = _pool_bool(py_item(fields, nk[].k_training), context)
     var probability = _dropout_probability(py_item(fields, nk[].k_p), context)
     if xcnn_is_t(x, context):
@@ -720,8 +720,8 @@ def _pool_layer(fields: PythonObject, entries: PythonObject, k: List[Int], maxed
 def _layer_indices(layer: PythonObject, context: PythonObject) raises -> PythonObject:
     """`MaxPool2d.indices_` of a pool this call ran: the host winners, read
     back once from the resident ones when they stayed on the device."""
-    var nk = xcnn_keys()
     var d = _fields(layer)
+    var nk = xcnn_keys()
     var held = py_get(d, nk[].k__idx_host)
     if held is None and py_get(d, nk[].k__idx_dev) is not None:
         var b = xcnn_builtins()
@@ -894,8 +894,8 @@ def xcnn_dropout_init(model: PythonObject, args: PythonObject, context: PythonOb
 
 
 def xcnn_dropout_mask(model: PythonObject, context: PythonObject) raises -> PythonObject:
-    var nk = xcnn_keys()
     var fields = _fields(model)
+    var nk = xcnn_keys()
     var mask = py_get(fields, nk[].k__mask_host)
     var handle = py_get(fields, nk[].k__mask_dev)
     if mask is None and handle is not None:
@@ -914,8 +914,8 @@ def xcnn_dropout_mask(model: PythonObject, context: PythonObject) raises -> Pyth
 
 
 def xcnn_dropout_backward(model: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
-    var nk = xcnn_keys()
     var fields = _fields(model)
+    var nk = xcnn_keys()
     var host = py_get(fields, nk[].k__mask_host)
     var handle = py_get(fields, nk[].k__mask_dev)
     if xcnn_is_t(source, context):
@@ -967,7 +967,6 @@ comptime _ADAPTIVE_MAX_SLOT = "xcnn_adaptive_max_v1"
 
 
 def _adaptive_max(model: PythonObject, context: PythonObject) raises -> Bool:
-    var nk = xcnn_keys()
     # p3-cnn-sequence-tsa: the class flag is kept per class under the type
     # watcher (`class_record`; an edit of the class or an ancestor misses)
     var cls = py_type(model)
@@ -976,6 +975,7 @@ def _adaptive_max(model: PythonObject, context: PythonObject) raises -> Bool:
     if kept is not None:
         return Bool(py=kept)
     var b = xcnn_builtins()
+    var nk = xcnn_keys()
     var ancestry = py_call(py_item(b.type.__dict__, nk[].k___mro__).__get__, cls)
     var result = False
     for i in range(len(ancestry)):  # driver-loop: native class metadata without descriptors/metaclass hooks
@@ -1013,8 +1013,8 @@ def xcnn_adaptive_init(model: PythonObject, args: PythonObject, context: PythonO
 
 
 def xcnn_adaptive_indices(model: PythonObject, context: PythonObject) raises -> PythonObject:
-    var nk = xcnn_keys()
     var fields = _fields(model)
+    var nk = xcnn_keys()
     var host = py_get(fields, nk[].k__idx_host)
     if host is not None:
         return host

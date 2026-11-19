@@ -308,7 +308,6 @@ def xcnn_builtins() raises -> PythonObject:
 
 def xcnn_connect_numpy(context: PythonObject) raises:
     """Connect the optional NumPy metadata without requiring arrays."""
-    var nk = xcnn_keys()
     # fx-cnn-layers (2026-11-18): the connected case first, through held
     # names. With `ndarray` connected on the context and on its admission
     # context (or no admission context) every statement below is a no-op
@@ -320,6 +319,7 @@ def xcnn_connect_numpy(context: PythonObject) raises:
         if connected is None or xcnn_get(connected, XK_NDARRAY) is not None:
             return
     classical_connect_numpy(context)
+    var nk = xcnn_keys()
     if py_get(context, nk[].k_ndarray) is None and py_get(context, nk[].k_xcnn_numpy_import_tried) is None:
         # The CNN host buffers are ndarrays. Importing the package never loads
         # NumPy (NUMPY_FREE_CONTRACT.md; the former import-time `import numpy`
@@ -341,8 +341,8 @@ def xcnn_connect_numpy(context: PythonObject) raises:
 
 def xcnn_numpy(context: PythonObject) raises:
     """Host-array creation and readback require the optional NumPy dependency."""
-    var nk = xcnn_keys()
     xcnn_connect_numpy(context)
+    var nk = xcnn_keys()
     if py_get(context, nk[].k_ndarray) is None:
         raise Error("ImportError: CNN host arrays require NumPy; install NumPy to use this operation")
 
@@ -586,7 +586,6 @@ comptime _XCNN_TENSOR_LAYOUT_SLOT = "xcnn_tensor_layout_v1"
 
 
 def xcnn_tensor_layout(context: PythonObject) raises:
-    var nk = xcnn_keys()
     var cls = xcnn_item(context, XK_TENSOR_CLASS)
     # p3-cnn-sequence-tsa: the verdict is kept per class under a type watcher
     # (`class_record`; any edit of the class or an ancestor misses), so the
@@ -599,6 +598,7 @@ def xcnn_tensor_layout(context: PythonObject) raises:
     var b = xcnn_builtins()
     if py_type(cls) is not b.type:
         raise Error("TypeError: CNN tensor refuses Python metaclass hooks")
+    var nk = xcnn_keys()
     var ancestry = py_call(py_item(b.type.__dict__, nk[].k___mro__).__get__, cls)
     for i in range(len(ancestry)):  # driver-loop: fixed tensor storage access ancestry
         var namespace = _class_fields(ancestry[i])
@@ -710,8 +710,8 @@ def _xcnn_set_at(g: UnsafePointer[_XcnnNames, MutAnyOrigin], t: UnsafePointer[CP
 
 
 def xcnn_tensor_slot(value: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
-    var nk = xcnn_keys()
     xcnn_tensor_layout(context)
+    var nk = xcnn_keys()
     var cls = py_item(context, nk[].k_xcnn_tensor_class)
     if py_type(value) is not cls:
         raise Error("TypeError: CNN tensor requires the connected native storage class")
@@ -723,8 +723,8 @@ def xcnn_tensor_slot(value: PythonObject, name: String, context: PythonObject) r
 
 
 def xcnn_tensor_set(value: PythonObject, name: String, item: PythonObject, context: PythonObject) raises:
-    var nk = xcnn_keys()
     xcnn_tensor_layout(context)
+    var nk = xcnn_keys()
     var cls = py_item(context, nk[].k_xcnn_tensor_class)
     if py_type(value) is not cls:
         raise Error("TypeError: CNN tensor requires the connected native storage class")
@@ -1011,14 +1011,14 @@ def xcnn_host_of(value: PythonObject, context: PythonObject) raises -> PythonObj
 
 def xcnn_host_f32(shape: List[Int], context: PythonObject) raises -> PythonObject:
     """A new float32 ndarray of `shape`."""
-    var nk = xcnn_keys()
     xcnn_numpy(context)
+    var nk = xcnn_keys()
     return sequential_array(xcnn_tuple(shape), py_item(context, nk[].k_float32), context)
 
 
 def xcnn_host_i32(shape: List[Int], context: PythonObject) raises -> PythonObject:
-    var nk = xcnn_keys()
     xcnn_numpy(context)
+    var nk = xcnn_keys()
     return sequential_array(xcnn_tuple(shape), py_item(context, nk[].k_int32), context)
 
 
@@ -1163,9 +1163,9 @@ def _xcnn_settle_old_dev(fields: PythonObject, dev: PythonObject, context: Pytho
     dropout mask becomes `_mask_host`, and every other field holding an old
     handle number (`_idx_dev`, `_mask_dev`, `_chain`, `_gdev_for`) is
     cleared."""
-    var nk = xcnn_keys()
     var b = xcnn_builtins()
     var names = Python.tuple("_gw_dev", "_gb_dev")
+    var nk = xcnn_keys()
     for i in range(2):  # small-loop(the two pending gradient fields)
         var pending = py_get(fields, names[i])
         if pending is None or py_type(pending) is not b.tuple or len(pending) != 2 or pending[0] is not dev:
@@ -1198,8 +1198,8 @@ def _xcnn_dev_admitted(mut mods: NativeModules, fields: PythonObject, entries: P
     the caller); `table` receives the owner's handle table, admitted here
     (an existing owner's by `xcnn_dev_fields`, a fresh owner's empty one).
     `mods`: the caller's module connections (see `xcnn_dev_fields`)."""
-    var nk = xcnn_keys()
     var dev = xcnn_get(fields, XK_DEV)
+    var nk = xcnn_keys()
     if dev is not None:
         var state = xcnn_dev_fields(mods, dev, context)
         if xcnn_item(state, XK_B) is xcnn_item(entries, XK_MODULE):

@@ -100,11 +100,11 @@ comptime _ADMIT_STAMP = "xcnn_clf_admission_v1"
 
 
 def _admission_stamp(model: PythonObject, fields: PythonObject, fitted_ok: Bool) raises:
-    var nk = xcnn_keys()
     if not (py_fields(model) is fields) or not records_stampable(model):
         return
     var content = ContentRecord()
     content_fields(content, fields, 4)
+    var nk = xcnn_keys()
     var layers = py_get(fields, nk[].k_layers_)
     if layers is not None and py_type(layers) is _b().list:
         for i in range(len(layers)):  # driver-loop: over the classifier layers (content words, once per record)
@@ -122,7 +122,6 @@ def _admission_stamp(model: PythonObject, fields: PythonObject, fitted_ok: Bool)
 
 
 def _classifier_fields(model: PythonObject, context: PythonObject, fitted: Bool = False) raises -> PythonObject:
-    var nk = xcnn_keys()
     var fields = _fields(model)
     var stamped = records_stamped_get(RECORDS_PREPARED, model, _ADMIT_STAMP)
     if stamped is not None and py_fields(model) is fields and (not fitted or Bool(py=stamped)):
@@ -132,6 +131,7 @@ def _classifier_fields(model: PythonObject, context: PythonObject, fitted: Bool 
                  "momentum", "weight_decay", "batch_size", "max_iter", "shuffle", "random_state", "numeric_mode",
                  "optimizer", "dampening", "nesterov", "betas", "eps", "_flat"]:
         neural_plain_value(mods, py_get(fields, PythonObject(name)), 0, context)
+    var nk = xcnn_keys()
     if fitted and (not py_contains(fields, nk[].k_classes_) or not py_contains(fields, nk[].k_layers_) or not py_contains(fields, nk[].k_head_)):
         raise Error("RuntimeError: call fit before classifier inference")
     var classes = py_get(fields, nk[].k_classes_)
@@ -178,7 +178,6 @@ def _classifier_fields(model: PythonObject, context: PythonObject, fitted: Bool 
 
 
 def cnnclf_initialize(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    var nk = xcnn_keys()
     neural_plain_value(args, 0, context)
     var b = _b()
     var fields = _fields(model)
@@ -197,6 +196,7 @@ def cnnclf_initialize(model: PythonObject, args: PythonObject, context: PythonOb
         var value = Int(py=args[1][i])
         cnnclf_run_check_channels(value)
         _ = py_call(channels.append, PythonObject(value))
+    var nk = xcnn_keys()
     py_setitem(fields, nk[].k_input_shape, py_call(b.tuple, input_shape))
     py_setitem(fields, nk[].k_conv_channels, py_call(b.tuple, channels))
     var integers = Python.tuple("kernel_size", "pool_size", "batch_size", "max_iter")
@@ -313,8 +313,8 @@ def _linear_new(d_in: Int, d_out: Int, seed: Int, mode: PythonObject, context: P
 
 def _build(fields: PythonObject, k: Int, context: PythonObject) raises:
     """`CNNClassifier._build(n_classes)`."""
-    var nk = xcnn_keys()
     var b = _b()
+    var nk = xcnn_keys()
     var rs = py_item(fields, nk[].k_random_state)
     var seed = 0 if rs is None else Int(py=py_call(b.int, rs))
     var shape = py_item(fields, nk[].k_input_shape)
@@ -350,8 +350,8 @@ def _build(fields: PythonObject, k: Int, context: PythonObject) raises:
 
 def _params(fields: PythonObject) raises -> PythonObject:
     """`_params()`: (layer, weight attr, grad attr) of every parametrized layer."""
-    var nk = xcnn_keys()
     var out = Python.list()
+    var nk = xcnn_keys()
     var layers = py_call(_b().list, py_item(fields, nk[].k_layers_))
     _ = py_call(layers.append, py_item(fields, nk[].k_head_))
     for i in range(len(layers)):  # driver-loop: over the layer list (model structure)
@@ -365,9 +365,9 @@ def _params(fields: PythonObject) raises -> PythonObject:
 
 def _images(fields: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_images(X)`."""
-    var nk = xcnn_keys()
     var x = xcnn_f32(source, "X", context)
     var shape = xcnn_shape(x)
+    var nk = xcnn_keys()
     var given = py_item(fields, nk[].k_input_shape)
     cnnclf_run_check_rows(shape)
     var images = cnnclf_run_images(shape, [Int(py=given[0]), Int(py=given[1]), Int(py=given[2])])
@@ -426,7 +426,6 @@ def _param_arrays(fields: PythonObject, context: PythonObject) raises -> PythonO
 # ---------------------------------------------------------------- fit
 
 def cnnclf_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    var nk = xcnn_keys()
     var b = _b()
     var fields = _classifier_fields(model, context)
     var x = _contiguous(_images(fields, args[0], context), context)
@@ -436,6 +435,7 @@ def cnnclf_fit(model: PythonObject, args: PythonObject, context: PythonObject) r
     # `model_labels` of the x_sequence binding of the model's tier)
     var labels = _engine(fields, context)
     var encoded = neural_encode_labels(args[1], labels, context)
+    var nk = xcnn_keys()
     py_setitem(fields, nk[].k_classes_, encoded[0])
     var yi = encoded[1]
     var n = Int(py=x.shape[0])
@@ -512,8 +512,8 @@ comptime _PREDICT_SLOT = "xcnn_clf_predict_v2"
 def _predict_layers(fields: PythonObject) raises -> PythonObject:
     """The layers whose weights the resident session holds: every block's
     conv, then the head (`_params` order)."""
-    var nk = xcnn_keys()
     var layers = _b().list()
+    var nk = xcnn_keys()
     var blocks = py_item(fields, nk[].k__blocks)
     for i in range(len(blocks)):  # driver-loop: over the conv layers
         _ = py_call(layers.append, blocks[i][0])
@@ -524,8 +524,8 @@ def _predict_layers(fields: PythonObject) raises -> PythonObject:
 def _weights_frozen(layers: PythonObject, freeze: Bool, context: PythonObject) raises -> Bool:
     """Whether every layer's `weight_` / `bias_` is a read-only exact ndarray
     (marked so first when `freeze`). One flags read per array."""
-    var nk = xcnn_keys()
     var b = _b()
+    var nk = xcnn_keys()
     for i in range(len(layers)):  # driver-loop: over the predict layers (model structure)
         var lf = _fields(layers[i])
         for name in ["weight_", "bias_"]:  # small-loop(the two learned arrays)
@@ -542,9 +542,9 @@ def _weights_frozen(layers: PythonObject, freeze: Bool, context: PythonObject) r
 
 def _predict_key(mut mods: NativeModules, fields: PythonObject, layers: PythonObject,
                  labels: PythonObject) raises -> NativeIdentityKey:
-    var nk = xcnn_keys()
     var key = NativeIdentityKey(mods)
     key.add_identity(labels)
+    var nk = xcnn_keys()
     key.add_identity(py_item(fields, nk[].k__blocks))
     key.add_identity(py_item(fields, nk[].k_head_))
     key.add_identity(py_item(fields, nk[].k_classes_))
@@ -558,11 +558,11 @@ def _predict_key(mut mods: NativeModules, fields: PythonObject, layers: PythonOb
 
 def _predict_key_matches(record: PythonObject, fields: PythonObject, layers: PythonObject,
                          labels: PythonObject) raises -> Bool:
-    var nk = xcnn_keys()
     if py_type(record) is not _b().tuple or len(record) != 2:
         return False
     var key = record[0].downcast_value_ptr[NativeIdentityKey]()
     var offset = 0
+    var nk = xcnn_keys()
     if not key[].matches_identity(labels, offset) or not key[].matches_identity(py_item(fields, nk[].k__blocks), offset):
         return False
     if not key[].matches_identity(py_item(fields, nk[].k_head_), offset) or not key[].matches_identity(py_item(fields, nk[].k_classes_), offset):
@@ -592,10 +592,10 @@ def _run_predict(model: PythonObject, source: PythonObject, codes: Bool, context
     """`_run_predict(X, codes)`: probabilities (n, k) float32, or with
     `codes` each row's class index (int32): one CNN_PREDICT call on the
     model's resident session (opened first when the record misses)."""
-    var nk = xcnn_keys()
     var fields = _classifier_fields(model, context, True)
     var x = _contiguous(_images(fields, source, context), context)
     var n = Int(py=x.shape[0])
+    var nk = xcnn_keys()
     var k = len(py_item(fields, nk[].k_classes_))
     _ = xcnn_entries(fields, context)
     var out = _empty(Python.tuple(n), "int32", context) if codes else _empty(Python.tuple(n, k), "float32", context)
@@ -636,6 +636,6 @@ def cnnclf_predict_proba(model: PythonObject, args: PythonObject, context: Pytho
 
 
 def cnnclf_predict(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    var nk = xcnn_keys()
     var codes = _run_predict(model, args[0], True, context)
+    var nk = xcnn_keys()
     return neural_decode_labels(py_item(_fields(model), nk[].k_classes_), codes, context)
