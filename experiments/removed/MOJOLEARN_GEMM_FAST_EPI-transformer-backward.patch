@@ -1,0 +1,1133 @@
+diff --git a/autograd/kernels/transformer.mojo b/autograd/kernels/transformer.mojo
+index 2600aa49cb..49a6d0a849 100644
+--- a/autograd/kernels/transformer.mojo
++++ b/autograd/kernels/transformer.mojo
+@@ -70,6 +70,7 @@ from gemm.neural_backward import (
+     gemm_backward_b_call,
+ )
+ from gemm.neural_dispatch import GemmWorkspace, identical_gemm
++from gemm.neural_dispatch import gemm_workspace_epi_takes, gemm_workspace_run_epi
+ from gemm.contract import OP_NN, OP_NT, OP_TN
+ from checks.numerics import (
+     identical_mul,
+@@ -2098,8 +2099,62 @@ def _afn_wgrad(
+ # Restore: git apply experiments/removed/LLAMA_DECODER_LAYER_BACKWARD_HAND_WALK.patch
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_GEMM_FAST_EPI, its transformer-backward use (NOISE, A/B round 1 NVIDIA L40S, job nvc-ab-20261119T125554Z-6f7afc: lm-train-step 0.98 = the row's other bases, samba-train-step 1.05) BWD_GEMM_EPI, _route_a_epi_takes, _route_a_epi and LlamaBackwardStages.fanin_joined (the S9 and S32 dX fan-ins joined in the GEMM store) deleted 2026-11-19 by lane/fx-arm-cleanup; code recoverable at a7c89e7558. The define stays for the packed sequence route's fused follower store (owed row gemm-seq-packed-epi-mlp).
+-# Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_EPI-transformer-backward.patch
++# lane fx-gemm-epi (2026-11-18, `-D MOJOLEARN_GEMM_FAST_EPI=1`, default OFF,
++# OPEN: no A/B yet). The two dX fan-ins (S9 `bwd_add2_kernel`, S32
++# `bwd_add3_kernel`) joined in the GEMM's own final store where the GEMM
++# route has one (gemm/checks/gemm_epilogue.mojo; NVIDIA's packed body today).
++# The join is the follower kernel's expression on the same words in the same
++# operand order, so no bit moves; where the route declines, the same follower
++# kernels run, one launch per fan-in as today. Off under the two fan-in
++# sabotage arms, which exist to move those kernels' cells.
++# MOJOLEARN_GEMM_FAST_EPI in the transformer backward, A/B round 1 2026-11-19 (lane fx-verdicts3; NVIDIA L40S host bd9c355c19c0, wheel 0c68d6cd27 and its B set, base and arm
++# back to back in one pod job, tag nvc-ab-20261119T125554Z-6f7afc, one scored run per arm; digests and quality equal).
++# Base -> arm ms: lm-train-step 36.98 -> 36.38 (0.98; the row's bases in three other pairs of the job 36.22, 36.26,
++# 36.39, so the arm sits on the base), samba-train-step 49.15 -> 51.65 (1.05). VERDICT for this use (the S9 and S32
++# fan-in joins in the GEMM store): NOISE, a loser by its own owed row. NOT promoted. DELETION OWED for this use
++# (BWD_GEMM_EPI, _route_a_epi, _route_a_epi_takes, rules_transformer _dx_fanin_epi, the C_PLUS_CELL / CELL_PLUS_C
++# kinds and the fold-stack epilogue kernel): compile-checked, with the work-list deletion it interleaves with. The
++# same define's other use, the fused follower store of the sequence packed route (sequence/gemm_packed_route.mojo
++# SEQ_GEMM_PACKED_EPI), was never timed (it needs the packed route, the default only since 2026-11-19) and stays
++# owed on the mlp rows (owed row gemm-seq-packed-epi-mlp).
++comptime BWD_GEMM_EPI = (
++    is_defined["MOJOLEARN_GEMM_FAST_EPI"]()
++    and not SAB_B_FANIN_ZERO_SEED
++    and not SAB_B_FANIN_ORDER_QKV_REVERSED
++)
++
++
++def _route_a_epi_takes(op: Int, m: Int, n: Int, k: Int) raises -> Bool:
++    """Whether `_route_a_epi` fuses the join for the `dA` of a forward at
++    `(m, n, k)`: a size and plan question, asked before any launch."""
++    var call = gemm_backward_a_call(op, m, n, k)
++    return gemm_workspace_epi_takes(call[1], call[2], call[3])
++
++
++def _route_a_epi[EPI: Int](
++    ctx: DeviceContext,
++    mut workspace: GemmWorkspace,
++    mut out_buf: DeviceBuffer[DType.float32],
++    mut dc: DeviceBuffer[DType.float32],
++    mut other: DeviceBuffer[DType.float32],
++    op: Int,
++    m: Int,
++    n: Int,
++    k: Int,
++) raises:
++    """`_route_a` with the fan-in join in the product's store:
++    `out_buf = EPI(dA, out_buf)`, `EPI` 1 = `ftz(ftz(out_buf) + ftz(dA))`,
++    2 = `ftz(ftz(dA) + ftz(out_buf))`. Same call row and side flag as
++    `_route_a`. Only where `_route_a_epi_takes` is True."""
++    var call = gemm_backward_a_call(op, m, n, k)
++    if call[4] == BWD_DC_LEFT:
++        gemm_workspace_run_epi[EPI](
++            ctx, workspace, out_buf, dc, other, call[1], call[2], call[3], call[0]
++        )
++        return
++    gemm_workspace_run_epi[EPI](
++        ctx, workspace, out_buf, other, dc, call[1], call[2], call[3], call[0]
++    )
+ 
+ 
+ # TOMBSTONE: MOJOLEARN_GEMM_FAST_DX_CONCAT (NOISE, A/B round 1 NVIDIA L40S, job nvc-ab-20261119T125554Z-6f7afc: lm-train-step 1.00, samba-train-step 0.99) pack kernel, one-product launcher and switch deleted 2026-11-19 by lane/fx-verdicts3; code recoverable at 913fc44cfa.
+@@ -2197,6 +2252,10 @@ struct LlamaBackwardStages(Movable):
+     var attn_bwd_fused_off: Bool
+     """DEVIATION 3110: this layer's fused BACKWARD refused once, so it is not
+     launched again for the life of this struct."""
++    var fanin_joined: Bool
++    """lane fx-gemm-epi (BWD_GEMM_EPI only): within the q, k, v fan-in, k's
++    dX is already joined into d(norm1.out) by its GEMM's store, so v joins
++    there too; False means k is in `tmp1` and `bwd_add3_kernel` runs."""
+     var head_c: DeviceBuffer[DType.float32]  # [L, s_max]
+ 
+     def __init__(
+@@ -2301,6 +2360,7 @@ struct LlamaBackwardStages(Movable):
+         self.attn_repaired = 0
+         self.attn_backward_status = -1
+         self.attn_bwd_fused_off = False
++        self.fanin_joined = False
+         self.head_c = _zeros[False](ctx, head_c_n)
+ 
+         # All fill targets are fields of self and remain alive through this
+diff --git a/autograd/rules_transformer.mojo b/autograd/rules_transformer.mojo
+index e73b6240c0..91baf5f7ab 100644
+--- a/autograd/rules_transformer.mojo
++++ b/autograd/rules_transformer.mojo
+@@ -115,6 +115,7 @@ from core.device_scan import device_first_nonfinite
+ from autograd.refuse_scan import DeferredNonfiniteScan
+ from core.step_phase import step_count_launch, step_count_sync
+ from gemm.contract import OP_NT
++from gemm.checks.gemm_identical import GEMM_EPI_C_PLUS_CELL, GEMM_EPI_CELL_PLUS_C
+ # Lane ag-pass6-host (2026-10-19, PASS6_IDEAS idea J), default on: the
+ # refusal scan of d(residual2) writes its verdict to a device word and the
+ # call reads it at its own closing wait (autograd/refuse_scan.mojo
+@@ -141,12 +142,15 @@ from transformer.impl.llama.modeling_llama import (
+ from autograd.kernels.transformer import (
+     BWD_FUSE_GATED_SILU,
+     BWD_FUSE_NORM2_RESIDUAL,
++    BWD_GEMM_EPI,
+     BWD_TPB,
+     IDN_BWD_ENTRY_ALIAS,
+     _AFN_NORM1_RESID,
+     LlamaBackwardStages,
+     _rec,
+     _route_a,
++    _route_a_epi,
++    _route_a_epi_takes,
+     _route_b,
+     _upload,
+     bwd_add2_kernel,
+@@ -195,6 +199,9 @@ comptime TF_DX_TMP0 = 1
+ comptime TF_DX_TMP1 = 2
+ comptime TF_DX_TMP0_ADD2 = 3
+ comptime TF_DX_TMP2_ADD3 = 4
++# lane fx-gemm-epi (BWD_GEMM_EPI only): never recorded; _linear's local mark
++# that _dx_fanin_epi already wrote this member's dX.
++comptime TF_DX_JOINED = 5
+ 
+ # Args slot i9 (TF_CARD_SLOT) of a TF_LINEAR or TF_ROPE node: which identity
+ # card entries the rule records after its launches on a traced call (the
+@@ -399,8 +406,70 @@ struct TransformerRules(BackwardRules):
+             self._card(35, bst.norm1_dx, m * dm)
+             self._card(36, bst.d_x, m * dm)
+ 
+-    # TOMBSTONE: MOJOLEARN_GEMM_FAST_EPI, its transformer-backward use (NOISE, A/B round 1 NVIDIA L40S, job nvc-ab-20261119T125554Z-6f7afc: lm-train-step 0.98 = the row's other bases, samba-train-step 1.05) _dx_fanin_epi, its branch in _linear and TF_DX_JOINED deleted 2026-11-19 by lane/fx-arm-cleanup; code recoverable at a7c89e7558. The define stays for the packed sequence route's fused follower store (owed row gemm-seq-packed-epi-mlp).
+-    # Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_EPI-transformer-backward.patch
++    def _dx_fanin_epi(
++        self, mode: Int, card: Int, mut dc: DeviceBuffer[DType.float32], mut w: DeviceBuffer[DType.float32],
++        total: FP, m: Int, n: Int, k: Int,
++    ) raises:
++        # lane fx-gemm-epi (-D MOJOLEARN_GEMM_FAST_EPI=1, default off): S9 and
++        # S32 with the join in the GEMM's store. `total` is the fan-in's
++        # destination (every member's gradients[0]: writes_total). The first
++        # member's dX goes there plain; each later member joins it there by
++        # the follower kernel's own expression, in the follower's operand order:
++        #   S9   up -> total; gate: total = ftz(ftz(gate) + ftz(total))
++        #        (bwd_add2_kernel: ftz(ftz(a) + ftz(bb)), a = gate, bb = up)
++        #   S32  q -> total; k: total = ftz(ftz(total) + ftz(k));
++        #        v: total = ftz(ftz(total) + ftz(v))
++        #        (bwd_add3_kernel: acc = ftz(ftz(q) + ftz(k)), ftz(ftz(acc) + ftz(v)))
++        # Where the GEMM route has no fused store for a member's shape, that
++        # member's dX goes to its tmp buffer and the same follower kernel
++        # joins it (in place: one thread reads and writes one cell), one
++        # launch per fan-in as today. Same words, same order: bits unchanged.
++        ref bst = self.bst[]
++        var d = _view(self.ctx, total, m * k)
++        var takes = _route_a_epi_takes(OP_NT, m, n, k)
++        if mode == TF_DX_TMP0 or (mode == TF_DX_TMP1 and card == TF_CARD_UP):
++            # the first member of its fan-in (q; up)
++            _route_a(self.ctx, bst.gemm_workspace, d, dc, w, OP_NT, m, n, k)
++            bst.fanin_joined = False
++        elif mode == TF_DX_TMP1:
++            # k, after q
++            if takes:
++                _route_a_epi[GEMM_EPI_C_PLUS_CELL](self.ctx, bst.gemm_workspace, d, dc, w, OP_NT, m, n, k)
++                bst.fanin_joined = True
++            else:
++                _route_a(self.ctx, bst.gemm_workspace, bst.tmp1, dc, w, OP_NT, m, n, k)
++        elif mode == TF_DX_TMP0_ADD2:
++            # gate, after up
++            if takes:
++                _route_a_epi[GEMM_EPI_CELL_PLUS_C](self.ctx, bst.gemm_workspace, d, dc, w, OP_NT, m, n, k)
++            else:
++                _route_a(self.ctx, bst.gemm_workspace, bst.tmp0, dc, w, OP_NT, m, n, k)
++                self._add2(total, _fp(bst.tmp0), total, m * k)
++        elif mode == TF_DX_TMP2_ADD3:
++            # v, after q and k
++            if bst.fanin_joined and takes:
++                _route_a_epi[GEMM_EPI_C_PLUS_CELL](self.ctx, bst.gemm_workspace, d, dc, w, OP_NT, m, n, k)
++            else:
++                _route_a(self.ctx, bst.gemm_workspace, bst.tmp2, dc, w, OP_NT, m, n, k)
++                if bst.fanin_joined:
++                    # total holds ftz(ftz(q) + ftz(k)) already
++                    self._add2(total, total, _fp(bst.tmp2), m * k)
++                else:
++                    # In place, q read from the destination: a SECOND view of
++                    # `total` as the first addend, as `_add2` takes its
++                    # operands (one view per pointer argument; one variable
++                    # passed twice to a launch is refused as mutable aliasing).
++                    var dq = _view(self.ctx, total, m * k)
++                    step_count_launch()
++                    self.ctx.enqueue_function[bwd_add3_kernel](
++                        d.unsafe_ptr(), dq.unsafe_ptr(), bst.tmp1.unsafe_ptr(), bst.tmp2.unsafe_ptr(),
++                        Int32(m * k),
++                        grid_dim=(_blocks(m * k), 1, 1),
++                        block_dim=(BWD_TPB, 1, 1),
++                    )
++            bst.fanin_joined = False
++        else:
++            raise Error("transformer linear: unknown dX destination")
+ 
+     # TOMBSTONE: MOJOLEARN_GEMM_FAST_DX_CONCAT (NOISE, A/B round 1 NVIDIA L40S, job nvc-ab-20261119T125554Z-6f7afc: lm-train-step 1.00, samba-train-step 0.99) _dx_fanin_cat (the q, k, v members as one product) deleted 2026-11-19 by lane/fx-verdicts3; code recoverable at 913fc44cfa.
+     # Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_DX_CONCAT.patch
+@@ -423,6 +492,11 @@ struct TransformerRules(BackwardRules):
+         var dw = _view(self.ctx, gradients[1], n * k)
+         _route_b(self.ctx, bst.gemm_workspace, dw, dc, x, OP_NT, m, n, k)
+         var mode = saved.i0
++        comptime if BWD_GEMM_EPI:
++            # lane fx-gemm-epi: the fan-in members under the arm
++            if mode != TF_DX_PLAIN:
++                self._dx_fanin_epi(mode, saved.i9, dc, w, gradients[0], m, n, k)
++                mode = TF_DX_JOINED
+         if mode == TF_DX_PLAIN:
+             var dx = _view(self.ctx, gradients[0], m * k)
+             _route_a(self.ctx, bst.gemm_workspace, dx, dc, w, OP_NT, m, n, k)
+@@ -445,6 +519,8 @@ struct TransformerRules(BackwardRules):
+                 grid_dim=(_blocks(m * k), 1, 1),
+                 block_dim=(BWD_TPB, 1, 1),
+             )
++        elif mode == TF_DX_JOINED:
++            pass
+         else:
+             raise Error("transformer linear: unknown dX destination")
+         # cards, in the hand walk's order (TF_CARD_* above)
+diff --git a/checks/native_tests/transformer_backward_packed.mojo b/checks/native_tests/transformer_backward_packed.mojo
+index d2f6e59b51..5de0c4e8a8 100644
+--- a/checks/native_tests/transformer_backward_packed.mojo
++++ b/checks/native_tests/transformer_backward_packed.mojo
+@@ -3,15 +3,17 @@
+ the packed GEMM plan: device words against host words.
+ 
+ `transformer/checks/transformer_backward_check.mojo` compares the 37 stages
+-at fixtures of d_model 32 to 48, far below the 128 x 128 packed tile. This
+-check runs one layer at 2,048 tokens and widths in the hundreds, where the
+-weight gradients and the input gradients of the projections take the packed
+-body, so the packed launches are what computes the compared words. The host
++at fixtures of d_model 32 to 48, far below the 128 x 128 packed tile, so on
++an arm build it exercises only the paths where the store epilogue arm
++(`-D MOJOLEARN_GEMM_FAST_EPI=1`) DECLINES. This check runs one layer at
++2,048 tokens and widths in the hundreds, where the weight gradients and the
++input gradients of the projections take the packed body, so the packed
++launches and the fused store are what computes the compared words. The host
+ side is the oracle every host caller runs
+-(`transformer_block_backward_oracle`). (The concatenated fan-in arm
+-MOJOLEARN_GEMM_FAST_DX_CONCAT, the work-list arm MOJOLEARN_GEMM_FAST_WORKLIST
+-and the transformer-backward use of the store epilogue arm
+-MOJOLEARN_GEMM_FAST_EPI were deleted 2026-11-19, docs/TOMBSTONES.md.)
++(`transformer_block_backward_oracle`); EPI claims unchanged bits, so the
++oracle is the default one for it. (The concatenated fan-in arm
++MOJOLEARN_GEMM_FAST_DX_CONCAT and the work-list arm
++MOJOLEARN_GEMM_FAST_WORKLIST were deleted 2026-11-19, docs/TOMBSTONES.md.)
+ 
+ Cases (each: one host forward and backward, two device runs):
+   0 q, k and v of one width (n_kv_heads = n_heads).
+@@ -22,12 +24,17 @@ compares what a training step reads: the nine weight gradients and d(x).
+ Device run B materializes the stages and also compares the two fan-in joins,
+ d(norm2.out) (gate + up) and d(norm1.out) (q, k, v).
+ 
+-The shape is chosen at run time: the first candidate whose main products
+-take the 128 x 128 plan on the device in front of it (else the first).
++NOT VACUOUS: the shape is chosen at run time, the first candidate for which
++the build's own plan function (`gemm_workspace_epi_takes`) says the arm's
++path is taken for the gate/up and k, v fan-in members. On an arm build with no such candidate the case FAILS as a fixture
++error that lists every product's answer: it never passes on the declined
++path. A default build has nothing to decline and runs the first candidate
++whose products take the 128 x 128 plan (else the first).
+ 
+-What a sabotage changes here: a fan-in joined in the wrong operand order or
+-twice (d(norm2.out), d(norm1.out), and everything downstream to d(x)); any
+-host/device difference in leaves or fold tree at these contraction lengths.
++What a sabotage changes here: a fused store that joins in the wrong operand
++order or joins twice (d(norm2.out), d(norm1.out), and everything downstream
++to d(x)); any host/device difference in leaves or fold tree at these
++contraction lengths.
+ 
+ Every host-device transfer of this file goes through the kit.
+ """
+@@ -38,6 +45,8 @@ from gemm.checks.gemm_identical import (
+     PLAN_TUNED_128_8X8,
+     choose_gemm_plan,
+ )
++from gemm.checks.gemm_epilogue import GEMM_EPI_FUSES
++from gemm.neural_dispatch import gemm_workspace_epi_takes
+ from transformer.checks.transformer_fixture import (
+     RMS_EPS,
+     ROPE_THETA,
+@@ -69,9 +78,7 @@ from transformer.impl.llama.modeling_llama import (
+ # Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_DX_CONCAT.patch
+ # TOMBSTONE: MOJOLEARN_GEMM_FAST_WORKLIST (NOISE, A/B round 1 NVIDIA L40S, job nvc-ab-20261119T125554Z-6f7afc: lm-train-step 1.00, transformer-decode 1.00, lm-forward 0.93 once = another base run of the row) its not-vacuous shape test (gemm_worklist_mode per product) deleted 2026-11-19 by lane/fx-arm-cleanup; code recoverable at a7c89e7558.
+ # Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_WORKLIST.patch
+-# TOMBSTONE: MOJOLEARN_GEMM_FAST_EPI, its transformer-backward use (NOISE, A/B round 1 NVIDIA L40S, job nvc-ab-20261119T125554Z-6f7afc: lm-train-step 0.98 = the row's other bases, samba-train-step 1.05) its not-vacuous shape test (_arm_reach, _ARM_GUARDED) deleted 2026-11-19 by lane/fx-arm-cleanup; code recoverable at a7c89e7558.
+-# Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_EPI-transformer-backward.patch
+-from autograd.kernels.transformer import LlamaBackwardStages
++from autograd.kernels.transformer import BWD_GEMM_EPI, LlamaBackwardStages
+ from autograd.rules_transformer import llama_decoder_layer_backward
+ 
+ from checks.native_tests.kit import download, same_words, upload
+@@ -81,6 +88,11 @@ from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report,
+ comptime TBP_CASES = 2
+ comptime TBP_CANDIDATES = 4
+ comptime TBP_L = 256
++#: Whether this build compiles an arm whose path a shape can decline (the
++#: fused store is NVIDIA's packed body only; elsewhere the define compiles to
++#: the default launches and there is nothing to decline).
++comptime _ARM_GUARDED = BWD_GEMM_EPI and GEMM_EPI_FUSES
++
+ # Tensor ids of this file's fixture (transformer_fixture's are 1 to 11, the
+ # backward check's d_out is 21).
+ comptime _TID_X = 31
+@@ -134,6 +146,24 @@ def _cand_dims(which: Int, gqa: Bool) raises -> TransformerDims:
+     return dims^
+ 
+ 
++def _arm_reach(m: Int, dims: TransformerDims) raises -> String:
++    """Empty when every arm of this build takes its path at `(m, dims)`;
++    otherwise the products that decline. A forward projection `(m, n, k)`
++    has its dX at GEMM `(m, k, n)` and its dW at GEMM `(n, k, m)`
++    (gemm/checks/gemm_backward.mojo)."""
++    var dm = dims.d_model
++    var inter = dims.intermediate
++    var qw = dims.q_width()
++    var kw = dims.kv_width()
++    var miss = String("")
++    comptime if BWD_GEMM_EPI and GEMM_EPI_FUSES:
++        if not gemm_workspace_epi_takes(m, dm, inter):
++            miss += " [epilogue: dX gate (" + String(m) + ", " + String(dm) + ", " + String(inter) + ") declines]"
++        if not gemm_workspace_epi_takes(m, dm, kw):
++            miss += " [epilogue: dX k, v (" + String(m) + ", " + String(dm) + ", " + String(kw) + ") declines]"
++    return miss
++
++
+ def _packed(m: Int, dims: TransformerDims) -> Bool:
+     """Whether the default dispatch gives the main products the 128 x 128 plan."""
+     var dm = dims.d_model
+@@ -143,13 +173,18 @@ def _packed(m: Int, dims: TransformerDims) -> Bool:
+ 
+ 
+ def _pick(gqa: Bool) raises -> Int:
+-    """The candidate this build runs (module docstring): the first whose
+-    main products take the 128 x 128 plan, else the first."""
++    """The candidate this build runs (module docstring, NOT VACUOUS)."""
++    var said = String("")
+     for which in range(TBP_CANDIDATES):  # small-loop(4 candidate shapes): plan questions only
+         var dims = _cand_dims(which, gqa)
+         var m = _cand_batch(which) * TBP_L
+-        if _packed(m, dims):
++        var miss = _arm_reach(m, dims)
++        if miss == "" and (_ARM_GUARDED or _packed(m, dims)):
+             return which
++        said += " candidate " + String(which) + ":" + miss
++    if _ARM_GUARDED:
++        raise Error("transformer_backward_packed: FIXTURE ERROR, no candidate shape reaches this build's arm paths;"
++                    + " the check would compare only the declined path." + said)
+     return 0
+ 
+ 
+diff --git a/gemm/checks/gemm_epilogue.mojo b/gemm/checks/gemm_epilogue.mojo
+new file mode 100644
+index 0000000000..f727dcf311
+--- /dev/null
++++ b/gemm/checks/gemm_epilogue.mojo
+@@ -0,0 +1,287 @@
++# SPDX-License-Identifier: Apache-2.0
++# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
++"""The GEMM store epilogue arm (lane fx-gemm-epi, 2026-11-18).
++
++`-D MOJOLEARN_GEMM_FAST_EPI=1`, default OFF, OPEN (no A/B yet). A product
++whose output is joined to the value already in its destination stores the
++join, so the follower add launch is not issued. The kinds and the argument
++for unchanged bits are beside `gemm_epi_cell` in `gemm_identical.mojo`.
++
++What takes a call (execution plan only, contract 6.1; no rule reads a board
++shape): exactly the calls the shipped dispatch runs on the packed body
++(`_shipped_body_kpack_hg`: kernel body row 1, the plan chooser answering the
++TUNED 128x128 plan), in the launch form that dispatch would use.
++
++  all leaves in one launch   `identical_gemm_kpack_kernel[..., EPI]`: the
++                             epilogue in the packed store. ONE launch where
++                             the two-launch form has two.
++  leaf groups + fold         the SAME group launch into the caller's
++                             workspace (`_kpack_launch`, untouched), then
++                             `identical_gemm_fold_stack_epi_kernel[EPI]`: the
++                             fold kernel's body with the epilogue in its
++                             store. TWO launches where there were three.
++
++Everything else declines (`identical_gemm_epi_takes` answers False) and the
++caller runs the plain product and its follower launch, unchanged: every other
++plan, an output of at most `SPLIT_BLOCK_FOLD_MAX_CELLS` cells under groups
++(the block fold), `k == 0`, a trial or sabotage build, and every column whose
++kernel body row is not 1 (AMD, Apple, the host today). Declining moves no
++bit: the epilogue IS the follower's expression.
++
++Parallel plan: one thread per output cell in the fold (grid
++`ceil(m n / 256)` blocks), the packed kernel's own tile grid otherwise; no
++host loop over data, nothing serial added.
++"""
++from max.gpu import block_dim, block_idx, thread_idx
++from max.gpu.host import DeviceBuffer, DeviceContext
++from std.sys.compile import is_defined
++from checks.kernel_matrix import (
++    COLUMN_NVIDIA,
++    TARGET_COLUMN,
++    lib_smem_page_fits_for,
++    lib_smem_pages_for,
++)
++from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz
++from core.step_phase import step_count_launch
++from gemm.checks.gemm_identical import (
++    ANY_SABOTAGE,
++    FLAT_TPB,
++    GEMM_ARM_TRIAL,
++    GEMM_BODY_KPACK_HG,
++    GEMM_EPI_C_PLUS_CELL,
++    GEMM_EPI_CELL_PLUS_C,
++    GEMM_FOLD_SLOTS,
++    GEMM_IDENTICAL_LEAF_SPLIT,
++    GEMM_IDENTICAL_MFMA,
++    GEMM_KPACK_ALIGN,
++    GEMM_KPACK_CPT,
++    GEMM_KPACK_FS,
++    GEMM_KPACK_KS,
++    GEMM_KPACK_PAD,
++    GEMM_KPACK_PAGE_GUARD_BYTES,
++    GEMM_KPACK_RPT,
++    GEMM_REUSE_GROUP_WS,
++    IDN_GEMM_FILL_TILES,
++    NI06_ONE_PAGE,
++    PLAN_TUNED_128_8X8,
++    SPLIT_BLOCK_FOLD_MAX_CELLS,
++    TUNED_TC,
++    TUNED_TPB,
++    _fold_drain,
++    _fold_push,
++    _kpack_launch,
++    _ksplit_resolve_leaves,
++    _tile_grid,
++    choose_gemm_plan,
++    contract_partition,
++    gemm_default_ksplit_leaves,
++    gemm_epi_cell,
++    gemm_fill_note_device,
++    gemm_kpack_fold_slots_for,
++    gemm_operand_strides,
++    identical_gemm_kpack_kernel,
++)
++
++#: The arm's define.
++comptime GEMM_FAST_EPI = is_defined["MOJOLEARN_GEMM_FAST_EPI"]()
++#: Whether this build has a fused store at all: the define, IDENTICAL, and the
++#: shipped dispatch on the packed body with the reusable group workspace (the
++#: NVIDIA column today). A trial build, a GEMM sabotage build and the
++#: matrix-core column keep the two-launch form.
++comptime GEMM_EPI_FUSES = (
++    GEMM_FAST_EPI
++    and GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++    and TARGET_COLUMN == COLUMN_NVIDIA
++    and GEMM_BODY_KPACK_HG
++    and GEMM_REUSE_GROUP_WS
++    and not GEMM_IDENTICAL_MFMA
++    and not GEMM_IDENTICAL_LEAF_SPLIT
++    and not GEMM_ARM_TRIAL
++    and not ANY_SABOTAGE
++    and not is_defined["MOJOLEARN_GEMM_SABOTAGE_WS_FOLD"]()
++)
++
++
++def identical_gemm_fold_stack_epi_kernel[EPI: Int](
++    c: MutPointer[Float32, MutAnyOrigin],
++    ws: MutPointer[Float32, MutAnyOrigin],
++    mn_in: Int32,
++    p_in: Int32,
++):
++    """`identical_gemm_fold_stack_kernel` with the epilogue in its store.
++
++    The same loads (leaf-major, batches of eight issued before their
++    pushes), the same `_fold_push` in ascending `t` and the same
++    `_fold_drain`: the contract's tree (7.2, 7.3). The plain kernel stores
++    `ftz(root)`; this one stores `gemm_epi_cell[EPI](ftz(root), c[cell])`,
++    the follower add's expression on the word the plain kernel would have
++    stored and the destination word read here, before the store. One thread
++    owns one cell, so no other thread reads or writes `c[cell]`.
++    """
++    var mn = Int(mn_in)
++    var p_count = Int(p_in)
++    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
++    if cell >= mn:
++        return
++    var stack = SIMD[DType.float32, GEMM_FOLD_SLOTS](0.0)
++    var occ = 0
++    comptime FOLD_BATCH = 8
++    var t = 0
++    while t + FOLD_BATCH <= p_count:
++        var vals = SIMD[DType.float32, FOLD_BATCH](0.0)
++        comptime for e in range(FOLD_BATCH):
++            vals[e] = ws.unsafe_load((t + e) * mn + cell)
++        comptime for e2 in range(FOLD_BATCH):
++            _ = _fold_push(stack, occ, vals[e2])
++        t += FOLD_BATCH
++    while t < p_count:
++        var part = ws.unsafe_load(t * mn + cell)
++        _ = _fold_push(stack, occ, part)
++        t += 1
++    var root = _fold_drain(stack, occ)
++    # 5g, then the epilogue.
++    c.unsafe_store(cell, gemm_epi_cell[EPI](ftz(root), c.unsafe_load(cell)))
++
++
++def _kpack_epi_launch[FS: Int, EPI: Int](
++    ctx: DeviceContext,
++    mut dst: DeviceBuffer[DType.float32],
++    mut a: DeviceBuffer[DType.float32],
++    mut b: DeviceBuffer[DType.float32],
++    m: Int,
++    n: Int,
++    k: Int,
++    leaf: Int,
++    p_count: Int,
++    st: Tuple[Int, Int, Int, Int],
++) raises:
++    """`_kpack_launch` in all-leaves mode at the shipped `kpack_hg` geometry
++    (padded aligned page, hardware fold flush, gather staging), with the
++    store epilogue `EPI`. The page, the grid and every argument are
++    `_kpack_launch`'s; `dst` is read by the store."""
++    comptime NTH = TUNED_TPB
++    comptime TR = NTH // TUNED_TC
++    comptime BM = GEMM_KPACK_RPT * TR
++    comptime BN = GEMM_KPACK_CPT * TUNED_TC
++    comptime PAGE_BYTES = (
++        BM * GEMM_KPACK_KS + TR * GEMM_KPACK_PAD + BN * GEMM_KPACK_KS + TUNED_TC * GEMM_KPACK_PAD
++    ) * 4
++    comptime PAGES = 1 if (NI06_ONE_PAGE or is_defined["MOJOLEARN_GEMM_ONE_PAGE"]()) else lib_smem_pages_for[
++        TARGET_COLUMN, PAGE_BYTES + GEMM_KPACK_PAGE_GUARD_BYTES
++    ]()
++    comptime assert lib_smem_page_fits_for[TARGET_COLUMN, PAGE_BYTES](), (
++        "_kpack_epi_launch: one packed page of this geometry exceeds the column's"
++        " shared limit"
++    )
++    comptime kern = identical_gemm_kpack_kernel[
++        GEMM_KPACK_RPT, GEMM_KPACK_CPT, TUNED_TC, GEMM_KPACK_KS, FS, PAGES, False, False,
++        GEMM_KPACK_PAD, GEMM_KPACK_ALIGN, 0, True, True, EPI
++    ]
++    var g = _tile_grid(m, n, BM, BN, False)
++    # No launch count here: `_kpack_launch` counts none, and the arm's
++    # counters must read against the default's.
++    ctx.enqueue_function[kern](
++        dst.unsafe_ptr(),
++        a.unsafe_ptr(),
++        b.unsafe_ptr(),
++        Int32(m),
++        Int32(n),
++        Int32(k),
++        Int32(leaf),
++        Int32(p_count),
++        Int32(st[0]),
++        Int32(st[1]),
++        Int32(st[2]),
++        Int32(st[3]),
++        Int32(0),
++        Int32(0),
++        grid_dim=(g[0], 1, 1),
++        block_dim=(NTH, 1, 1),
++    )
++
++
++def identical_gemm_epi_takes(m: Int, n: Int, k: Int) -> Bool:
++    """Whether `identical_gemm_epi_into` fuses the join at `(m, n, k)` on
++    this build (module docstring). Reads sizes and the plan chooser only, so
++    a caller can decide where its operands go before any launch. Always
++    False on a build without a fused store."""
++    comptime if not GEMM_EPI_FUSES:
++        return False
++    if m <= 0 or n <= 0:
++        return False
++    if choose_gemm_plan(m, n, k) != PLAN_TUNED_128_8X8:
++        return False
++    var p_count = contract_partition(k)[1]
++    if p_count <= 0:
++        return False
++    if gemm_default_ksplit_leaves(m, n, k) > 0 and m * n <= SPLIT_BLOCK_FOLD_MAX_CELLS:
++        # Groups whose fold is one BLOCK per cell: not given an epilogue.
++        return False
++    return True
++
++
++def identical_gemm_epi_into[EPI: Int](
++    ctx: DeviceContext,
++    mut c: DeviceBuffer[DType.float32],
++    mut a: DeviceBuffer[DType.float32],
++    mut b: DeviceBuffer[DType.float32],
++    mut ws: DeviceBuffer[DType.float32],
++    m: Int,
++    n: Int,
++    k: Int,
++    op: Int,
++) raises:
++    """`c[i, j] = gemm_epi_cell[EPI]((op(A) . op(B))[i, j], c[i, j])`, the
++    product's leaves, fold tree and stored cell exactly as
++    `identical_gemm_into` computes them on this build. ASYNCHRONOUS, as
++    that entry. Call only where `identical_gemm_epi_takes(m, n, k)` is
++    True (RAISES otherwise, before any launch). `ws` holds at least
++    `identical_gemm_workspace_max_floats(m, n, k)` floats, as for
++    `identical_gemm_into`; `c` overlaps neither operand nor `ws`."""
++    comptime assert EPI == GEMM_EPI_C_PLUS_CELL or EPI == GEMM_EPI_CELL_PLUS_C, (
++        "identical_gemm_epi_into: kind 1 (prior + cell) or 2 (cell + prior)"
++    )
++    comptime if not GEMM_EPI_FUSES:
++        raise Error("identical_gemm_epi_into: this build has no fused GEMM store (identical_gemm_epi_takes is False)")
++    else:
++        comptime if IDN_GEMM_FILL_TILES:
++            # As `identical_gemm_shipped_into`: before the first plan choice.
++            gemm_fill_note_device(ctx)
++        if not identical_gemm_epi_takes(m, n, k):
++            raise Error("identical_gemm_epi_into: identical_gemm_epi_takes(m, n, k) is False for this call")
++        var part = contract_partition(k)
++        var gl = gemm_default_ksplit_leaves(m, n, k)
++        var st = gemm_operand_strides(op, m, n, k)
++        # The fold-stack class `_shipped_body_kpack_hg` picks on this column
++        # (unused local storage only; it cannot change the fold DAG).
++        var fs4 = False
++        comptime if not is_defined["MOJOLEARN_LEGACY_SHAPE_NV_FS4"]() and not is_defined["MOJOLEARN_GEMM_NV_FS4_OFF"]():
++            fs4 = gemm_kpack_fold_slots_for(part[1], gl) == 4
++        if gl > 0:
++            var rg = _ksplit_resolve_leaves(gl, part[1])
++            if len(ws) < m * n * rg[1]:
++                raise Error("identical_gemm_epi_into: the workspace does not hold the group nodes")
++            if fs4:
++                _kpack_launch[
++                    GEMM_KPACK_RPT, GEMM_KPACK_CPT, TUNED_TC, GEMM_KPACK_KS, 4, True, False,
++                    GEMM_KPACK_PAD, GEMM_KPACK_ALIGN, 0, True, True,
++                ](ctx, ws, a, b, m, n, k, part[0], part[1], st, rg[0], rg[1])
++            else:
++                _kpack_launch[
++                    GEMM_KPACK_RPT, GEMM_KPACK_CPT, TUNED_TC, GEMM_KPACK_KS, GEMM_KPACK_FS, True, False,
++                    GEMM_KPACK_PAD, GEMM_KPACK_ALIGN, 0, True, True,
++                ](ctx, ws, a, b, m, n, k, part[0], part[1], st, rg[0], rg[1])
++            step_count_launch()
++            ctx.enqueue_function[identical_gemm_fold_stack_epi_kernel[EPI]](
++                c.unsafe_ptr(),
++                ws.unsafe_ptr(),
++                Int32(m * n),
++                Int32(rg[1]),
++                grid_dim=((m * n + FLAT_TPB - 1) // FLAT_TPB, 1, 1),
++                block_dim=(FLAT_TPB, 1, 1),
++            )
++            return
++        if fs4:
++            _kpack_epi_launch[4, EPI](ctx, c, a, b, m, n, k, part[0], part[1], st)
++        else:
++            _kpack_epi_launch[GEMM_KPACK_FS, EPI](ctx, c, a, b, m, n, k, part[0], part[1], st)
+diff --git a/gemm/checks/gemm_epilogue_check.mojo b/gemm/checks/gemm_epilogue_check.mojo
+new file mode 100644
+index 0000000000..28104c0039
+--- /dev/null
++++ b/gemm/checks/gemm_epilogue_check.mojo
+@@ -0,0 +1,10 @@
++# SPDX-License-Identifier: Apache-2.0
++# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
++"""Standalone wrapper of `gemm/checks/gemm_epilogue_suite.mojo` (the store
++epilogue arm, `-D MOJOLEARN_GEMM_FAST_EPI=1`): fused store against the
++two-launch form and the host column, word for word."""
++from gemm.checks.gemm_epilogue_suite import run_checks
++
++
++def main() raises:
++    run_checks()
+diff --git a/gemm/checks/gemm_epilogue_suite.mojo b/gemm/checks/gemm_epilogue_suite.mojo
+new file mode 100644
+index 0000000000..615750b67a
+--- /dev/null
++++ b/gemm/checks/gemm_epilogue_suite.mojo
+@@ -0,0 +1,284 @@
++# SPDX-License-Identifier: Apache-2.0
++# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
++"""Native check of the GEMM store epilogue arm (lane fx-gemm-epi).
++
++`-D MOJOLEARN_GEMM_FAST_EPI=1`. For every case and both kinds it compares,
++word for word (bit patterns, so -0.0 and +0.0 differ):
++
++  FUSED     `identical_gemm_epi_into[EPI]` into a destination holding PRIOR
++  FOLLOWER  `identical_gemm_into` into a scratch, then the kernel the arm
++            replaces (`bwd_add2_kernel`, operands in the kind's order)
++  HOST      the follower's expression on the host from the downloaded plain
++            product and PRIOR (`checks.numerics.ftz`, the host column)
++
++and one three-product chain against `bwd_add3_kernel` ((q + k) + v).
++PRIOR carries -0.0, subnormals and both signs; A carries a zero row (cells
++that are exactly zero) and A and B a scaled row and column whose products
++are subnormal (the packed kernel's window admission path).
++
++The cases are sizes, not board rows: outputs that take leaf groups and the
++fold, outputs past the group rule (all leaves in one launch, with and without
++a fold) and ragged edges on both axes. A case the build's route declines is
++printed as declined; the check is VACUOUS (raises) unless at least one group
++case and one all-leaves case ran fused. On a build without a fused store
++(no define, or a column without the packed body) it raises "not compiled":
++it never reports a pass it did not earn.
++
++One device, one stream: cases run one after another on the GPU because each
++is a launch sequence on the single device under test; the host side only
++fills fixtures and compares downloaded words (each a single pass, bounded by
++the largest case, 6.3 M cells).
++"""
++from max.gpu.host import DeviceBuffer, DeviceContext
++
++from autograd.kernels.transformer import BWD_TPB, bwd_add2_kernel, bwd_add3_kernel
++from checks.fixture_rng import u16_row_f32
++from checks.numerics import ftz
++from checks.scaffold import CaseTally, bits, download, hex32, mode_name, upload
++from std.memory import bitcast
++from gemm.contract import OP_NN, OP_NT, OP_TN
++from gemm.checks.gemm_epilogue import (
++    GEMM_EPI_FUSES,
++    identical_gemm_epi_into,
++    identical_gemm_epi_takes,
++)
++from gemm.checks.gemm_identical import (
++    GEMM_EPI_C_PLUS_CELL,
++    GEMM_EPI_CELL_PLUS_C,
++    gemm_default_ksplit_leaves,
++    identical_gemm_into,
++    identical_gemm_workspace_max_floats,
++)
++
++
++def _operand(rows: Int, cols: Int, salt: Int, tiny_row: Int, tiny_col: Int, zero_row: Int) -> List[Float32]:
++    """`rows x cols` row-major, cells in [-0.5, 0.5) (exact in Float32).
++    Row `tiny_row` and column `tiny_col` (when >= 0) are scaled so their
++    mutual products are subnormal; row `zero_row` (when >= 0) is +0.0."""
++    var vals = List[Float32](capacity=rows * cols)
++    for i in range(rows):
++        for f in range(cols):
++            var v = u16_row_f32(i, f, salt) - Float32(0.5)
++            if i == tiny_row or f == tiny_col:
++                v = v * Float32(1.0e-21)
++            if i == zero_row:
++                v = Float32(0.0)
++            vals.append(v)
++    return vals^
++
++
++def _prior(count: Int, salt: Int) -> List[Float32]:
++    """The destination's words before the join: both signs, and every 7th
++    cell -0.0, every 11th a negative subnormal, every 13th a positive one."""
++    var vals = List[Float32](capacity=count)
++    for i in range(count):
++        var v = (u16_row_f32(i, 3, salt) - Float32(0.5)) * Float32(8.0)
++        if i % 7 == 0:
++            v = bitcast[DType.float32](UInt32(0x80000000))
++        elif i % 11 == 0:
++            v = bitcast[DType.float32](UInt32(0x80000123))
++        elif i % 13 == 0:
++            v = bitcast[DType.float32](UInt32(0x00000456))
++        vals.append(v)
++    return vals^
++
++
++def _add2(
++    ctx: DeviceContext,
++    mut dst: DeviceBuffer[DType.float32],
++    mut x: DeviceBuffer[DType.float32],
++    mut y: DeviceBuffer[DType.float32],
++    count: Int,
++) raises:
++    """The replaced follower launch, as `TransformerRules._add2` issues it."""
++    ctx.enqueue_function[bwd_add2_kernel](
++        dst.unsafe_ptr(), x.unsafe_ptr(), y.unsafe_ptr(), Int32(count),
++        grid_dim=((count + BWD_TPB - 1) // BWD_TPB, 1, 1),
++        block_dim=(BWD_TPB, 1, 1),
++    )
++
++
++def _mismatches(name: String, got: List[Float32], want: List[Float32], count: Int) -> Int:
++    var bad = 0
++    for i in range(count):
++        if bits(got[i]) != bits(want[i]):
++            if bad < 4:
++                print("    ", name, "cell", i, "got", hex32(got[i]), "want", hex32(want[i]))
++            bad += 1
++    return bad
++
++
++def _join_case[EPI: Int](
++    ctx: DeviceContext, mut tally: CaseTally, m: Int, n: Int, k: Int, op: Int,
++) raises -> Bool:
++    """One product, one kind. True when the fused store ran."""
++    var name = (
++        String("epi ") + String(EPI) + " op " + String(op) + " " + String(m) + "x" + String(n) + "x" + String(k)
++    )
++    if not identical_gemm_epi_takes(m, n, k):
++        print("  declined", name, "(the route has no fused store at this size)")
++        return False
++    var mn = m * n
++    # A is m x k (k x m under OP_TN), B is k x n (n x k under OP_NT): m k and
++    # n k words either way; the tiny/zero lines are planted by flat row.
++    var a_rows = k if op == OP_TN else m
++    var a_cols = m if op == OP_TN else k
++    var b_rows = n if op == OP_NT else k
++    var b_cols = k if op == OP_NT else n
++    var a_vals = _operand(a_rows, a_cols, 11, 1, -1, 2)
++    var b_vals = _operand(b_rows, b_cols, 23, -1, 1, -1)
++    var p_vals = _prior(mn, 37)
++    var da = upload(ctx, a_vals)
++    var db = upload(ctx, b_vals)
++    var d_prior = upload(ctx, p_vals)
++    var d_fused = upload(ctx, p_vals)
++    var d_plain = ctx.enqueue_create_buffer[DType.float32](mn)
++    var d_follow = ctx.enqueue_create_buffer[DType.float32](mn)
++    var ws = ctx.enqueue_create_buffer[DType.float32](identical_gemm_workspace_max_floats(m, n, k))
++    ctx.synchronize()
++    # FOLLOWER: the plain product, then the replaced kernel.
++    identical_gemm_into(ctx, d_plain, da, db, ws, m, n, k, op)
++    ctx.synchronize()
++    comptime if EPI == GEMM_EPI_C_PLUS_CELL:
++        _add2(ctx, d_follow, d_prior, d_plain, mn)
++    else:
++        _add2(ctx, d_follow, d_plain, d_prior, mn)
++    ctx.synchronize()
++    # FUSED: the join in the product's own store.
++    identical_gemm_epi_into[EPI](ctx, d_fused, da, db, ws, m, n, k, op)
++    ctx.synchronize()
++    var plain = download(ctx, d_plain, mn)
++    var follow = download(ctx, d_follow, mn)
++    var fused = download(ctx, d_fused, mn)
++    # HOST: the follower's expression in the host column.
++    var host = List[Float32](capacity=mn)
++    for i in range(mn):
++        comptime if EPI == GEMM_EPI_C_PLUS_CELL:
++            host.append(ftz(ftz(p_vals[i]) + ftz(plain[i])))
++        else:
++            host.append(ftz(ftz(plain[i]) + ftz(p_vals[i])))
++    var bad = _mismatches(String("fused/follower"), fused, follow, mn)
++    bad += _mismatches(String("fused/host"), fused, host, mn)
++    tally.production(name, bad)
++    # Every buffer a queued launch read stays named past the last wait.
++    _ = da
++    _ = db
++    _ = d_prior
++    _ = d_fused
++    _ = d_plain
++    _ = d_follow
++    _ = ws
++    return True
++
++
++def _chain_case(ctx: DeviceContext, mut tally: CaseTally, m: Int, n: Int, k: Int) raises -> Bool:
++    """S32's shape of use: three products into one destination, the first
++    plain, the next two joined (prior + cell), against `bwd_add3_kernel`."""
++    var name = String("chain (q + k) + v ") + String(m) + "x" + String(n) + "x" + String(k)
++    if not identical_gemm_epi_takes(m, n, k):
++        print("  declined", name, "(the route has no fused store at this size)")
++        return False
++    var mn = m * n
++    var a_q = upload(ctx, _operand(m, k, 41, 1, -1, 2))
++    var a_k = upload(ctx, _operand(m, k, 43, 3, -1, -1))
++    var a_v = upload(ctx, _operand(m, k, 47, -1, -1, 4))
++    var b_q = upload(ctx, _operand(k, n, 53, -1, 1, -1))
++    var b_k = upload(ctx, _operand(k, n, 59, -1, 2, -1))
++    var b_v = upload(ctx, _operand(k, n, 61, -1, -1, -1))
++    var t_q = ctx.enqueue_create_buffer[DType.float32](mn)
++    var t_k = ctx.enqueue_create_buffer[DType.float32](mn)
++    var t_v = ctx.enqueue_create_buffer[DType.float32](mn)
++    var d_follow = ctx.enqueue_create_buffer[DType.float32](mn)
++    var d_fused = ctx.enqueue_create_buffer[DType.float32](mn)
++    var ws = ctx.enqueue_create_buffer[DType.float32](identical_gemm_workspace_max_floats(m, n, k))
++    ctx.synchronize()
++    identical_gemm_into(ctx, t_q, a_q, b_q, ws, m, n, k, OP_NN)
++    ctx.synchronize()
++    identical_gemm_into(ctx, t_k, a_k, b_k, ws, m, n, k, OP_NN)
++    ctx.synchronize()
++    identical_gemm_into(ctx, t_v, a_v, b_v, ws, m, n, k, OP_NN)
++    ctx.synchronize()
++    ctx.enqueue_function[bwd_add3_kernel](
++        d_follow.unsafe_ptr(), t_q.unsafe_ptr(), t_k.unsafe_ptr(), t_v.unsafe_ptr(), Int32(mn),
++        grid_dim=((mn + BWD_TPB - 1) // BWD_TPB, 1, 1),
++        block_dim=(BWD_TPB, 1, 1),
++    )
++    ctx.synchronize()
++    identical_gemm_into(ctx, d_fused, a_q, b_q, ws, m, n, k, OP_NN)
++    ctx.synchronize()
++    identical_gemm_epi_into[GEMM_EPI_C_PLUS_CELL](ctx, d_fused, a_k, b_k, ws, m, n, k, OP_NN)
++    ctx.synchronize()
++    identical_gemm_epi_into[GEMM_EPI_C_PLUS_CELL](ctx, d_fused, a_v, b_v, ws, m, n, k, OP_NN)
++    ctx.synchronize()
++    var follow = download(ctx, d_follow, mn)
++    var fused = download(ctx, d_fused, mn)
++    tally.production(name, _mismatches(String("chain fused/add3"), fused, follow, mn))
++    _ = a_q
++    _ = a_k
++    _ = a_v
++    _ = b_q
++    _ = b_k
++    _ = b_v
++    _ = t_q
++    _ = t_k
++    _ = t_v
++    _ = d_follow
++    _ = d_fused
++    _ = ws
++    return True
++
++
++def run_checks() raises:
++    print("== gemm/checks/gemm_epilogue_suite.mojo [" + mode_name() + "] ==")
++    comptime if not GEMM_EPI_FUSES:
++        raise Error(
++            "gemm_epilogue_check: NOT COMPILED. This build has no fused GEMM store"
++            " (needs -D MOJOLEARN_GEMM_FAST_EPI=1, identical mode and a column whose"
++            " shipped GEMM body is the packed kernel); nothing was checked."
++        )
++    else:
++        var tally = CaseTally()
++        var group_ran = 0
++        var leaves_ran = 0
++        # (m, n, k): leaf groups + fold (3 and 6 leaves, ragged edges), then
++        # all leaves in one launch: one leaf, two leaves past the group rule.
++        var shapes: List[Int] = [
++            1536, 320, 320,
++            1000, 300, 700,
++            2048, 384, 1024,
++            520, 510, 96,
++            4096, 256, 128,
++            3000, 2100, 200,
++        ]
++        with DeviceContext() as ctx:
++            # driver-loop: over the check's cases
++            for s in range(len(shapes) // 3):
++                var m = shapes[3 * s]
++                var n = shapes[3 * s + 1]
++                var k = shapes[3 * s + 2]
++                var grouped = gemm_default_ksplit_leaves(m, n, k) > 0
++                var ran = 0
++                if _join_case[GEMM_EPI_C_PLUS_CELL](ctx, tally, m, n, k, OP_NN):
++                    ran += 1
++                if _join_case[GEMM_EPI_CELL_PLUS_C](ctx, tally, m, n, k, OP_NN):
++                    ran += 1
++                if _join_case[GEMM_EPI_C_PLUS_CELL](ctx, tally, m, n, k, OP_NT):
++                    ran += 1
++                if _join_case[GEMM_EPI_CELL_PLUS_C](ctx, tally, m, n, k, OP_TN):
++                    ran += 1
++                if grouped:
++                    group_ran += ran
++                else:
++                    leaves_ran += ran
++            if _chain_case(ctx, tally, 1536, 320, 320):
++                group_ran += 1
++            if _chain_case(ctx, tally, 520, 510, 96):
++                leaves_ran += 1
++        print("  fused cases: leaf groups + fold", group_ran, " all leaves", leaves_ran)
++        if group_ran == 0 or leaves_ran == 0:
++            raise Error(
++                "gemm_epilogue_check: VACUOUS, the fused store ran on "
++                + String(group_ran) + " group cases and " + String(leaves_ran)
++                + " all-leaves cases; both forms must run"
++            )
++        tally.finish(String("gemm_epilogue_check"))
+diff --git a/gemm/checks/gemm_identical.mojo b/gemm/checks/gemm_identical.mojo
+index 5a26b1966b..53fc108536 100644
+--- a/gemm/checks/gemm_identical.mojo
++++ b/gemm/checks/gemm_identical.mojo
+@@ -8905,10 +8905,17 @@ comptime GEMM_KPACK_LOADAHEAD = (
+     if is_defined["MOJOLEARN_GEMM_FAST_LOADAHEAD"]() else 1
+ )
+ 
+-# THE STORE EPILOGUE (`-D MOJOLEARN_GEMM_FAST_EPI=1`, default OFF, A/B owed: row gemm-seq-packed-epi-mlp). A
+-# product whose output is only ever read by a follower launch over the same cells stores the follower's result,
+-# so the follower launch is not issued. The kinds below are the followers' expressions, with `cell` the product's
+-# stored cell (`ftz(root)`, contract 5g).
++# lane fx-gemm-epi (2026-11-18, `-D MOJOLEARN_GEMM_FAST_EPI=1`, default OFF,
++# OPEN: no A/B yet). THE STORE EPILOGUE: a product whose output is only ever
++# joined to the value already in its destination stores the join, so the
++# follower add launch (`autograd/kernels/transformer.mojo` `bwd_add2_kernel`,
++# `bwd_add3_kernel`) is not issued. The kinds are the follower's expressions,
++# character for character, with `cell` the product's stored cell (`ftz(root)`,
++# contract 5g) and `prior` the destination word read before the store:
++#   GEMM_EPI_C_PLUS_CELL  ftz(ftz(prior) + ftz(cell))   bwd_add3's two joins
++#                         `ftz(ftz(va) + ftz(vb))`, `ftz(ftz(acc) + ftz(vc))`
++#   GEMM_EPI_CELL_PLUS_C  ftz(ftz(cell) + ftz(prior))   bwd_add2
++#                         `ftz(ftz(a) + ftz(bb))` with a = this product
+ # SAME BITS, by construction: the follower read the product back from memory
+ # (the stored `ftz(root)` word) and flushed it again; here the same word is
+ # flushed in a register (`ftz` is idempotent). One IEEE add, round to nearest
+@@ -8917,10 +8924,14 @@ comptime GEMM_KPACK_LOADAHEAD = (
+ # (`checks/numerics.mojo`: NVIDIA `llvm.nvvm.fma.rn.ftz.f(x, 1.0, -0.0)` and a
+ # NaN select, AMD a class test and a select, Apple a compare and a select, the
+ # host the integer spelling), never of a bare product, so neither LLVM's
+-# fp-contract nor ptxas has a multiply to fuse into this add.
+-# TOMBSTONE: MOJOLEARN_GEMM_FAST_EPI, its transformer-backward use (NOISE, A/B round 1 NVIDIA L40S, job nvc-ab-20261119T125554Z-6f7afc: lm-train-step 0.98 = the row's other bases, samba-train-step 1.05) kinds 1 and 2 (GEMM_EPI_C_PLUS_CELL, GEMM_EPI_CELL_PLUS_C: the join to the destination word) and gemm_epi_cell; the numbers 1 and 2 are not reused deleted 2026-11-19 by lane/fx-arm-cleanup; code recoverable at a7c89e7558. The define stays for the packed sequence route's fused follower store (owed row gemm-seq-packed-epi-mlp).
+-# Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_EPI-transformer-backward.patch
++# fp-contract nor ptxas has a multiply to fuse into this add; it is the add
++# `bwd_add2_kernel` compiles. Kinds that read a SECOND buffer (bias, bias +
++# ReLU, the activation derivative, a residual whose other term is not the
++# destination) need one more pointer in the kernel's argument block and are
++# not here: see the lane's RESULT file.
+ comptime GEMM_EPI_NONE = 0
++comptime GEMM_EPI_C_PLUS_CELL = 1
++comptime GEMM_EPI_CELL_PLUS_C = 2
+ # lane/fx-gemm-worklist (2026-11-19, coordinator follow-up): kinds that read a SECOND buffer. They are served by
+ # `identical_gemm_kpack_epi_ptr_kernel` only (below `_kpack_launch`), whose argument block carries the pointer
+ # `epi_p` and one Int32 `epi_i`; the single-product kernel keeps its arguments and passes the
+@@ -8943,7 +8954,7 @@ comptime GEMM_EPI_PLUS_BIAS = 3
+ #   GEMM_EPI_ACT_BWD      ftz(act_bwd_value(ftz(cell), ftz(epi_p[i n + j]), epi_i))
+ #                         `op_act_bwd`: d = ld(C[t]), z = ld(p1[t]) (the forward activation, dense, row stride n),
+ #                         `act_bwd_value`'s branch, `st`. `mul` and `sub` are sequence/ops.mojo's (the follower's).
+-# SAME BITS as the follower launch by the argument above: the follower read the stored `ftz(root)`
++# SAME BITS as the follower launch by the argument above `gemm_epi_cell`: the follower read the stored `ftz(root)`
+ # word back and flushed it; here the same word is flushed in a register. PLUS_BIAS is `op_bias` alone as well
+ # (`add(ld(C), ld(b[j]))` is `ftz(ftz(c) + ftz(b[j]))`, the expression above), so a sequence bias with no activation
+ # takes kind 3.
+@@ -8951,6 +8962,19 @@ comptime GEMM_EPI_BIAS_ACT = 4
+ comptime GEMM_EPI_ACT_BWD = 5
+ 
+ 
++@always_inline
++def gemm_epi_cell[EPI: Int](cell: Float32, prior: Float32) -> Float32:
++    """The stored word of a product cell under epilogue kind `EPI` (above).
++    `cell` is the product's own cell as the plain store writes it; `prior`
++    is the destination word loaded before the store."""
++    comptime assert EPI == GEMM_EPI_C_PLUS_CELL or EPI == GEMM_EPI_CELL_PLUS_C, (
++        "gemm_epi_cell: kind 1 (prior + cell) or 2 (cell + prior)"
++    )
++    comptime if EPI == GEMM_EPI_C_PLUS_CELL:
++        return ftz(ftz(prior) + ftz(cell))
++    return ftz(ftz(cell) + ftz(prior))
++
++
+ @always_inline
+ def _kpack_step[DIAG: Int](a: Float32, b: Float32, acc: Float32) -> Float32:
+     """DEVIATION 2705: the per-step seam of `identical_gemm_kpack_kernel`.
+@@ -9551,8 +9575,10 @@ def _kpack_kernel_body[
+     var outv = _fold_drain_local[NCELL, FS, HWFOLD](fl, occ)
+     comptime if DIAG == 4 or DIAG == 5:
+         outv = acc
+-    # `EPI != 0` (all-leaves mode only) stores the follower's result, ONE store per cell: the detect seam's exact
+-    # cell (FASTK) is chosen BEFORE the epilogue is applied, not written over the store afterwards.
++    # lane fx-gemm-epi: `EPI != 0` (all-leaves mode only) stores
++    # `gemm_epi_cell[EPI](cell, dst word)`, ONE store per cell: the destination
++    # is the epilogue's operand, so the detect seam's exact cell (FASTK) is
++    # chosen BEFORE the store, not written over it afterwards.
+     comptime assert EPI == GEMM_EPI_NONE or (not GROUP and not SAB and DIAG == 0), (
+         "identical_gemm_kpack_kernel: the store epilogue is the all-leaves"
+         " store of the clean body (no group nodes, no sabotage, no DIAG)"
+@@ -9590,6 +9616,8 @@ def _kpack_kernel_body[
+                         elif EPI == GEMM_EPI_ACT_BWD:
+                             # `op_act_bwd` on the stored word and the forward activation of the same cell.
+                             cell = ftz(act_bwd_value(ftz(cell), ftz(epi_p.unsafe_load(gi * n + gj)), Int(epi_i)))
++                        else:
++                            cell = gemm_epi_cell[EPI](cell, dst.unsafe_load(gi * n + gj))
+                     dst.unsafe_store(gi * n + gj, cell)
+     comptime if FASTK and EPI == GEMM_EPI_NONE:
+         # lane/amd-step-time: a step result of my cells was subnormal; every
+@@ -9689,6 +9717,7 @@ def identical_gemm_kpack_kernel[
+     DIAG: Int = 0,
+     HWFOLD: Bool = False,
+     GATHER: Bool = False,
++    EPI: Int = 0,
+ ](
+     dst: MutPointer[Float32, MutAnyOrigin],
+     a: MutPointer[Float32, MutAnyOrigin],
+@@ -9710,14 +9739,20 @@ def identical_gemm_kpack_kernel[
+     group mode `block_idx.y` is the leaf group. Same name, same arguments
+     and same launches as before the body moved into the helper.
+ 
+-    The comptime list is the body's without its last parameter (the store
+-    epilogue kind, 0 here): every positional instantiation written against
+-    the kernel before the split (13 parameters) names the same kernel. An
+-    epilogue kind needs `identical_gemm_kpack_epi_ptr_kernel`."""
++    The comptime list is the body's, in the body's order, `EPI` (lane
++    fx-gemm-epi, the store epilogue) last and passed through: every
++    positional instantiation written against the kernel before the split
++    (13 parameters, or 14 with `EPI`) names the same kernel, and with `EPI`
++    0 this is the kernel as it was. Kinds that read a second buffer
++    (`GEMM_EPI_PTR_FIRST` and above) need `identical_gemm_kpack_epi_ptr_kernel`."""
++    comptime assert EPI < GEMM_EPI_PTR_FIRST, (
++        "identical_gemm_kpack_kernel: this epilogue kind reads a second buffer;"
++        " launch identical_gemm_kpack_epi_ptr_kernel"
++    )
+     var q_in = Int32(0)
+     comptime if GROUP:
+         q_in = Int32(Int(block_idx.y))
+-    _kpack_kernel_body[RPT, CPT, TC, KS, FS, PAGES, GROUP, SAB, PAD, ALIGN, DIAG, HWFOLD, GATHER, GEMM_EPI_NONE](
++    _kpack_kernel_body[RPT, CPT, TC, KS, FS, PAGES, GROUP, SAB, PAD, ALIGN, DIAG, HWFOLD, GATHER, EPI](
+         dst, a, b, m_in, n_in, k_in, leaf_in, p_in, a_si_in, a_sp_in, b_sp_in, b_sj_in,
+         gleaves_in, groups_in, Int32(Int(block_idx.x)), q_in, dst, Int32(0),
+     )
+diff --git a/gemm/neural_dispatch.mojo b/gemm/neural_dispatch.mojo
+index ab598c2412..0356bc3933 100644
+--- a/gemm/neural_dispatch.mojo
++++ b/gemm/neural_dispatch.mojo
+@@ -12,6 +12,10 @@ from max.gpu.host import DeviceContext,DeviceBuffer
+ from checks.kernel_matrix import TARGET_COLUMN,COLUMN_NVIDIA
+ from checks.numerics import ftz
+ from checks.rtf_seam import rtf_mul_add
++from gemm.checks.gemm_epilogue import (
++    identical_gemm_epi_takes as _incumbent_epi_takes,
++    identical_gemm_epi_into as _incumbent_epi_into,
++)
+ from core.step_phase import step_count_device_alloc,step_count_sync
+ from gemm.checks.gemm_identical import (
+     identical_gemm_into as _incumbent_into,
+@@ -411,8 +415,27 @@ def identical_gemm[allow_vendor: Bool = True,ROLE: Int = ROLE_PROJECTION](
+     _ = workspace^
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_GEMM_FAST_EPI, its transformer-backward use (NOISE, A/B round 1 NVIDIA L40S, job nvc-ab-20261119T125554Z-6f7afc: lm-train-step 0.98 = the row's other bases, samba-train-step 1.05) gemm_workspace_epi_takes and gemm_workspace_run_epi (the join in the product's store), with gemm/checks/gemm_epilogue.mojo, its suite and its check deleted 2026-11-19 by lane/fx-arm-cleanup; code recoverable at a7c89e7558. The define stays for the packed sequence route's fused follower store (owed row gemm-seq-packed-epi-mlp).
+-# Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_EPI-transformer-backward.patch
++# lane fx-gemm-epi (2026-11-18, -D MOJOLEARN_GEMM_FAST_EPI=1, default OFF, OPEN: no A/B yet): the store epilogue.
++# A product joined to the value already in its destination, in the product's own final store
++# (gemm/checks/gemm_epilogue.mojo; kinds and the unchanged-bits argument beside gemm_epi_cell in gemm_identical.mojo).
++# Two free functions, so a caller decides where its operands go before any launch and GemmWorkspace gains no method.
++def gemm_workspace_epi_takes(m: Int,n: Int,k: Int) -> Bool:
++    """Whether gemm_workspace_run_epi fuses the join at (m, n, k) on this build. False without the define, on a
++    column or plan with no fused store, and under a changed neural profile (its kernel has no epilogue): the caller
++    then runs GemmWorkspace.run and its follower launch, unchanged."""
++    comptime if NEURAL_GEMM_EXPERIMENT_ENABLED:
++        return False
++    return _incumbent_epi_takes(m,n,k)
++
++
++def gemm_workspace_run_epi[EPI: Int](ctx: DeviceContext,mut workspace: GemmWorkspace,
++    mut c: DeviceBuffer[DType.float32],mut a: DeviceBuffer[DType.float32],
++    mut b: DeviceBuffer[DType.float32],m: Int,n: Int,k: Int,op: Int) raises:
++    """GemmWorkspace.run with the join in the store: c = EPI(op(A) . op(B), c), EPI 1 = ftz(ftz(c) + ftz(cell)),
++    2 = ftz(ftz(cell) + ftz(c)). Call only where gemm_workspace_epi_takes(m, n, k) is True (raises otherwise, before
++    any launch). Same workspace sizing and the same asynchronous contract as run."""
++    workspace._ensure(ctx,identical_gemm_workspace_max_floats(m,n,k))
++    _incumbent_epi_into[EPI](ctx,c,a,b,workspace.buffer,m,n,k,op)
+ 
+ 
+ # TOMBSTONE NN05 (MOJOLEARN_IDN_NEURAL_NN05, neural_gemm_pair=nn05, deleted
