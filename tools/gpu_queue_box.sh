@@ -27,7 +27,7 @@
 #   q backstop                                         (plain mode, lease) delete the pod if the dispatcher stops
 #
 # CONFIG. Files in the queue dir, written at install: slots (GPU count),
-# vendor (amd|nvidia), mode (systemd|plain), service (the systemd unit name),
+# vendor (amd|nvidia|cpu; cpu: the CPU check box of tools/cpu_central.sh, a slot is one concurrent job), mode (systemd|plain), service (the systemd unit name),
 # default_cap and max_cap (minutes; max_cap 0 = none). With no files, the
 # values are the central AMD box's (2 slots, amd, systemd, 720, none), so the
 # AMD install behaves as it did before this script was generalized.
@@ -316,6 +316,9 @@ runner)
         export GQ_JOB_ID=$id GQ_LANE=$LANE GQ_JOB_TOKEN=$token GQ_DEADLINE=$deadline   # GQ_DEADLINE: the cap, epoch s (the job's own cap guard)
         if [ "$VENDOR" = nvidia ]; then
             export CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=$got NVQ_JOB_ID=$id NVQ_LANE=$LANE
+        elif [ "$VENDOR" = cpu ]; then
+            # the CPU check box (tools/cpu_central.sh): a slot is one concurrent job, no device to hide
+            export CPUQ_JOB_ID=$id CPUQ_LANE=$LANE CPUQ_SLOT=$got
         else
             export ROCR_VISIBLE_DEVICES=$got HIP_VISIBLE_DEVICES=$(seq -s, 0 $((GPUS - 1))) AMDQ_JOB_ID=$id AMDQ_LANE=$LANE
         fi
