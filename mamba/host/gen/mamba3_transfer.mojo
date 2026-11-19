@@ -41,7 +41,7 @@ def m3_download(ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], n: Int
         var view = buf.create_sub_buffer[DType.float32](0, n)
         ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=view)
     ctx.synchronize()
-    var out = List[Float32](length=n, fill=Float32(0.0))
+    var out = List[Float32](unsafe_uninit_length=max(n, 0))
     if n > 0:
         unsafe_memcpy(dest=out.unsafe_ptr(), src=host.unsafe_ptr(), count=n)
     _ = host^
