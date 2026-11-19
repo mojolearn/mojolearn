@@ -164,7 +164,7 @@ def dispatch_fast_trial(wheel_dir, ref="", commit="", families="0x7ffffff", exac
     return token
 
 
-def dispatch(wheel_dir, ref="", commit="", dry=False, days=2, census=None, record=True):
+def dispatch(wheel_dir, ref="", commit="", dry=False, days=2, census=None, record=True, python=None):
     """Upload the core wheel, dispatch the workflow; returns the token its run-name carries. census: None applies
     the skip rule, True forces the frames census, False skips it. record=False (the pre-build probe wheel, whose
     native code is an earlier build's) never records its census as the branch's."""
@@ -187,8 +187,8 @@ def dispatch(wheel_dir, ref="", commit="", dry=False, days=2, census=None, recor
     url = upload_wheel(wheel, key, days)
     argv = ["gh", "workflow", "run", WORKFLOW, "--ref", ref, "-f", f"ref={commit}", "-f", f"wheel_url={url}",
             "-f", f"wheel_name={wheel.name}", "-f", f"wheel_sha256={digest}", "-f", f"token={token}"] + census_args
-    if getattr(args, "python", None):   # the workflow's own input (default: the release CPU column's)
-        argv += ["-f", f"python={args.python}"]
+    if python:   # the workflow's own input (default: the release CPU column's)
+        argv += ["-f", f"python={python}"]
     p = subprocess.run(argv, cwd=ROOT, capture_output=True, text=True)
     if p.returncode != 0:
         raise SystemExit(f"verify smoke: gh workflow run failed: {(p.stderr or p.stdout).strip()[-400:]}")
@@ -223,7 +223,7 @@ def main(argv=None):
         dispatch_fast_trial(a.wheel_dir, a.ref, a.commit, a.families, a.exact_families, a.shards, a.dry_run,
                             tests_from=a.tests_from)
         return 0
-    dispatch(a.wheel_dir, a.ref, a.commit, a.dry_run, census=a.census)
+    dispatch(a.wheel_dir, a.ref, a.commit, a.dry_run, census=a.census, python=a.python)
     return 0
 
 
