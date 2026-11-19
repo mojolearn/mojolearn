@@ -378,6 +378,11 @@ for name, kind, extra in FAMILIES:
         rows[name] = dict(status="unavailable", why=failed)
         continue
     failed, got, model = run(name, kind, extra, "fast")
+    if failed is not None and model is None and failed.startswith("TypeError") and "numeric_mode" in failed:
+        # The class has no `numeric_mode` parameter at all: no door of any family answers for it, so it says
+        # nothing about whether its family is whole (the summary leaves it out of the family's word).
+        rows[name] = dict(status="no_parameter", why=failed)
+        continue
     if failed is not None:
         # The family refuses the word at fit: nothing of it runs under `fast`.
         rows[name] = dict(status="refused", why=failed)
@@ -504,7 +509,7 @@ class BuiltInstallFamilies(unittest.TestCase):
         ran = 0
         for name, row in sorted(report["rows"].items()):
             with self.subTest(estimator=name):
-                if row["status"] == "unavailable":
+                if row["status"] in ("unavailable", "no_parameter"):
                     continue  # not runnable under `identical` either on this install
                 ran += 1
                 self.assertIn(row["status"], ("answered", "refused"), row.get("ops", ""))

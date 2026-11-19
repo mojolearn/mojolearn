@@ -42,7 +42,7 @@ TEST_FILE = "test_fast_selector.py"
 TEST_SELECT = "BuiltInstallFamilies"
 MASK_ALL = (1 << 23) - 1  # core/mode_answer.mojo MODE_FAMILIES_ALL
 UNIT_TIMEOUT = 1900  # the test's own child timeout is 1800 s
-STATUSES = ("answered", "mixed", "refused", "unavailable", "crashed")
+STATUSES = ("answered", "mixed", "refused", "unavailable", "no_parameter", "crashed")
 
 
 def mask(text: str) -> str:
@@ -204,9 +204,11 @@ def family_status(rows: list[dict]) -> str:
     for word in ("crashed", "mixed"):
         if word in seen:
             return word
-    real = seen - {"unavailable"}
+    # unavailable (not runnable under identical) and no_parameter (the class takes no numeric_mode, so no door
+    # answers for it) say nothing about the family's doors
+    real = seen - {"unavailable", "no_parameter"}
     if not real:
-        return "unavailable"
+        return "no_parameter" if "no_parameter" in seen else "unavailable"
     if len(real) == 1:
         return real.pop()
     return "mixed"  # its estimators disagree (one answered, one refused): not whole
@@ -241,7 +243,7 @@ def render(merged: dict, family_of: dict) -> str:
             for op, value in sorted(row.get("ops", {}).items()):
                 if value != "same":
                     lines.append(f"  - {op}: {value}")
-        refused = [(n, r) for n, r in sorted(rows.items()) if r["status"] in ("refused", "unavailable")]
+        refused = [(n, r) for n, r in sorted(rows.items()) if r["status"] in ("refused", "unavailable", "no_parameter")]
         if refused:
             lines += ["", "### refused at fit / unavailable", ""]
             lines += [f"- {n}: {r['status']}: {r.get('why', '')}" for n, r in refused]
