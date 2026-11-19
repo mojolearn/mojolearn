@@ -433,6 +433,80 @@ FAMILIES = [
     ["GaussianNB", "cls", {}],
 ]
 
+#: The walk (lane fx-fast-per-estimator, 2026-11-19): the public estimators with a `numeric_mode` parameter that
+#: FAMILIES does not cover, run only by the trial (tools/ops/fast_trial.py, or MOJOLEARN_FAST_ESTIMATORS naming one):
+#: their rows show which estimators the shared doors (RESOLVER, PROGRAM, METADATA) leave `mixed`. An estimator whose
+#: default construction does not fit the trial's small data reports `unavailable`, which is not a failure.
+WALK = [
+    ["DecisionTreeClassifier", "cls", {}],
+    ["AdaBoostClassifier", "cls", {"n_estimators": 4, "random_state": 0}],
+    ["BaggingClassifier", "cls", {"n_estimators": 4, "random_state": 0}],
+    ["DARTClassifier", "cls", {"n_estimators": 4}],
+    ["RidgeClassifier", "cls", {}],
+    ["Perceptron", "cls", {"random_state": 0}],
+    ["PassiveAggressiveClassifier", "cls", {"random_state": 0}],
+    ["LogisticRegressionCV", "cls", {}],
+    ["LinearSVC", "cls", {}],
+    ["NearestCentroid", "cls", {}],
+    ["GaussianProcessClassifier", "cls", {}],
+    ["LabelPropagation", "cls", {}],
+    ["LabelSpreading", "cls", {}],
+    ["Lasso", "reg", {}],
+    ["LassoCV", "reg", {}],
+    ["ElasticNetCV", "reg", {}],
+    ["RidgeCV", "reg", {}],
+    ["BayesianRidge", "reg", {}],
+    ["ARDRegression", "reg", {}],
+    ["HuberRegressor", "reg", {}],
+    ["SGDRegressor", "reg", {"random_state": 0}],
+    ["PassiveAggressiveRegressor", "reg", {"random_state": 0}],
+    ["Lars", "reg", {}],
+    ["LassoLars", "reg", {}],
+    ["QuantileRegressor", "reg", {}],
+    ["TweedieRegressor", "reg", {}],
+    ["QNRegressor", "reg", {}],
+    ["SVR", "reg", {}],
+    ["LinearSVR", "reg", {}],
+    ["DecisionTreeRegressor", "reg", {}],
+    ["ExtraTreesRegressor", "reg", {"n_estimators": 4, "random_state": 0}],
+    ["AdaBoostRegressor", "reg", {"n_estimators": 4, "random_state": 0}],
+    ["BaggingRegressor", "reg", {"n_estimators": 4, "random_state": 0}],
+    ["DARTRegressor", "reg", {"n_estimators": 4}],
+    ["GaussianProcessRegressor", "reg", {}],
+    ["PLSCanonical", "reg", {"n_components": 1}],
+    ["MiniBatchKMeans", "unsup", {"n_clusters": 2, "random_state": 0}],
+    ["BisectingKMeans", "unsup", {"n_clusters": 2, "random_state": 0}],
+    ["BayesianGaussianMixture", "unsup", {"n_components": 2, "random_state": 0}],
+    ["MeanShift", "unsup", {}],
+    ["AffinityPropagation", "unsup", {}],
+    ["OPTICS", "unsup", {}],
+    ["DBSCAN", "unsup", {}],
+    ["HDBSCAN", "unsup", {}],
+    ["KernelDensity", "unsup", {}],
+    ["FastICA", "unsup", {"n_components": 2, "random_state": 0}],
+    ["FactorAnalysis", "unsup", {"n_components": 2}],
+    ["SparsePCA", "unsup", {"n_components": 2, "random_state": 0}],
+    ["DictionaryLearning", "unsup", {"n_components": 2, "random_state": 0}],
+    ["GaussianRandomProjection", "unsup", {"n_components": 2, "random_state": 0}],
+    ["SparseRandomProjection", "unsup", {"n_components": 2, "random_state": 0}],
+    ["Isomap", "unsup", {"n_components": 2}],
+    ["LocallyLinearEmbedding", "unsup", {"n_components": 2}],
+    ["MDS", "unsup", {"n_components": 2, "random_state": 0}],
+    ["MinCovDet", "unsup", {"random_state": 0}],
+    ["EllipticEnvelope", "unsup", {"random_state": 0}],
+    ["Nystroem", "unsup", {"n_components": 4, "random_state": 0}],
+    ["RBFSampler", "unsup", {"n_components": 4, "random_state": 0}],
+    ["NearestNeighbors", "unsup", {}],
+    ["RadiusNeighbors", "unsup", {}],
+    ["LocalOutlierFactor", "unsup", {}],
+    ["OneClassSVM", "unsup", {}],
+    ["SGDOneClassSVM", "unsup", {"random_state": 0}],
+    ["UMAP", "unsup", {"random_state": 0}],
+    ["TSNE", "unsup", {"random_state": 0}],
+    ["KNNImputer", "unsup", {}],
+    ["RandomTreesEmbedding", "unsup", {"n_estimators": 4, "random_state": 0}],
+]
+
 #: The door family (core/mode_answer.mojo MODE_FAMILY_<name>) whose answer step each estimator's doors hold;
 #: "none" for a family with no answer step at all (always refused: maxabs, robust, kmeans, mixture, svm). The
 #: trial report (tools/ops/fast_trial.py) rolls the rows up by this name.
@@ -444,7 +518,21 @@ ESTIMATOR_FAMILY = {
     "PLSRegression": "PLS", "LinearRegression": "LINEAR", "Ridge": "LINEAR", "LogisticRegression": "LINEAR",
     "ElasticNet": "LINEAR", "SGDClassifier": "LINEAR", "GaussianNB": "PREP", "KernelRidge": "KERNEL",
     "KNeighborsClassifier": "NEIGHBORS", "KNeighborsRegressor": "NEIGHBORS", "KMeans": "none",
-    "GaussianMixture": "none", "SVC": "none",
+    "GaussianMixture": "MIXTURE", "SVC": "none",
+    "DecisionTreeClassifier": "FOREST", "DecisionTreeRegressor": "FOREST", "AdaBoostClassifier": "FOREST", "AdaBoostRegressor": "FOREST", "BaggingClassifier": "FOREST",
+    "BaggingRegressor": "FOREST", "ExtraTreesRegressor": "FOREST", "RandomTreesEmbedding": "FOREST", "DARTClassifier": "GBDT", "DARTRegressor": "GBDT",
+    "RidgeClassifier": "LINEAR", "Perceptron": "LINEAR", "PassiveAggressiveClassifier": "LINEAR", "LogisticRegressionCV": "LINEAR", "Lasso": "LINEAR",
+    "LassoCV": "LINEAR", "ElasticNetCV": "LINEAR", "RidgeCV": "LINEAR", "BayesianRidge": "LINEAR", "ARDRegression": "LINEAR",
+    "HuberRegressor": "LINEAR", "SGDRegressor": "LINEAR", "PassiveAggressiveRegressor": "LINEAR", "Lars": "LINEAR", "LassoLars": "LINEAR",
+    "QuantileRegressor": "LINEAR", "TweedieRegressor": "LINEAR", "QNRegressor": "LINEAR", "SGDOneClassSVM": "LINEAR", "NearestNeighbors": "NEIGHBORS",
+    "RadiusNeighbors": "NEIGHBORS", "GaussianProcessClassifier": "GP", "GaussianProcessRegressor": "GP", "BayesianGaussianMixture": "MIXTURE", "PLSCanonical": "PLS",
+    "FastICA": "DECOMP_KIT", "FactorAnalysis": "DECOMP_KIT", "SparsePCA": "DECOMP_KIT", "DictionaryLearning": "DECOMP_KIT", "GaussianRandomProjection": "DECOMP_KIT",
+    "SparseRandomProjection": "DECOMP_KIT", "Isomap": "DECOMP_KIT", "LocallyLinearEmbedding": "DECOMP_KIT", "MDS": "DECOMP_KIT", "MinCovDet": "DECOMP_KIT",
+    "EllipticEnvelope": "DECOMP_KIT", "Nystroem": "KERNEL", "RBFSampler": "KERNEL", "UMAP": "SPECTRAL", "TSNE": "SPECTRAL",
+    "LinearSVC": "none", "NearestCentroid": "none", "LabelPropagation": "none", "LabelSpreading": "none", "SVR": "none",
+    "LinearSVR": "none", "MiniBatchKMeans": "none", "BisectingKMeans": "none", "MeanShift": "none", "AffinityPropagation": "none",
+    "OPTICS": "none", "DBSCAN": "none", "HDBSCAN": "none", "KernelDensity": "none", "LocalOutlierFactor": "none",
+    "OneClassSVM": "none", "KNNImputer": "none",
 }
 
 
@@ -454,10 +542,10 @@ def selected_families():
     names = [n.strip() for n in os.environ.get("MOJOLEARN_FAST_ESTIMATORS", "").split(",") if n.strip()]
     if not names:
         return FAMILIES
-    unknown = sorted(set(names) - {row[0] for row in FAMILIES})
+    unknown = sorted(set(names) - {row[0] for row in FAMILIES + WALK})
     if unknown:
-        raise ValueError(f"MOJOLEARN_FAST_ESTIMATORS names estimators not in FAMILIES: {unknown}")
-    return [row for row in FAMILIES if row[0] in names]
+        raise ValueError(f"MOJOLEARN_FAST_ESTIMATORS names estimators not in FAMILIES or WALK: {unknown}")
+    return [row for row in FAMILIES + WALK if row[0] in names]
 
 
 class BuiltInstallFamilies(unittest.TestCase):

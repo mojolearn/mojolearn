@@ -137,7 +137,7 @@ def run_unit(python: str, tests_root: Path, out: Path, unit, code: str) -> dict:
 def cmd_run(a) -> int:
     tests_root = Path(a.tests_root).resolve()
     module = load_test(tests_root)
-    estimators = [row[0] for row in module.FAMILIES]
+    estimators = [row[0] for row in module.FAMILIES + list(getattr(module, "WALK", []))]
     todo = units(estimators, trials(a.families, a.exact), a.shard, a.shards)
     out = Path(a.out)
     (out / "units").mkdir(parents=True, exist_ok=True)
