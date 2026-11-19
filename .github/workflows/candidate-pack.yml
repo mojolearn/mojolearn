@@ -1,0 +1,114 @@
+name: Candidate pack
+
+# A MEASUREMENT BUILD'S PACK ON A FREE RUNNER (lane fx-pack-offload, 2026-11-19; Andrew: offload the laptop).
+# Dispatched by `tools/release.py candidate` (its linux-pack step, tools/release_remote_pack.py pack_on_github),
+# never by itself (light-checks.yml refuses any other workflow with a push or schedule trigger).
+#
+# One job: the build's records from the Mac (a presigned R2 GET in bundle_url, read from the event file and
+# masked, never interpolated: no repository secret), the Mac's paths mirrored, every leg's tree downloaded from
+# its own release-linux-build.yml run at once and verified, a B arm's base wheels from its base's pack run
+# (base_run), then the same command the Mac would run, `tools/release.py candidate --pack-here`: linux-wait's tree
+# checks, linux-assemble, linux-pack (packaging/linux/pack_wheel.py --local-version through pixi's pkg env,
+# packaging/linux/audit.sh in its pinned manylinux_2_28 and python:3.12-slim containers on the runner's native
+# Docker, the directory-entry strip, split_audit). Artifact candidate-final: final/ (linux/final), records.tar.gz,
+# runner.log, cores.txt. The Mac downloads it and writes candidate.json.
+#
+# CORES: the leg downloads run at once (one thread per leg), the core's audit first and then every other wheel's
+# audit and strip at once (tools/release.py step_linux_pack, audit.sh --cpus 2 each on the runner's 4 vCPU);
+# pack_wheel.py is one process (serial inside: zip writing of one wheel set). cores.txt records nproc and the load.
+run-name: "candidate-pack ${{ inputs.version }} @ ${{ inputs.commit }} [${{ inputs.tag }}]"
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: "the measurement build's source commit (40 hex)"
+        required: true
+      version:
+        description: "the measurement build's local version"
+        required: true
+      tooling_sha:
+        description: "the tooling commit the Mac dispatched from (checked out here)"
+        required: true
+      tag:
+        description: "the dispatcher's tag, to find this run"
+        required: true
+      bundle_url:
+        description: "presigned GET of the build's records (masked; never printed)"
+        required: true
+      bundle_sha256:
+        description: "sha256 of that bundle"
+        required: true
+      base_run:
+        description: "a B arm's base pack run (its candidate-final artifact holds the base wheels); empty: in the bundle or none"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  pack:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    steps:
+      - name: Inputs
+        env:
+          IN_COMMIT: ${{ inputs.commit }}
+          IN_TOOLING: ${{ inputs.tooling_sha }}
+          IN_SHA: ${{ inputs.bundle_sha256 }}
+          IN_BASE: ${{ inputs.base_run }}
+        run: |
+          set -eu
+          printf '%s' "$IN_COMMIT" | grep -Eq '^[0-9a-f]{40}$' || { echo "commit must be 40 hex"; exit 2; }
+          printf '%s' "$IN_TOOLING" | grep -Eq '^[0-9a-f]{40}$' || { echo "tooling_sha must be 40 hex"; exit 2; }
+          printf '%s' "$IN_SHA" | grep -Eq '^[0-9a-f]{64}$' || { echo "bundle_sha256 must be 64 hex"; exit 2; }
+          [ -z "$IN_BASE" ] || printf '%s' "$IN_BASE" | grep -Eq '^[1-9][0-9]*$' || { echo "base_run must be a run ID"; exit 2; }
+      - name: Free disk
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/.ghcup /usr/share/swift
+          df -h / | tail -1
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ inputs.tooling_sha }}
+          # full history: the candidate adds a worktree of the source commit and diffs it against the tooling
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: prefix-dev/setup-pixi@v0.10.1
+        with:
+          run-install: true
+          cache: true
+          environments: pkg
+      - name: Audit images (both at once)
+        run: |
+          set -u
+          for i in 1 2 3; do
+            docker pull -q quay.io/pypa/manylinux_2_28_x86_64 & a=$!
+            docker pull -q python:3.12-slim & b=$!
+            wait $a && wait $b && break
+            sleep 20
+          done
+      - name: Pack (release.py candidate --pack-here)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -u
+          ( while sleep 60; do echo "$(date -u +%H:%M:%S) nproc=$(nproc) load=$(cut -d' ' -f1-3 /proc/loadavg)"; done ) \
+            > "$RUNNER_TEMP/cores.txt" 2>&1 & probe=$!
+          rc=0
+          python3 tools/release_remote_pack.py runner --event "$GITHUB_EVENT_PATH" --out "$RUNNER_TEMP/out" \
+            --tmp "$RUNNER_TEMP" || rc=$?
+          kill "$probe" 2>/dev/null || true
+          cp "$RUNNER_TEMP/cores.txt" "$RUNNER_TEMP/out/cores.txt" 2>/dev/null || true
+          { echo "### candidate pack ${{ inputs.version }}"; echo '```'; tail -n 25 "$RUNNER_TEMP/out/runner.log" 2>/dev/null
+            echo "cores (nproc, 1/5/15-min load, every minute):"; tail -n 15 "$RUNNER_TEMP/cores.txt" 2>/dev/null
+            ls -la "$RUNNER_TEMP/out/final" 2>/dev/null; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          exit $rc
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: candidate-final
+          path: ${{ runner.temp }}/out
+          retention-days: 14
+          if-no-files-found: error

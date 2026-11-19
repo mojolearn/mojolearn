@@ -3419,6 +3419,11 @@ class Release(release_identity_wheels.IdentityOnWheels):
         return rec.get("result") if rec.get("tooling_commit") == self.tooling_commit else None
 
     def step_linux_builds(self):
+        if candidate_pack(self) == "here" and not self.dry and read_json(self.plan_path) != self.plan():
+            # the pack runner packs the Mac's plan, never one of its own (its evidence root holds only the records
+            # the Mac sent): a plan it would make differently is refused, not packed
+            raise StepFailed(f"the pack runner's reuse plan differs from the Mac's {self.plan_path}; pack this "
+                             "build with --pack local")
         legs = linux_legs(self)
         for line in self.linux_group_plan():
             self.say("  " + line)
