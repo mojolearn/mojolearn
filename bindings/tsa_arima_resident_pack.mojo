@@ -18,6 +18,7 @@ from bindings.p3nc_fitted_freeze_unpack import fitted_is_freezable_any, fitted_f
 from bindings.py_balanced import py_call, py_get, py_contains
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_arrays_door import classical_address
+from bindings.tsa_keys_unpack import tsa_keys
 
 # The resident fitted state of a fitted model (lane ne1-a-decomp-tsa, plan
 # section A, rows N028/N029): one prepared-owner record per model, outside
@@ -38,13 +39,14 @@ def arima_resident_mint(model: PythonObject, fields: PythonObject, entries: Pyth
     fitted arrays that cannot be frozen (a caller-assigned ndarray: its
     words could change under a device copy, plan section A's read-only
     rule)."""
-    var prepare = py_get(entries, "arima_resident_prepare")
-    var release = py_get(entries, "arima_resident_release")
-    if prepare is None or release is None or not py_contains(entries, "arima_predict_resident"):
+    var nk = tsa_keys()
+    var prepare = py_get(entries, nk[].k_arima_resident_prepare)
+    var release = py_get(entries, nk[].k_arima_resident_release)
+    if prepare is None or release is None or not py_contains(entries, nk[].k_arima_predict_resident):
         return PythonObject(None)
-    var y_obj = py_get(fields, "_y")
-    var params_obj = py_get(fields, "params_")
-    var ex_obj = py_get(fields, "_exog", PythonObject(None))
+    var y_obj = py_get(fields, nk[].k__y)
+    var params_obj = py_get(fields, nk[].k_params_)
+    var ex_obj = py_get(fields, nk[].k__exog, PythonObject(None))
     if not fitted_is_freezable_any(y_obj) or not fitted_is_freezable_any(params_obj):
         return PythonObject(None)
     if words[10] > 0 and not fitted_is_freezable_any(ex_obj):

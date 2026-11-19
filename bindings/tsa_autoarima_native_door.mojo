@@ -12,6 +12,8 @@ from bindings.classical_arrays_door import classical_address, classical_typed
 from bindings.tsa_arima_native_door import arima_fit, _adopt, _no_exog
 from bindings.tsa_hw_native_door import tsa_array
 from providers.python.array_metadata_pyapi_door import ArrayMetadata, ArrayPin
+from bindings.tsa_keys_unpack import tsa_keys
+from bindings.py_balanced import py_item
 
 
 
@@ -23,29 +25,31 @@ def _new_arima(order: PythonObject, sorder: PythonObject, k: Int, maxiter: Int, 
     """`ARIMA(order=..., seasonal_order=..., trend="c" if k else "n",
     maxiter=...)` for a search order: the constructor's fields, written
     natively (a search order is already the normalized integer tuple)."""
+    var nk = tsa_keys()
     var b = _b()
     var model = py_call(b.object.__new__, autoarima_model_class(context))
-    var fields = _fields(model, context["arima_class"])
+    var fields = _fields(model, py_item(context, nk[].k_arima_class))
     var o = py_call(b.tuple, order)
     var so = py_call(b.tuple, sorder)
-    py_setitem(fields, "order", o)
-    py_setitem(fields, "seasonal_order", so)
-    py_setitem(fields, "trend", "c" if k else "n")
-    py_setitem(fields, "k_", k)
-    py_setitem(fields, "method", "ml")
-    py_setitem(fields, "maxiter", maxiter)
-    py_setitem(fields, "verbose", False)
-    py_setitem(fields, "output_type", PythonObject(None))
-    py_setitem(fields, "n_exog_", 0)
+    py_setitem(fields, nk[].k_order, o)
+    py_setitem(fields, nk[].k_seasonal_order, so)
+    py_setitem(fields, nk[].k_trend, "c" if k else "n")
+    py_setitem(fields, nk[].k_k_, k)
+    py_setitem(fields, nk[].k_method, "ml")
+    py_setitem(fields, nk[].k_maxiter, maxiter)
+    py_setitem(fields, nk[].k_verbose, False)
+    py_setitem(fields, nk[].k_output_type, PythonObject(None))
+    py_setitem(fields, nk[].k_n_exog_, 0)
     var complexity = Int(py=o[0]) + Int(py=o[2]) + Int(py=so[0]) + Int(py=so[2]) + k + 1
-    py_setitem(fields, "complexity_", complexity)
-    py_setitem(fields, "numeric_mode", PythonObject(None))
+    py_setitem(fields, nk[].k_complexity_, complexity)
+    py_setitem(fields, nk[].k_numeric_mode, PythonObject(None))
     return model
 
 
 def autoarima_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    var fields = _fields(model, context["autoarima_class"])
-    var models = py_get(fields, "models")
+    var nk = tsa_keys()
+    var fields = _fields(model, py_item(context, nk[].k_autoarima_class))
+    var models = py_get(fields, nk[].k_models)
     if models is None:
         raise Error("RuntimeError: AutoARIMA: call search() before fit()")
     if py_type(models) is not py_type(Python.list()):
@@ -58,20 +62,20 @@ def autoarima_fit(model: PythonObject, args: PythonObject, context: PythonObject
     var maxiter = _integer(args[1], context)
     if h != 1e-8 or _integer(args[3], context) != 0 or String(args[2]) != "ml":
         raise Error("NotImplementedError: AutoARIMA.fit: method ml with the default h only")
-    var reuse = py_get(fields, "_reuse")
-    var ids_all = fields["_ids"]
+    var reuse = py_get(fields, nk[].k__reuse)
+    var ids_all = py_item(fields, nk[].k__ids)
     if py_type(ids_all) is not py_type(Python.list()) or len(ids_all) != len(models):
         raise Error("TypeError: AutoARIMA model groups require matching native index lists")
     if reuse is not None and (py_type(reuse) is not py_type(Python.list()) or len(reuse) != len(models)):
         raise Error("TypeError: AutoARIMA reuse metadata requires a matching native list")
     var endog_pin = ArrayPin()
-    var endog = _packed(fields["_endog"], "endog", context, endog_pin)
+    var endog = _packed(py_item(fields, nk[].k__endog), "endog", context, endog_pin)
     if len(endog.shape) != 2:
         raise Error("ValueError: AutoARIMA endog must be a matrix")
     var rows = endog.shape[0]
     var width = endog.shape[1]
     var fitted = Python.list()
-    var search_maxiter = py_get(fields, "_search_maxiter")
+    var search_maxiter = py_get(fields, nk[].k__search_maxiter)
     var iterations = -1 if search_maxiter is None else _integer(search_maxiter, context)
     var block_cache = Optional[_SearchBlock]()
     for i in range(len(models)):  # driver-loop: over chosen order groups
@@ -94,12 +98,12 @@ def autoarima_fit(model: PythonObject, args: PythonObject, context: PythonObject
         if len(ids.shape) != 1:
             raise Error("ValueError: AutoARIMA group indices must be a vector")
         var y = classical_typed(Python.tuple(ids.count, width), "<f4", context)
-        _ = py_call_typed(context["base_gather_rows_bytes"], endog.source.addr, classical_address(y), ids.source.addr,
+        _ = py_call_typed(py_item(context, nk[].k_base_gather_rows_bytes), endog.source.addr, classical_address(y), ids.source.addr,
                           rows, ids.count, width * 4)
         var saved = PythonObject(None) if reuse is None else reuse[i]
         if saved is not None and maxiter == iterations:
             _adopt_reuse(m, y, saved, block_cache, ids.count, width,
-                         Int(py=_fields(m, context["arima_class"])["complexity_"]), context)
+                         Int(py=py_item(_fields(m, py_item(context, nk[].k_arima_class)), nk[].k_complexity_)), context)
         else:
             _ = arima_fit(m, Python.tuple(y, PythonObject(None)), context)
         _ = py_call(fitted.append, m)
@@ -107,7 +111,7 @@ def autoarima_fit(model: PythonObject, args: PythonObject, context: PythonObject
         _ = ids_pin^
         _ = y
     var updates = Python.dict()
-    py_setitem(updates, "_fitted", fitted)
+    py_setitem(updates, nk[].k__fitted, fitted)
     autoarima_commit(fields, updates, context)
     _ = endog
     _ = endog_pin^  # the door's pin held endog through every gather
@@ -165,6 +169,7 @@ struct _SearchBlock(Movable):
 
 def _adopt_reuse(model: PythonObject, y: PythonObject, saved: PythonObject, mut cache: Optional[_SearchBlock],
                  count: Int, n_obs: Int, complexity: Int, context: PythonObject) raises:
+    var nk = tsa_keys()
     var tuple_type = py_type(Python.tuple())
     if py_type(saved) is not tuple_type or len(saved) != 3:
         raise Error("TypeError: AutoARIMA search reuse requires a native triple")
@@ -198,7 +203,7 @@ def _adopt_reuse(model: PythonObject, y: PythonObject, saved: PythonObject, mut 
     var x0 = tsa_array("f", "<f4", Python.tuple(count, complexity), count * complexity, 4, context)
     var stats = tsa_array("f", "<f4", Python.tuple(2 * count), 2 * count, 4, context)
     var result_flags = tsa_array("i", "<i4", Python.tuple(2 * count), 2 * count, 4, context)
-    var gather = context["base_gather_rows_bytes"]
+    var gather = py_item(context, nk[].k_base_gather_rows_bytes)
     _ = py_call_typed(gather, f.source.addr + 4 * offset, classical_address(params), local.source.addr,
                       rows, count, 4 * complexity)
     _ = py_call_typed(gather, f.source.addr + 4 * (offset + rows * complexity), classical_address(x), local.source.addr,
@@ -213,7 +218,7 @@ def _adopt_reuse(model: PythonObject, y: PythonObject, saved: PythonObject, mut 
     _ = py_call_typed(gather, flags.source.addr + 8 * rows * trial, fa, local.source.addr, rows, count, 4)
     _ = py_call_typed(gather, flags.source.addr + 4 * (2 * rows * trial + rows), fa + 4 * count,
                       local.source.addr, rows, count, 4)
-    _adopt(model, _fields(model, context["arima_class"]), y, False, 2, count, n_obs, _no_exog(context), 0,
+    _adopt(model, _fields(model, py_item(context, nk[].k_arima_class)), y, False, 2, count, n_obs, _no_exog(context), 0,
            complexity, params, x, x0, stats, result_flags, PythonObject(None), context)
     _ = local
     _ = local_pin^

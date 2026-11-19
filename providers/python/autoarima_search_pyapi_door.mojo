@@ -16,6 +16,8 @@ from providers.python.array_metadata_pyapi_door import ArrayPin
 from arima.autoarima_search_run import _penalty
 from providers.python.autoarima_owner_pyapi_unpack import autoarima_commit
 from bindings.py_optional import py_present
+from bindings.tsa_keys_unpack import tsa_keys
+from bindings.py_balanced import py_item
 
 
 struct _Candidate(Copyable, Movable):
@@ -43,8 +45,9 @@ struct _Candidate(Copyable, Movable):
 
 
 def _array(count: Int, code: Int, context: PythonObject) raises -> PythonObject:
+    var nk = tsa_keys()
     var key = Python.tuple("f" if code < 2 else "i", 4 if code == 0 or code == 2 else 8)
-    return sequential_array(Python.tuple(max(count, 1)), context["numeric_dtypes"][key], context)
+    return sequential_array(Python.tuple(max(count, 1)), py_item(context, nk[].k_numeric_dtypes)[key], context)
 
 
 def _base(context: PythonObject, name: String) raises -> PythonObject:
@@ -132,7 +135,8 @@ def _string(value: PythonObject, name: String) raises -> String:
 
 
 def autoarima_search(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    var fields = _fields(model, context["autoarima_class"])
+    var nk = tsa_keys()
+    var fields = _fields(model, py_item(context, nk[].k_autoarima_class))
     var criterion = _string(args[8], "ic")
     if criterion != "aic" and criterion != "aicc" and criterion != "bic":
         raise Error("ValueError: AutoARIMA: ic must be aic, aicc or bic")
@@ -163,15 +167,15 @@ def autoarima_search(model: PythonObject, args: PythonObject, context: PythonObj
     if not auto_k:
         explicit_k = _options("k", args[7], 0, 1, context)
     var y_pin = ArrayPin()
-    var y = _packed(fields["_endog"], "endog", context, y_pin)
+    var y = _packed(py_item(fields, nk[].k__endog), "endog", context, y_pin)
     if len(y.shape) != 2 or y.shape[0] <= 0 or y.shape[1] <= 0:
         raise Error("ValueError: AutoARIMA endog must be a nonempty matrix")
     var batch = y.shape[0]
     var n_obs = y.shape[1]
-    if _integer(fields["batch_size"], context) != batch or _integer(fields["n_obs"], context) != n_obs:
+    if _integer(py_item(fields, nk[].k_batch_size), context) != batch or _integer(py_item(fields, nk[].k_n_obs), context) != n_obs:
         raise Error("ValueError: AutoARIMA stored dimensions disagree with endog")
     var dummy = _new_arima(Python.tuple(1, 0, 0), Python.tuple(0, 0, 0, 0), 1, maxiter, context)
-    var entries = _arima_entries(dummy, _fields(dummy, context["arima_class"]), context)
+    var entries = _arima_entries(dummy, _fields(dummy, py_item(context, nk[].k_arima_class)), context)
     var fast_mode = _optional(entries, "arima_fast_search_mode")
     var caps = _optional(entries, "arima_order_caps")
     var device_ic = (caps & 4) != 0
@@ -193,15 +197,15 @@ def autoarima_search(model: PythonObject, args: PythonObject, context: PythonObj
             if ds[i] != i:
                 raise Error("NotImplementedError: AutoARIMA: a d option list must be 0, 1, ..., d_max")
         if fast_mode & 32 and seasonal_d == 0:
-            var written = Int(py=py_call_typed(entries["arima_ndiffs_kpss"], y.source.addr, classical_address(d32),
+            var written = Int(py=py_call_typed(py_item(entries, nk[].k_arima_ndiffs_kpss), y.source.addr, classical_address(d32),
                                               Python.list(batch, n_obs, ds[len(ds) - 1])))
             if written != batch:
                 raise Error("RuntimeError: AutoARIMA: incomplete ndiffs output")
         else:
-            var tsa = context["tsa_bindings"][context["backend_fields"]["_DEFAULT_MODE"]]
+            var tsa = py_item(context, nk[].k_tsa_bindings)[py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)]
             if py_type(tsa) is py_type(PythonObject("")):
                 raise Error(String(tsa))
-            _ = py_call_typed(tsa["select_d"], y.source.addr, classical_address(d32),
+            _ = py_call_typed(py_item(tsa, nk[].k_select_d), y.source.addr, classical_address(d32),
                               Python.list(batch, n_obs, seasonal_d, period, ds[len(ds) - 1], 0.05))
     var dser = _cast(d32, 2, 3, batch, context)
     var dcounts = _counts(d32, 2, batch, 3, context)
@@ -268,7 +272,7 @@ def autoarima_search(model: PythonObject, args: PythonObject, context: PythonObj
             if caps & 1 and (plain or caps & 2):
                 var best32 = _array(count, 2, context)
                 var out = _array(count if device_ic else trials * count, 0, context)
-                var written = Int(py=py_call_typed(entries["arima_order_search_device"], classical_address(sub),
+                var written = Int(py=py_call_typed(py_item(entries, nk[].k_arima_order_search_device), classical_address(sub),
                                   classical_address(out), classical_address(best32), packed, pens,
                                   Python.list(count, n_obs, d, seasonal_d, period, maxiter, 1 if device_ic else 0)))
                 # best32 is only read back on the device-IC route; keep its
@@ -298,12 +302,12 @@ def autoarima_search(model: PythonObject, args: PythonObject, context: PythonObj
                 if _optional(entries, "arima_search_reuse_enabled"):
                     var fitf = _array(off, 0, context)
                     var fiti = _array(2 * count * trials, 2, context)
-                    written = Int(py=py_call_typed(entries["arima_order_search_fit"], classical_address(sub),
+                    written = Int(py=py_call_typed(py_item(entries, nk[].k_arima_order_search_fit), classical_address(sub),
                                   classical_address(grouped_ll.value()), classical_address(fitf), classical_address(fiti), compact,
                                   Python.list(count, n_obs, d, maxiter)))
                     search_fit = Python.tuple(fitf, fiti, offsets, count, grouped_ll.value())
                 else:
-                    written = Int(py=py_call_typed(entries["arima_order_search"], classical_address(sub),
+                    written = Int(py=py_call_typed(py_item(entries, nk[].k_arima_order_search), classical_address(sub),
                                   classical_address(grouped_ll.value()), compact, Python.list(count, n_obs, d, maxiter)))
                 if written == 0:
                     grouped_ll = Optional[PythonObject]()
@@ -319,7 +323,7 @@ def autoarima_search(model: PythonObject, args: PythonObject, context: PythonObj
             var best_ic_address = classical_address(best_ic)
             var best_address = classical_address(best)
             var grouped_address = 0 if not grouped_ll else Int(py=classical_address(grouped_ll.value()))
-            var arima_class = context["arima_class"]
+            var arima_class = py_item(context, nk[].k_arima_class)
             for trial in range(trials):  # driver-loop: over candidate order fits and compiled IC folds
                 ref order = grid[trial]
                 var llf = PythonObject(None)
@@ -329,7 +333,7 @@ def autoarima_search(model: PythonObject, args: PythonObject, context: PythonObj
                         Python.tuple(order.seasonal_p, seasonal_d, order.seasonal_q, order.period), order.intercept, maxiter, context)
                     _ = arima_fit(m, Python.tuple(sub, PythonObject(None)), context)
                     var state = _fields(m, arima_class)
-                    llf = _cast(state["llf_"], 1, 0, count, context)
+                    llf = _cast(py_item(state, nk[].k_llf_), 1, 0, count, context)
                     address = Int(py=classical_address(llf))
                 else:
                     address = grouped_address + trial * count * 4
@@ -365,16 +369,16 @@ def autoarima_search(model: PythonObject, args: PythonObject, context: PythonObj
     _ = dcounts
     # Commit finished search state only after every native candidate group returns.
     var updates = Python.dict()
-    py_setitem(updates, "d_", dser)
-    py_setitem(updates, "models", models)
-    py_setitem(updates, "_ids", ids_all)
-    py_setitem(updates, "_reuse", reuse_all)
-    py_setitem(updates, "_fitted", fitted)
-    py_setitem(updates, "_search_maxiter", maxiter)
-    py_setitem(updates, "_ic", criterion)
-    py_setitem(updates, "_root_check", (fast_mode & 16) != 0)
-    py_setitem(updates, "order_", order_out)
-    py_setitem(updates, "ic_", ic_out)
+    py_setitem(updates, nk[].k_d_, dser)
+    py_setitem(updates, nk[].k_models, models)
+    py_setitem(updates, nk[].k__ids, ids_all)
+    py_setitem(updates, nk[].k__reuse, reuse_all)
+    py_setitem(updates, nk[].k__fitted, fitted)
+    py_setitem(updates, nk[].k__search_maxiter, maxiter)
+    py_setitem(updates, nk[].k__ic, criterion)
+    py_setitem(updates, nk[].k__root_check, (fast_mode & 16) != 0)
+    py_setitem(updates, nk[].k_order_, order_out)
+    py_setitem(updates, nk[].k_ic_, ic_out)
     autoarima_commit(fields, updates, context)
     _ = y
     _ = y_pin^  # the door's pin held endog through every RUN read

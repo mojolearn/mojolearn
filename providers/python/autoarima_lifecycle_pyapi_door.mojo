@@ -25,6 +25,8 @@ from bindings.tsa_arima_resident_pack import (
     arima_resident_mint,
 )
 from arima.tsa_arima_resident_run import arima_resident_words
+from bindings.tsa_keys_unpack import tsa_keys
+from bindings.py_balanced import py_item
 
 comptime _F32 = MutPointer[Float32, MutUntrackedOrigin]
 comptime _REFUSE_DOUBLE = "TypeError: AutoARIMA: float64 is refused; pass float32 (no float64 on the device)"
@@ -34,10 +36,11 @@ comptime _FIELDS_ROW_SLOT = "xseq_fields_row_v1"  # p3-cnn-sequence-tsa class re
 
 
 def _fields(model: PythonObject, cls: PythonObject) raises -> PythonObject:
+    var nk = tsa_keys()
     var b = native_loaded_module("builtins")
     if py_type(model) is not cls or py_type(cls) is not b.type:
         raise Error("TypeError: AutoARIMA requires its connected native model classes")
-    var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
+    var mro = py_call(py_item(b.type.__dict__, nk[].k___mro__).__get__, cls)
     # p3-cnn-sequence-tsa: the MRO row whose `__dict__` descriptor serves the
     # instance storage is kept per class under the type watcher, and the
     # instance keys are re-checked only after the dict changed (dictionary
@@ -50,8 +53,8 @@ def _fields(model: PythonObject, cls: PythonObject) raises -> PythonObject:
         start = Int(py=kept)
         stop = start + 1
     for i in range(start, stop):  # driver-loop: over native instance dictionary descriptors
-        var own = py_call(b.type.__dict__["__dict__"].__get__, mro[i])
-        var descriptor = py_get(own, "__dict__")
+        var own = py_call(py_item(b.type.__dict__, nk[].k___dict__).__get__, mro[i])
+        var descriptor = py_get(own, nk[].k___dict__)
         if descriptor is not None and py_type(descriptor) is py_type(b.memoryview.obj):
             var fields = py_call(descriptor.__get__, model)
             if py_type(fields) is not b.dict:
@@ -70,9 +73,10 @@ def _fields(model: PythonObject, cls: PythonObject) raises -> PythonObject:
 
 
 def _integer_object(value: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = tsa_keys()
     var cls = py_type(value)
     var b = native_loaded_module("builtins")
-    if cls is not b.int and cls is not b.float and cls is not b.bool and cls is not b.str and cls is not b.bytes and not _one_of(cls, context["scalar_types"]):
+    if cls is not b.int and cls is not b.float and cls is not b.bool and cls is not b.str and cls is not b.bytes and not _one_of(cls, py_item(context, nk[].k_scalar_types)):
         raise Error("TypeError: AutoARIMA numeric settings require native scalar values")
     return py_call(b.int, value)
 
@@ -82,8 +86,9 @@ def _integer(value: PythonObject, context: PythonObject) raises -> Int:
 
 
 def _number(value: PythonObject, context: PythonObject) raises -> Float64:
+    var nk = tsa_keys()
     var cls = py_type(value)
-    if cls is not py_type(PythonObject(0)) and cls is not py_type(PythonObject(0.0)) and cls is not py_type(PythonObject(True)) and not _one_of(cls, context["scalar_types"]):
+    if cls is not py_type(PythonObject(0)) and cls is not py_type(PythonObject(0.0)) and cls is not py_type(PythonObject(True)) and not _one_of(cls, py_item(context, nk[].k_scalar_types)):
         raise Error("TypeError: AutoARIMA numeric settings require native scalar values")
     return Float64(py=py_call(native_loaded_module("builtins").float, value))
 
@@ -107,7 +112,8 @@ def _series_buffer(value: PythonObject, name: String, refusal: String, context: 
 
 
 def autoarima_initialize(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    var fields = _fields(model, context["autoarima_class"])
+    var nk = tsa_keys()
+    var fields = _fields(model, py_item(context, nk[].k_autoarima_class))
     var source_pin = ArrayPin()
     var source = _series_buffer(args[0], "endog", _REFUSE_DOUBLE, context, source_pin)
     var rank = len(source.shape)
@@ -132,12 +138,12 @@ def autoarima_initialize(model: PythonObject, args: PythonObject, context: Pytho
         _ = admitted_cast_nd_f32(source.source.addr, source.shape, strides, source.source.itemsize, source.source.kind,
                      _F32(unsafe_from_address=Int(py=classical_address(out))))
     var updates = Python.dict()
-    py_setitem(updates, "endog", args[0])
-    py_setitem(updates, "_endog", out)
-    py_setitem(updates, "batch_size", rows)
-    py_setitem(updates, "n_obs", cols)
-    py_setitem(updates, "models", Python.list())
-    forecast_commit(fields, updates, context["tsa_owner_context"])
+    py_setitem(updates, nk[].k_endog, args[0])
+    py_setitem(updates, nk[].k__endog, out)
+    py_setitem(updates, nk[].k_batch_size, rows)
+    py_setitem(updates, nk[].k_n_obs, cols)
+    py_setitem(updates, nk[].k_models, Python.list())
+    forecast_commit(fields, updates, py_item(context, nk[].k_tsa_owner_context))
     _ = source
     _ = source_pin^
     return PythonObject(None)
@@ -154,23 +160,24 @@ def _packed(value: PythonObject, name: String, context: PythonObject, mut pin: A
 
 
 def autoarima_forecast(model: PythonObject, args: PythonObject, context: PythonObject, prediction: Bool = False) raises -> PythonObject:
-    var fields = _fields(model, context["autoarima_class"])
+    var nk = tsa_keys()
+    var fields = _fields(model, py_item(context, nk[].k_autoarima_class))
     if (args[2] if prediction else args[1]) is not None:
         raise Error("NotImplementedError: AutoARIMA: prediction intervals (level) are not implemented")
-    var observations = _integer(fields["n_obs"], context)
+    var observations = _integer(py_item(fields, nk[].k_n_obs), context)
     var start = _integer(args[0], context) if prediction else observations
     var end = (observations if args[1] is None else _integer(args[1], context)) if prediction else observations + _integer(args[0], context)
     var steps = end - start
     if steps < 1:
         raise Error("ValueError: AutoARIMA needs start < end and forecast steps >= 1")
-    var fitted = py_get(fields, "_fitted")
-    var ids_all = py_get(fields, "_ids")
+    var fitted = py_get(fields, nk[].k__fitted)
+    var ids_all = py_get(fields, nk[].k__ids)
     var list_type = py_type(Python.list())
     if fitted is None:
         raise Error("RuntimeError: AutoARIMA: call fit() first")
     if py_type(fitted) is not list_type or py_type(ids_all) is not list_type or len(fitted) != len(ids_all):
         raise Error("TypeError: AutoARIMA group state requires matching native lists")
-    var batch = _integer(fields["batch_size"], context)
+    var batch = _integer(py_item(fields, nk[].k_batch_size), context)
     if batch <= 0:
         raise Error("ValueError: AutoARIMA batch_size must be positive")
     var out = classical_typed(Python.tuple(batch, steps), "<f4", context)
@@ -178,23 +185,23 @@ def autoarima_forecast(model: PythonObject, args: PythonObject, context: PythonO
     for group in range(len(fitted)):  # driver-loop: over selected order groups, one compiled forecast each
         if fitted[group] is None:
             raise Error("RuntimeError: AutoARIMA: call fit() first")
-        var state = _fields(fitted[group], context["arima_class"])
-        var order = state["order"]
-        var seasonal = state["seasonal_order"]
+        var state = _fields(fitted[group], py_item(context, nk[].k_arima_class))
+        var order = py_item(state, nk[].k_order)
+        var seasonal = py_item(state, nk[].k_seasonal_order)
         classical_admit_value(Python.tuple(order, seasonal), context)
         if py_type(order) is not py_type(Python.tuple()) or len(order) != 3 or py_type(seasonal) is not py_type(Python.tuple()) or len(seasonal) != 4:
             raise Error("TypeError: AutoARIMA fitted orders require native tuples")
-        var rows = _integer(state["batch_size_"], context)
-        var n_obs = _integer(state["n_obs_"], context)
-        var k = _integer(state["k_"], context)
-        var n_exog = _integer(state["n_exog_"], context)
+        var rows = _integer(py_item(state, nk[].k_batch_size_), context)
+        var n_obs = _integer(py_item(state, nk[].k_n_obs_), context)
+        var k = _integer(py_item(state, nk[].k_k_), context)
+        var n_exog = _integer(py_item(state, nk[].k_n_exog_), context)
         if rows <= 0 or n_obs <= 0 or n_exog != 0 or k < 0 or k > 1:
             raise Error("ValueError: AutoARIMA fitted dimensions are invalid")
         var y_pin = ArrayPin()
         var params_pin = ArrayPin()
         var ids_pin = ArrayPin()
-        var y = _packed(state["_y"], "endog", context, y_pin)
-        var params = _packed(state["params_"], "params", context, params_pin)
+        var y = _packed(py_item(state, nk[].k__y), "endog", context, y_pin)
+        var params = _packed(py_item(state, nk[].k_params_), "params", context, params_pin)
         var ids = _packed(ids_all[group], "group indices", context, ids_pin, True)
         var words = Python.list(rows, n_obs, start, end) if prediction else Python.list(rows, n_obs, steps)
         var complexity = k + 1
@@ -218,9 +225,9 @@ def autoarima_forecast(model: PythonObject, args: PythonObject, context: PythonO
         if y.count != rows * n_obs or params.count != rows * complexity or ids.count != rows:
             raise Error("ValueError: AutoARIMA fitted buffer dimensions disagree")
         _ = py_call(words.extend, Python.tuple(k, 0) if prediction else Python.tuple(k, 0, 0))
-        var mode = py_get(state, "numeric_mode")
+        var mode = py_get(state, nk[].k_numeric_mode)
         if mode is None:
-            mode = context["backend_fields"]["_DEFAULT_MODE"]
+            mode = py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)
         if py_type(mode) is not py_type(PythonObject("")):
             raise Error("TypeError: numeric_mode must be an exact string")
         mode = py_call(py_call(mode.strip).lower)
@@ -228,10 +235,10 @@ def autoarima_forecast(model: PythonObject, args: PythonObject, context: PythonO
         if mode_word != "identical" and mode_word != "fast":
             raise Error("ValueError: numeric_mode must be identical or fast")
         answer_mode_object(mode, mode_word, MODE_FAMILY_TSA)
-        var entries = context["arima_bindings"][mode]
+        var entries = py_item(context, nk[].k_arima_bindings)[mode]
         if py_type(entries) is py_type(PythonObject("")):
             raise Error(String(entries))
-        var got = Int(py=py_call_typed(entries["arima_numeric_mode"]))
+        var got = Int(py=py_call_typed(py_item(entries, nk[].k_arima_numeric_mode)))
         if got != (1 if String(mode) == "identical" else 0):
             raise Error("RuntimeError: ARIMA binary numeric mode disagrees with its selected tier")
         var part = classical_typed(Python.tuple(rows, steps), "<f4", context)
@@ -262,7 +269,7 @@ def autoarima_forecast(model: PythonObject, args: PythonObject, context: PythonO
         _ = record  # the record (and its capsule) outlive the query
         # The connected base scatter owns bounds validation and finished-result
         # assembly on its compiled target; no Python indexing or data loops.
-        _ = py_call_typed(context["base_scatter_rows_bytes"], part_address, ids.source.addr, rows,
+        _ = py_call_typed(py_item(context, nk[].k_base_scatter_rows_bytes), part_address, ids.source.addr, rows,
                           4 * steps, output_address, batch)
         _ = y
         _ = params

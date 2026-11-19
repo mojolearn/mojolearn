@@ -16,17 +16,20 @@ from bindings.p3nc_fitted_freeze_unpack import fitted_is_freezable_any, fitted_f
 from bindings.py_balanced import py_call, py_get, py_contains
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_arrays_door import classical_address
+from bindings.tsa_keys_unpack import tsa_keys
+from bindings.py_balanced import py_item
 
 def arima_resident_hit(record: PythonObject, fields: PythonObject, entries: PythonObject, words: List[Int]) raises -> Int:
     """The handle of this model's resident fitted state when its record was
     minted from these very `_y`, `params_` and `_exog` objects (frozen
     read-only when minted, held by the record so their addresses cannot be
     recycled) by this binding with these plan words; -1 on any miss."""
-    if record[0] is not py_get(fields, "_y") or record[1] is not py_get(fields, "params_"):
+    var nk = tsa_keys()
+    if record[0] is not py_get(fields, nk[].k__y) or record[1] is not py_get(fields, nk[].k_params_):
         return -1
-    if record[2] is not py_get(fields, "_exog", PythonObject(None)):
+    if record[2] is not py_get(fields, nk[].k__exog, PythonObject(None)):
         return -1
-    if record[3] is not py_get(entries, "arima_resident_prepare"):
+    if record[3] is not py_get(entries, nk[].k_arima_resident_prepare):
         return -1
     var held = record[4]
     if len(held) != len(words):
@@ -41,9 +44,10 @@ def arima_resident_call(entries: PythonObject, handle: Int, future_addr: Int, re
                         width: Int, forecast: Bool) raises:
     """One resident predict (`[start, end]`) or forecast (`[width, 0]`)
     writing `result`'s float32 words."""
+    var nk = tsa_keys()
     if forecast:
-        _ = py_call_typed(entries["arima_forecast_resident"], handle, future_addr, classical_address(result),
+        _ = py_call_typed(py_item(entries, nk[].k_arima_forecast_resident), handle, future_addr, classical_address(result),
                           Python.list(width, 0))
     else:
-        _ = py_call_typed(entries["arima_predict_resident"], handle, future_addr, classical_address(result),
+        _ = py_call_typed(py_item(entries, nk[].k_arima_predict_resident), handle, future_addr, classical_address(result),
                           Python.list(start, end))

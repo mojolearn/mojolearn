@@ -44,6 +44,8 @@ from bindings.tsa_arima_resident_pack import (
     arima_resident_mint,
 )
 from arima.tsa_arima_resident_run import arima_resident_words
+from bindings.tsa_keys_unpack import tsa_keys
+from bindings.py_balanced import py_item
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _A = "mojolearn ARIMA: "
@@ -67,6 +69,7 @@ def _arima_entries(model: PythonObject, fields: PythonObject, context: PythonObj
     """`ARIMA._extension()`: the `_mojolearn_arima` entries of the model's
     tier with the binary's own mode read back; a host inference class's
     loaded forecast host binding."""
+    var nk = tsa_keys()
     var b = _b()
     var cls = py_type(model)
     # p3-cnn-sequence-tsa: the class flag is kept per class under the type
@@ -77,25 +80,25 @@ def _arima_entries(model: PythonObject, fields: PythonObject, context: PythonObj
     if kept is not None:
         host_only = Bool(py=kept)
     else:
-        var ancestry = py_call(b.type.__dict__["__mro__"].__get__, cls)
+        var ancestry = py_call(py_item(b.type.__dict__, nk[].k___mro__).__get__, cls)
         for i in range(len(ancestry)):  # driver-loop: native MRO metadata, never class lookup protocols
             var namespace = _class_fields(ancestry[i])
-            if py_contains(namespace, "_HOST_INFERENCE_ONLY"):
-                host_only = _truth(namespace["_HOST_INFERENCE_ONLY"])
+            if py_contains(namespace, nk[].k__HOST_INFERENCE_ONLY):
+                host_only = _truth(py_item(namespace, nk[].k__HOST_INFERENCE_ONLY))
                 break
         class_admit(mods, _HOST_ONLY_SLOT, cls, PythonObject(host_only))
     if host_only:
-        var saved = py_get(fields, "numeric_mode")
+        var saved = py_get(fields, nk[].k_numeric_mode)
         if saved is not None and (py_type(saved) is not b.str or not Bool(py=saved == "identical")):
             raise Error("ValueError: mojolearn: " + String("ARIMA")
                         + " runs IDENTICAL only on the host; this model was saved " + _repr(saved))
-        var module = py_get(context["modules"], context["hw_host_module"])
+        var module = py_get(py_item(context, nk[].k_modules), py_item(context, nk[].k_hw_host_module))
         if module is None:
             raise Error("RuntimeError: mojolearn: the host " + String("ARIMA")
                         + " has no loaded forecast binding; load the model with its own load()")
         var module_fields = _loaded_fields(module)
         var host = b.dict()
-        var names = context["arima_entry_names"]
+        var names = py_item(context, nk[].k_arima_entry_names)
         for i in range(len(names)):  # driver-loop: over the fixed host entry names
             var entry = py_get(module_fields, names[i])
             if entry is not None:
@@ -103,9 +106,9 @@ def _arima_entries(model: PythonObject, fields: PythonObject, context: PythonObj
                     raise Error("TypeError: host ARIMA entries must be compiled native functions")
                 py_setitem(host, names[i], entry)
         return host
-    var mode = py_get(fields, "numeric_mode")
+    var mode = py_get(fields, nk[].k_numeric_mode)
     if mode is None:
-        mode = context["backend_fields"]["_DEFAULT_MODE"]
+        mode = py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)
     if py_type(mode) is not b.str:
         raise Error("ValueError: numeric_mode must be fast, identical or None")
     var want = mode
@@ -116,14 +119,14 @@ def _arima_entries(model: PythonObject, fields: PythonObject, context: PythonObj
     if want_word != "identical" and want_word != "fast":
         raise Error("ValueError: numeric_mode must be fast, identical or None")
     answer_mode_object(want, want_word, MODE_FAMILY_TSA)
-    var entries = context["arima_bindings"][want]
+    var entries = py_item(context, nk[].k_arima_bindings)[want]
     if py_type(entries) is b.str:
         raise Error(String(py=entries))
-    if py_contains(entries, "arima_numeric_mode"):
-        var got = Int(py=py_call_typed(entries["arima_numeric_mode"]))
+    if py_contains(entries, nk[].k_arima_numeric_mode):
+        var got = Int(py=py_call_typed(py_item(entries, nk[].k_arima_numeric_mode)))
         if got != (1 if String(py=want) == "identical" else 0):
             raise Error("RuntimeError: " + _A + "numeric_mode=" + _repr(want) + " was requested but "
-                        + String(py=entries["module_name"]) + " reports compile-time mode code " + String(got)
+                        + String(py=py_item(entries, nk[].k_module_name)) + " reports compile-time mode code " + String(got)
                         + "; the binary and the directory it sits in disagree, rebuild it")
     return entries
 
@@ -213,8 +216,9 @@ def _exog_array(source: PythonObject, batch: Int, n_rows: Int, y_ndim: Int, name
 
 def _order(fields: PythonObject, context: PythonObject) raises -> List[Int]:
     """[p, d, q, P, D, Q, s]."""
-    var o = arima_order(fields["order"], 3, "order", context)
-    var so = arima_order(fields["seasonal_order"], 4, "seasonal_order", context)
+    var nk = tsa_keys()
+    var o = arima_order(py_item(fields, nk[].k_order), 3, "order", context)
+    var so = arima_order(py_item(fields, nk[].k_seasonal_order), 4, "seasonal_order", context)
     return [Int(py=o[0]), Int(py=o[1]), Int(py=o[2]), Int(py=so[0]), Int(py=so[1]), Int(py=so[2]), Int(py=so[3])]
 
 
@@ -232,6 +236,7 @@ def _copy_block(source: PythonObject, offset: Int, count: Int, code: String, typ
 
 
 def arima_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = tsa_keys()
     var fields = _fields(model)
     var series = _series_major(args[0], context)
     var arr = series[0]
@@ -247,13 +252,13 @@ def arima_fit(model: PythonObject, args: PythonObject, context: PythonObject) ra
         var e = _exog_array(args[1], batch, n_obs, y_ndim, "exog", context)
         ex = e[0]
         n_exog = Int(py=e[1])
-    var k = _integer(fields["k_"], context)
+    var k = _integer(py_item(fields, nk[].k_k_), context)
     if k < 0 or k > 1:
         raise Error("ValueError: ARIMA k must be 0 or 1")
-    var method = fields["method"]
+    var method = py_item(fields, nk[].k_method)
     if py_type(method) is not _b().str:
         raise Error("TypeError: ARIMA method requires an exact string")
-    var maxiter = _integer_object(fields["maxiter"], context)
+    var maxiter = _integer_object(py_item(fields, nk[].k_maxiter), context)
     var big_n = order[0] + order[2] + order[3] + order[5] + k + n_exog + 1
     var total = batch * big_n
     var params = tsa_array("f", "<f4", Python.tuple(batch, big_n), total, 4, context)
@@ -265,7 +270,7 @@ def arima_fit(model: PythonObject, args: PythonObject, context: PythonObject) ra
     var pens = _penalties(order, big_n, n_obs)
     var entries = _arima_entries(model, fields, context)
     var plan = Python.list(batch, n_obs, order[0], order[1], order[2], order[3], order[4], order[5], order[6], k,
-                           n_exog, context["arima_methods"][method], maxiter,
+                           n_exog, py_item(context, nk[].k_arima_methods)[method], maxiter,
                            classical_address(ics), pens[0], pens[1])
     _ = ics  # keep the Python object alive through the native call above
     var written = Int(py=py_call_typed(_entry(entries, "arima_fit"), classical_address(arr), classical_address(ex),
@@ -308,6 +313,7 @@ def _adopt(model: PythonObject, fields: PythonObject, arr: PythonObject, copied:
     """`ARIMA._adopt_fit`: the fitted state from the fit's output buffers;
     without the fit's criteria (`ics_in` None: an AutoARIMA search block)
     the plain fit's device kernel over the adopted log-likelihood row."""
+    var nk = tsa_keys()
     var ics = ics_in
     if ics is None:
         ics = tsa_array("d", "<f8", Python.tuple(2 * batch), 2 * batch, 8, context)
@@ -322,44 +328,46 @@ def _adopt(model: PythonObject, fields: PythonObject, arr: PythonObject, copied:
             _ = ics  # keep the Python object alive through the native call above
         _ = ics  # keep the Python object alive through the native calls above
     var updates = Python.dict()
-    py_setitem(updates, "input_copied_", copied)
-    py_setitem(updates, "batch_size_", batch)
-    py_setitem(updates, "n_obs_", n_obs)
-    py_setitem(updates, "_y", arr)
-    py_setitem(updates, "_y_ndim", y_ndim)
-    py_setitem(updates, "n_exog_", n_exog)
-    py_setitem(updates, "complexity_", big_n)
-    py_setitem(updates, "_exog", ex if n_exog else PythonObject(None))
-    py_setitem(updates, "params_", params)
-    py_setitem(updates, "x_", x)
-    py_setitem(updates, "x0_", x0)
-    py_setitem(updates, "n_iter_", _copy_block(flags, 0, batch, "i", "<i4", 4, Python.tuple(batch), context))
-    py_setitem(updates, "retcode_", _copy_block(flags, batch, batch, "i", "<i4", 4, Python.tuple(batch), context))
+    py_setitem(updates, nk[].k_input_copied_, copied)
+    py_setitem(updates, nk[].k_batch_size_, batch)
+    py_setitem(updates, nk[].k_n_obs_, n_obs)
+    py_setitem(updates, nk[].k__y, arr)
+    py_setitem(updates, nk[].k__y_ndim, y_ndim)
+    py_setitem(updates, nk[].k_n_exog_, n_exog)
+    py_setitem(updates, nk[].k_complexity_, big_n)
+    py_setitem(updates, nk[].k__exog, ex if n_exog else PythonObject(None))
+    py_setitem(updates, nk[].k_params_, params)
+    py_setitem(updates, nk[].k_x_, x)
+    py_setitem(updates, nk[].k_x0_, x0)
+    py_setitem(updates, nk[].k_n_iter_, _copy_block(flags, 0, batch, "i", "<i4", 4, Python.tuple(batch), context))
+    py_setitem(updates, nk[].k_retcode_, _copy_block(flags, batch, batch, "i", "<i4", 4, Python.tuple(batch), context))
     # llf_ = stats[:batch].astype("<f8"): each float32 widened exactly
     var llf = tsa_array("d", "<f8", Python.tuple(batch), batch, 8, context)
     xseq_widen_f32_f64(_F32P(unsafe_from_address=Int(py=classical_address(stats))),
                        MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(llf))), batch)
     _ = llf  # keep the Python object alive through the native call above
-    py_setitem(updates, "llf_", llf)
-    py_setitem(updates, "fx_", _copy_block(stats, batch, batch, "f", "<f4", 4, Python.tuple(batch), context))
-    py_setitem(updates, "aic_", _copy_block(ics, 0, batch, "d", "<f8", 8, Python.tuple(batch), context))
-    py_setitem(updates, "bic_", _copy_block(ics, batch, batch, "d", "<f8", 8, Python.tuple(batch), context))
-    forecast_commit(fields, updates, context["tsa_owner_context"])
+    py_setitem(updates, nk[].k_llf_, llf)
+    py_setitem(updates, nk[].k_fx_, _copy_block(stats, batch, batch, "f", "<f4", 4, Python.tuple(batch), context))
+    py_setitem(updates, nk[].k_aic_, _copy_block(ics, 0, batch, "d", "<f8", 8, Python.tuple(batch), context))
+    py_setitem(updates, nk[].k_bic_, _copy_block(ics, batch, batch, "d", "<f8", 8, Python.tuple(batch), context))
+    forecast_commit(fields, updates, py_item(context, nk[].k_tsa_owner_context))
 
 
 def _gather_block(src: PythonObject, offset: Int, width: Int, nrows: Int, local: PythonObject, dst_addr: Int,
                   context: PythonObject) raises:
     """`_gather_block`: dst rows = src[offset:].reshape(nrows, width)[local],
     the base binding's byte gather of 4-byte rows."""
+    var nk = tsa_keys()
     if len(local):
         var item = Int(py=src.itemsize)
-        _ = py_call(context["base_gather_rows_bytes"], Int(py=classical_address(src)) + item * offset, dst_addr,
+        _ = py_call(py_item(context, nk[].k_base_gather_rows_bytes), Int(py=classical_address(src)) + item * offset, dst_addr,
                     classical_address(local), nrows, len(local), item * width)
 
 
 def arima_adopt(model: PythonObject, y: PythonObject, reuse: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_adopt_search_fit(m, y, *reuse)`: `m` fitted from the AutoARIMA
     search's fit block for the group positions `local`."""
+    var nk = tsa_keys()
     var fields = _fields(model)
     var search_fit = reuse[0]
     var trial = Int(py=reuse[1])
@@ -373,7 +381,7 @@ def arima_adopt(model: PythonObject, y: PythonObject, reuse: PythonObject, conte
     var arr = series[0]
     var b = Int(py=series[1])
     var n_obs = Int(py=series[2])
-    var big_n = Int(py=fields["complexity_"])
+    var big_n = Int(py=py_item(fields, nk[].k_complexity_))
     var params = tsa_array("f", "<f4", Python.tuple(b, big_n), b * big_n, 4, context)
     var x = tsa_array("f", "<f4", Python.tuple(b, big_n), b * big_n, 4, context)
     var x0 = tsa_array("f", "<f4", Python.tuple(b, big_n), b * big_n, 4, context)
@@ -403,10 +411,11 @@ def arima_adopt(model: PythonObject, y: PythonObject, reuse: PythonObject, conte
 
 
 def arima_predict(model: PythonObject, args: PythonObject, context: PythonObject, forecast: Bool = False) raises -> PythonObject:
+    var nk = tsa_keys()
     var fields = _fields(model)
-    if not py_contains(fields, "params_"):
+    if not py_contains(fields, nk[].k_params_):
         raise Error("ValueError: " + _A + "call fit() before " + ("forecast" if forecast else "predict"))
-    var n_obs = _integer(fields["n_obs_"], context)
+    var n_obs = _integer(py_item(fields, nk[].k_n_obs_), context)
     var start = n_obs if forecast else _integer(args[0], context)
     var end = Int(py=PythonObject(n_obs) + _integer_object(args[0], context)) if forecast else n_obs if args[1] is None else _integer(args[1], context)
     var exog = args[1] if forecast else args[2]
@@ -414,15 +423,15 @@ def arima_predict(model: PythonObject, args: PythonObject, context: PythonObject
     var width = Int(py=PythonObject(end) - start)
     if width <= 0:
         raise Error("ValueError: " + _A + ("steps must be >= 1" if forecast else "need start < end; end is excluded"))
-    var n_exog = _integer(py_get(fields, "n_exog_", PythonObject(0)), context)
+    var n_exog = _integer(py_get(fields, nk[].k_n_exog_, PythonObject(0)), context)
     if n_exog > 0 and end > n_obs and exog is None:
         raise Error("ValueError: " + _A + "the model was fit with a regression component, so future values must be provided via `exog`")
     if n_exog == 0 and exog is not None:
         raise Error("ValueError: " + _A + "a value was given for `exog` but the model was fit without any regression component")
     if end <= n_obs and exog is not None:
         raise Error("ValueError: " + _A + "a value was given for `exog` but only in-sample predictions were requested")
-    var batch = _integer(fields["batch_size_"], context)
-    var k = _integer(fields["k_"], context)
+    var batch = _integer(py_item(fields, nk[].k_batch_size_), context)
+    var k = _integer(py_item(fields, nk[].k_k_), context)
     if batch <= 0 or n_obs <= 0 or n_exog < 0 or k < 0 or k > 1:
         raise Error("ValueError: ARIMA fitted dimension metadata is invalid")
     var complexity = Int(py=PythonObject(order[0]) + order[2] + order[3] + order[5] + k + n_exog + 1)
@@ -441,7 +450,7 @@ def arima_predict(model: PythonObject, args: PythonObject, context: PythonObject
             var fut_addr = 0
             var fut_owner = PythonObject(None)
             if n_exog > 0 and end > n_obs:
-                var fe = _exog_array(exog, batch, end - n_obs, _integer(py_get(fields, "_y_ndim", PythonObject(2)), context), "exog", context)
+                var fe = _exog_array(exog, batch, end - n_obs, _integer(py_get(fields, nk[].k__y_ndim, PythonObject(2)), context), "exog", context)
                 if Int(py=fe[1]) != n_exog:
                     # The same wording as the cold path below, so a resident
                     # hit and a first query refuse one bad exog identically.
@@ -461,8 +470,8 @@ def arima_predict(model: PythonObject, args: PythonObject, context: PythonObject
             _ = fut_owner
             _ = fut
             return out
-    var y = arima_buffer(fields["_y"], "y", context, True)
-    var params = arima_buffer(fields["params_"], "params", context, True)
+    var y = arima_buffer(py_item(fields, nk[].k__y), "y", context, True)
+    var params = arima_buffer(py_item(fields, nk[].k_params_), "params", context, True)
     if y.count != Int(py=PythonObject(batch) * n_obs) or params.count != Int(py=PythonObject(batch) * complexity):
         raise Error("ValueError: ARIMA fitted buffer dimensions disagree with model metadata")
     # Unused exog pointers remain live through the admitted y owner.
@@ -472,12 +481,12 @@ def arima_predict(model: PythonObject, args: PythonObject, context: PythonObject
     var future_owner = y.copy()
     var future = PythonObject(None)
     if n_exog > 0:
-        ex_owner = arima_buffer(fields["_exog"], "exog", context, True)
+        ex_owner = arima_buffer(py_item(fields, nk[].k__exog), "exog", context, True)
         if ex_owner.count != Int(py=PythonObject(batch) * n_obs * n_exog):
             raise Error("ValueError: ARIMA fitted exog dimensions disagree")
         ex_addr = ex_owner.address
         if end > n_obs:
-            var e = _exog_array(exog, batch, end - n_obs, _integer(py_get(fields, "_y_ndim", PythonObject(2)), context), "exog", context)
+            var e = _exog_array(exog, batch, end - n_obs, _integer(py_get(fields, nk[].k__y_ndim, PythonObject(2)), context), "exog", context)
             if Int(py=e[1]) != n_exog:
                 raise Error("ValueError: " + _A + "dimensions mismatch, `exog` has " + String(Int(py=e[1]))
                             + " regressor column(s) and the model was fit with " + String(n_exog))

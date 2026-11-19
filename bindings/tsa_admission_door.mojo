@@ -22,21 +22,24 @@ from bindings.admitted_input_unpack import admit_view, AdmittedTypedPin
 from bindings.admitted_input_run import admitted_view_kind
 from bindings.tensor_view import TensorView
 from core.cast_in import CAST_KIND_BOOL, CAST_KIND_FLOAT, CAST_KIND_SIGNED, CAST_KIND_UNSIGNED
+from bindings.tsa_keys_unpack import tsa_keys
+from bindings.py_balanced import py_item
 
 
 def tsa_scalar(value: PythonObject, context: PythonObject, integer: Bool = False) raises -> PythonObject:
+    var nk = tsa_keys()
     var b = native_loaded_module("builtins")
     var cls = py_type(value)
     if cls is b.int or cls is b.float or cls is b.bool or cls is b.str or cls is b.bytes or cls is b.bytearray:
         return value
-    if _one_of(cls, context["scalar_types"]):
+    if _one_of(cls, py_item(context, nk[].k_scalar_types)):
         return value
-    if py_get(context, "ndarray") is not None:
+    if py_get(context, nk[].k_ndarray) is not None:
         var factory = native_numpy_dtype(context)
         for code in ["?", "i1", "u1", "i2", "u2", "i4", "u4", "i8", "u8", "q", "Q", "f2", "f4", "f8", "g", "S", "U"]:  # driver-loop: exact primitive scalar classes, including long double and native long-long aliases
             if cls is py_call(factory, code).type:
                 return value
-        if cls is context["ndarray"] and _primitive_dtype(value, context):
+        if cls is py_item(context, nk[].k_ndarray) and _primitive_dtype(value, context):
             if Int(py=value.size) != 1:
                 raise Error("TypeError: TSA scalar settings require one native numeric value")
             var kind = String(value.dtype.kind)
@@ -102,12 +105,13 @@ def tsa_word(v: TensorView, name: String) raises -> PythonObject:
 
 
 def tsa_hw_class(model: PythonObject, context: PythonObject) raises -> Bool:
+    var nk = tsa_keys()
     var cls = py_type(model)
-    if cls is context["hw_class"]:
+    if cls is py_item(context, nk[].k_hw_class):
         return False
-    var module = py_get(context["modules"], "mojolearn._classical_host")
+    var module = py_get(py_item(context, nk[].k_modules), "mojolearn._classical_host")
     if module is not None and py_type(module) is py_type(native_loaded_module("sys")):
-        if cls is py_get(native_numpy_module_fields(module), "HostExponentialSmoothing"):
+        if cls is py_get(native_numpy_module_fields(module), nk[].k_HostExponentialSmoothing):
             return True
     raise Error("TypeError: ExponentialSmoothing requires its connected native model class")
 
@@ -116,12 +120,13 @@ comptime _HW_LAYOUT_SLOT = "tsa_hw_layout_v1"  # p3-cnn-sequence-tsa class recor
 
 
 def tsa_hw_fields(model: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = tsa_keys()
     _ = tsa_hw_class(model, context)
     var b = native_loaded_module("builtins")
     var cls = py_type(model)
     if py_type(cls) is not b.type:
         raise Error("TypeError: ExponentialSmoothing requires a native model metaclass")
-    var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
+    var mro = py_call(py_item(b.type.__dict__, nk[].k___mro__).__get__, cls)
     var fields = PythonObject(None)
     # p3-cnn-sequence-tsa: the class walk's verdict (the MRO row whose
     # `__dict__` descriptor serves the instance storage) is kept per class
@@ -131,19 +136,19 @@ def tsa_hw_fields(model: PythonObject, context: PythonObject) raises -> PythonOb
     var mods = NativeModules()
     var kept = class_record(mods, _HW_LAYOUT_SLOT, cls)
     if kept is not None:
-        var own = py_call(b.type.__dict__["__dict__"].__get__, mro[Int(py=kept)])
-        fields = py_call(py_get(own, "__dict__").__get__, model)
+        var own = py_call(py_item(b.type.__dict__, nk[].k___dict__).__get__, mro[Int(py=kept)])
+        fields = py_call(py_get(own, nk[].k___dict__).__get__, model)
     else:
         var row = -1
         # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
         var found = Optional[PythonObject]()
         for i in range(len(mro)):  # driver-loop: exact class dictionaries and native instance storage
-            var own = py_call(b.type.__dict__["__dict__"].__get__, mro[i])
+            var own = py_call(py_item(b.type.__dict__, nk[].k___dict__).__get__, mro[i])
             if not _tsa_str_items(py_call(b.list, own), b):
                 raise Error("TypeError: ExponentialSmoothing class keys must be native strings")
-            if py_get(own, "__del__") is not None:
+            if py_get(own, nk[].k___del__) is not None:
                 raise Error("TypeError: ExponentialSmoothing cannot invoke lifecycle callbacks")
-            var descriptor = py_get(own, "__dict__")
+            var descriptor = py_get(own, nk[].k___dict__)
             if not found and descriptor is not None and py_type(descriptor) is py_type(b.memoryview.obj):
                 var read = py_call(descriptor.__get__, model)
                 row = i
@@ -186,20 +191,21 @@ def _tsa_str_items(keys: PythonObject, b: PythonObject) raises -> Bool:
 
 
 def tsa_truth(value: PythonObject, context: PythonObject) raises -> Bool:
+    var nk = tsa_keys()
     var b = native_loaded_module("builtins")
     var cls = py_type(value)
     if value is None:
         return False
     if cls is b.list or cls is b.tuple or cls is b.dict or cls is b.set or cls is b.frozenset or cls is b.str or cls is b.bytes or cls is b.bytearray:
         return len(value) != 0
-    if cls is context["array_class"]:
+    if cls is py_item(context, nk[].k_array_class):
         var snapshot_pin = AdmittedTypedPin()
         var snapshot = admit_view(value, "flag", context, snapshot_pin)
         _ = snapshot_pin^  # metadata only: no word of the buffer is read
         if len(snapshot.shape) == 0:
             raise Error("TypeError: len() of unsized object")
         return snapshot.shape[0] != 0
-    if cls is py_get(context, "ndarray") and _primitive_dtype(value, context):
+    if cls is py_get(context, nk[].k_ndarray) and _primitive_dtype(value, context):
         var count = Int(py=value.size)
         if count == 0:
             return False
@@ -211,12 +217,13 @@ def tsa_truth(value: PythonObject, context: PythonObject) raises -> Bool:
 
 
 def tsa_component_index(value: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = tsa_keys()
     if value is None:
         return value
     var b = native_loaded_module("builtins")
-    if py_type(value) is b.bool or _one_of(py_type(value), context["integer_types"]):
+    if py_type(value) is b.bool or _one_of(py_type(value), py_item(context, nk[].k_integer_types)):
         return py_call(b.int, value)
-    if py_type(value) is py_get(context, "ndarray"):
+    if py_type(value) is py_get(context, nk[].k_ndarray):
         var snapshot_pin = AdmittedTypedPin()
         var snapshot = admit_view(value, "component index", context, snapshot_pin)
         _ = snapshot_pin^  # metadata only: no word of the buffer is read

@@ -14,20 +14,23 @@ from bindings.classical_arrays_door import classical_address
 from bindings.tsa_hw_native_door import tsa_array
 from core.native_scalar_decode import native_scalar_real
 from core.cast_in import CAST_KIND_BOOL, CAST_KIND_SIGNED, CAST_KIND_UNSIGNED
+from bindings.tsa_keys_unpack import tsa_keys
+from bindings.py_balanced import py_item
 
 
 def arima_order(value: PythonObject, width: Int, name: String, context: PythonObject) raises -> PythonObject:
+    var nk = tsa_keys()
     var b = native_loaded_module("builtins")
     var cls = py_type(value)
     var values = Python.list()
     var normalized = True
-    if cls is b.tuple or cls is b.list or cls is b.range or cls is context["array_type"]:
+    if cls is b.tuple or cls is b.list or cls is b.range or cls is py_item(context, nk[].k_array_type):
         if len(value) != width:
             raise Error("ValueError: mojolearn ARIMA: " + name + " must have " + String(width) + " entries")
         for i in range(width):  # driver-loop: the three or four order metadata words
             var item = value[i]
             var kind = py_type(item)
-            if kind is not b.int and kind is not b.bool and kind is not b.float and not _one_of(kind, context["scalar_types"]):
+            if kind is not b.int and kind is not b.bool and kind is not b.float and not _one_of(kind, py_item(context, nk[].k_scalar_types)):
                 raise Error("TypeError: ARIMA orders require native numeric scalars")
             var word = _integer_object(item, context)
             if Bool(py=word != item) or Bool(py=word < 0):
@@ -57,6 +60,7 @@ def arima_order(value: PythonObject, width: Int, name: String, context: PythonOb
 
 
 def arima_initialize(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = tsa_keys()
     var fields = _fields(model)
     var b = native_loaded_module("builtins")
     var order = arima_order(args[0], 3, "order", context)
@@ -83,47 +87,48 @@ def arima_initialize(model: PythonObject, args: PythonObject, context: PythonObj
     if method_name != "ml" and method_name != "css" and method_name != "css-ml":
         raise Error("ValueError: mojolearn ARIMA: unknown method; cuML's three are ['css', 'css-ml', 'ml'] and this implementation offers 'ml'")
     var maxiter = _integer_object(args[4], context)
-    if (Bool(py=args[5]) if _one_of(py_type(args[5]), context["scalar_types"]) else _truth(args[5])):
+    if (Bool(py=args[5]) if _one_of(py_type(args[5]), py_item(context, nk[].k_scalar_types)) else _truth(args[5])):
         raise Error("NotImplementedError: mojolearn ARIMA: verbose is refused; this implementation prints no log lines")
     if args[6] is not None:
         raise Error("NotImplementedError: mojolearn ARIMA: output_type is a cuML-internal selector; this package returns mojolearn.Array")
     var updates = Python.dict()
-    py_setitem(updates, "order", order)
-    py_setitem(updates, "seasonal_order", seasonal)
-    py_setitem(updates, "trend", trend)
-    py_setitem(updates, "k_", intercept)
-    py_setitem(updates, "method", method)
-    py_setitem(updates, "maxiter", maxiter)
-    py_setitem(updates, "verbose", False)
-    py_setitem(updates, "output_type", PythonObject(None))
-    py_setitem(updates, "n_exog_", 0)
+    py_setitem(updates, nk[].k_order, order)
+    py_setitem(updates, nk[].k_seasonal_order, seasonal)
+    py_setitem(updates, nk[].k_trend, trend)
+    py_setitem(updates, nk[].k_k_, intercept)
+    py_setitem(updates, nk[].k_method, method)
+    py_setitem(updates, nk[].k_maxiter, maxiter)
+    py_setitem(updates, nk[].k_verbose, False)
+    py_setitem(updates, nk[].k_output_type, PythonObject(None))
+    py_setitem(updates, nk[].k_n_exog_, 0)
     # Kernel order bounds remain the kernel owner's decision. Arbitrary-size
     # builtin integers here preserve constructor/clone metadata unchanged.
-    py_setitem(updates, "complexity_", order[0] + order[2] + seasonal[0] + seasonal[2] + intercept + 1)
+    py_setitem(updates, nk[].k_complexity_, order[0] + order[2] + seasonal[0] + seasonal[2] + intercept + 1)
     # The constructor's own numeric_mode (formerly added by the `_mode`
     # NumericModeMixin wrapper): stored as given, checked when fit selects
     # the binary (bindings/tsa_arima_native.mojo).
-    py_setitem(updates, "numeric_mode", args[7])
-    forecast_commit(fields, updates, context["tsa_owner_context"])
+    py_setitem(updates, nk[].k_numeric_mode, args[7])
+    forecast_commit(fields, updates, py_item(context, nk[].k_tsa_owner_context))
     return PythonObject(None)
 
 
 def arima_parameter(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = tsa_keys()
     var fields = _fields(model)
     var b = native_loaded_module("builtins")
     if py_type(args[0]) is not b.str:
         raise Error("TypeError: ARIMA parameter name must be an exact string")
     var name = String(py=args[0])
-    var intercept = _integer(fields["k_"], context)
-    var regressors = _integer(py_get(fields, "n_exog_", PythonObject(0)), context)
+    var intercept = _integer(py_item(fields, nk[].k_k_), context)
+    var regressors = _integer(py_get(fields, nk[].k_n_exog_, PythonObject(0)), context)
     if name == "mu_" and intercept == 0:
         raise Error("AttributeError: mojolearn ARIMA: there is no mu_ because this model has no intercept; construct with trend='c'")
     if name == "beta_" and regressors == 0:
         raise Error("AttributeError: mojolearn ARIMA: there is no beta_ because this model was fit without exogenous regressors; pass exog to fit")
-    if not py_contains(fields, "params_"):
+    if not py_contains(fields, nk[].k_params_):
         raise Error("AttributeError: mojolearn ARIMA: call fit() before " + name)
-    var order = arima_order(fields["order"], 3, "order", context)
-    var seasonal = arima_order(fields["seasonal_order"], 4, "seasonal_order", context)
+    var order = arima_order(py_item(fields, nk[].k_order), 3, "order", context)
+    var seasonal = arima_order(py_item(fields, nk[].k_seasonal_order), 4, "seasonal_order", context)
     var offset = intercept + regressors
     var width = 0
     var flatten = False
@@ -146,13 +151,13 @@ def arima_parameter(model: PythonObject, args: PythonObject, context: PythonObje
         offset += Int(py=order[0]) + Int(py=order[2]) + Int(py=seasonal[0])
         width = Int(py=seasonal[2])
     elif name == "sigma2_":
-        offset = _integer(fields["complexity_"], context) - 1
+        offset = _integer(py_item(fields, nk[].k_complexity_), context) - 1
         width = 1
         flatten = True
     else:
         raise Error("AttributeError: unknown ARIMA parameter " + name)
     var source_pin = ArrayPin()
-    var source = _packed(fields["params_"], "params", context, source_pin)
+    var source = _packed(py_item(fields, nk[].k_params_), "params", context, source_pin)
     if len(source.shape) != 2:
         raise Error("ValueError: ARIMA params must be a fitted parameter matrix")
     var rows = source.shape[0]
@@ -170,7 +175,7 @@ def arima_parameter(model: PythonObject, args: PythonObject, context: PythonObje
         dims.append(1)
         dims.append(Int64(offset))
         dims.append(0)
-        _ = py_call_typed(context["base_strided_copy_bytes"], source.source.addr, classical_address(result), Int(dims.unsafe_ptr()), 2, 4)
+        _ = py_call_typed(py_item(context, nk[].k_base_strided_copy_bytes), source.source.addr, classical_address(result), Int(dims.unsafe_ptr()), 2, 4)
         # The integer address does not retain the native dimension buffer.
         # Keep its owner through the indirect compiled copy, as array_native's
         # strided-copy boundary does for its metadata buffer. The installed
@@ -184,12 +189,13 @@ def arima_parameter(model: PythonObject, args: PythonObject, context: PythonObje
 
 
 def arima_repr(model: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = tsa_keys()
     var fields = _fields(model)
     var b = native_loaded_module("builtins")
-    var order = arima_order(fields["order"], 3, "order", context)
-    var seasonal = arima_order(fields["seasonal_order"], 4, "seasonal_order", context)
-    var trend = fields["trend"]
-    var method = fields["method"]
+    var order = arima_order(py_item(fields, nk[].k_order), 3, "order", context)
+    var seasonal = arima_order(py_item(fields, nk[].k_seasonal_order), 4, "seasonal_order", context)
+    var trend = py_item(fields, nk[].k_trend)
+    var method = py_item(fields, nk[].k_method)
     if (trend is not None and py_type(trend) is not b.str) or py_type(method) is not b.str:
         raise Error("TypeError: ARIMA repr requires passive native trend/method metadata")
     return PythonObject("ARIMA(order=" + String(py=py_call(b.repr, order)) + ", seasonal_order=" + String(py=py_call(b.repr, seasonal)) + ", trend=" + String(py=py_call(b.repr, trend)) + ", method=" + String(py=py_call(b.repr, method)) + ")")
