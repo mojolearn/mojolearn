@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Fixed scorer records call verified compiled estimator/metric entries. The
 # Python function objects identify import-time plans; they are never invoked.
-from core.mode_answer import answer_mode_object
+from bindings.mode_answer_door import answer_mode_object
 from bindings.native_loaded_module_door import NativeModules, native_loaded_module
 from bindings.native_class_admission_door import class_record, class_admit
 from bindings.py_model_records import RECORDS_PREPARED, ContentRecord, records_stamped_get, records_stamped_put

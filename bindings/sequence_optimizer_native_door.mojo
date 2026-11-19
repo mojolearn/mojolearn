@@ -3,7 +3,7 @@
 # schedule evaluation and state/output handling execute natively here.
 # TOMBSTONE: MOJOLEARN_OPTIMIZER_RESIDENT_OFF (LOSER: per-call optimizer step, arm/base geomean 1.129 over 5 cells, samba-train-step 1.97, NV L40S ab3 2026-11-18) deleted 2026-11-18 by lane/fx-verdicts2; code recoverable at 85c36e324f.
 # Restore: git apply experiments/removed/MOJOLEARN_OPTIMIZER_RESIDENT_OFF.patch; record in docs/TOMBSTONES.md.
-from core.mode_answer import answer_mode_object
+from bindings.mode_answer_door import answer_mode_object
 from std.memory import bitcast
 from std.python import Python, PythonObject
 from bindings.optimizer_container_boundary_unpack import OptimizerInputOwners

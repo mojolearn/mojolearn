@@ -18,7 +18,7 @@ assigning `weight` and finalizing release the resident device table.
 The same compiled entries with the same argument words as the Python bodies
 it replaces, so no bit moves.
 """
-from core.mode_answer import answer_mode_object
+from bindings.mode_answer_door import answer_mode_object
 from bindings.native_class_admission_door import class_record, class_admit
 from bindings.native_loaded_module_door import NativeModules
 from std.memory import unsafe_memcpy

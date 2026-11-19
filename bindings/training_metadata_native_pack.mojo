@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Public training metadata: fixed compiled entries, no runtime loader callbacks.
-from core.mode_answer import answer_mode_object, answer_mode_word
+from core.mode_answer import answer_mode_word
+from bindings.mode_answer_door import answer_mode_object
 from std.python import PythonObject
 from bindings.py_balanced import py_call, py_type
 from bindings.py_typed_call import py_call_typed

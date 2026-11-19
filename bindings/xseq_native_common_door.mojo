@@ -9,7 +9,7 @@ Python connects the compiled `_mojolearn_x_sequence` entries once, at import
 into `xseq_native_call`, which runs the same compiled entries, in the same
 order and with the same arguments, as the Python bodies it replaces.
 """
-from core.mode_answer import answer_mode_object
+from bindings.mode_answer_door import answer_mode_object
 from std.ffi import c_int
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # StandardScaler's public lifecycle. The original preprocessing and x_prep
 # kernels, operation order, modes, and copy semantics remain unchanged.
-from core.mode_answer import answer_mode_object
+from bindings.mode_answer_door import answer_mode_object
 from std.memory import unsafe_memcpy
 from std.os import getenv
 from bindings.py_typed_call import py_call_typed

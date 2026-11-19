@@ -3,7 +3,7 @@
 # (bindings/decomp_native.mojo and the per-class files it dispatches to):
 # instance fields with Python's AttributeError, the fitted numeric mode's
 # connected x_decomp entries, mojolearn Array outputs and scalar reads.
-from core.mode_answer import answer_mode_object
+from bindings.mode_answer_door import answer_mode_object
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_get, py_type, py_contains, py_setitem

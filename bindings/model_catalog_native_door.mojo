@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Whole catalog operation over exported artifacts and retained native inputs."""
-from core.mode_answer import answer_mode_object
+from bindings.mode_answer_door import answer_mode_object
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception

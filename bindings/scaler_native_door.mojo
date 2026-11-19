@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # StandardScaler.fit owns admission, buffers, route selection, launches and
 # fitted-state publication here. The existing statistics kernels are unchanged.
-from core.mode_answer import answer_mode_object
+from bindings.mode_answer_door import answer_mode_object
 from std.memory import unsafe_memcpy
 from bindings.native_loaded_module_door import native_loaded_module
 from std.python import Python, PythonObject

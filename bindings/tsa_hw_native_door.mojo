@@ -17,7 +17,7 @@ The same compiled entries with the same argument words, so no bit moves.
 A host inference class (`HostExponentialSmoothing`) reads its loaded
 forecast host binding from the module table.
 """
-from core.mode_answer import answer_mode_object
+from bindings.mode_answer_door import answer_mode_object
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module

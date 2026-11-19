@@ -12,7 +12,8 @@ against y on the metrics binding of the model's numeric mode, the kernel
 
 The same kernels in the same order, so the score keeps its bits.
 """
-from core.mode_answer import answer_mode_object, answer_mode_word
+from core.mode_answer import answer_mode_word
+from bindings.mode_answer_door import answer_mode_object
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_contains

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # MinMaxScaler owns preparation, launches, running extrema, outputs and state
 # here. The preprocessing and x_prep kernels and their order are unchanged.
-from core.mode_answer import answer_mode_object
+from bindings.mode_answer_door import answer_mode_object
 from std.memory import unsafe_memcpy, bitcast
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module

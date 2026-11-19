@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Complete standalone queries, sharing the worker's native search ownership.
-from core.mode_answer import answer_mode_object
+from bindings.mode_answer_door import answer_mode_object
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr

@@ -13,7 +13,7 @@
 # release of every device slot it acquired. It replaces the Python bodies of
 # `_expansion_prep._Prog.run` and `_expansion_metrics._execute` step for
 # step: the same entries are called with the same words, so no bit moves.
-from core.mode_answer import answer_mode_object
+from bindings.mode_answer_door import answer_mode_object
 from std.sys.compile import is_defined
 from bindings.native_array_storage_door import native_array_zeros
 from std.memory import unsafe_memcpy

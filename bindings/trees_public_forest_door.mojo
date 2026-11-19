@@ -20,7 +20,7 @@
 # resident device snapshot is prepared and queried in the same call, and a
 # classifier `predict` decodes the resident labels (or the argmax of the
 # vote) without returning to Python between the vote and the decode.
-from core.mode_answer import answer_mode_object
+from bindings.mode_answer_door import answer_mode_object
 from std.math import sqrt
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields, py_item

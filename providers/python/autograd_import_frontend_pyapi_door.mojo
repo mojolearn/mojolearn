@@ -3,7 +3,7 @@
 # export is deliberately absent: a native call to that exporter still runs
 # Python forward. The public API now requires an already exported artifact
 # (owner authorization 2026-10-27); it never performs an implicit export.
-from core.mode_answer import answer_mode_object
+from bindings.mode_answer_door import answer_mode_object
 from std.python import Python, PythonObject
 from bindings.byte_checkpoint_io_unpack import ByteCheckpointIOError
 from providers.python.framework_metadata_pyapi_pack import framework_metadata_operation

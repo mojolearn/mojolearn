@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Native PCA constructor and scalar-parameter metadata. Public activation is
 # separate: this private owner does not replace inherited Python API wrappers.
-from core.mode_answer import answer_mode_object
+from bindings.mode_answer_door import answer_mode_object
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module, NativeModules
 from bindings.native_class_admission_door import class_record, class_admit
