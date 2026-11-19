@@ -38,7 +38,6 @@ moves the q, k, v, o and MLP projections forward and every weight and
 activation gradient they reach.
 """
 
-from std.sys.compile import is_defined
 from gemm.contract import GEMM_ORACLE_HOST_SABOTAGE
 from transformer.checks.transformer_fixture import (
     ScorePlant,
@@ -193,9 +192,8 @@ def transformer_host_forward(
         raise Error("transformer host: the carried caches do not have B * n_kv * capacity * head_dim floats")
     var cache = TransformerKVCache(b, dims, smax, window)
     if not zero_cache:
-        if window > 0 or HOST_KV_STRIDE_CAP:
-            # The ring: the same slot map on both sides (and, under
-            # HOST_KV_STRIDE_CAP, the full causal cache at stride smax).
+        if window > 0:
+            # The ring: the same slot map on both sides.
             for i in range(cache_n):
                 cache.k[i] = k_in[i]
                 cache.v[i] = v_in[i]
@@ -227,7 +225,7 @@ def transformer_host_forward(
         _ = st^
         _ = rope^
         return out^
-    if window > 0 or HOST_KV_STRIDE_CAP:
+    if window > 0:
         out.k_cache = cache.k.copy()
         out.v_cache = cache.v.copy()
     else:
@@ -247,13 +245,8 @@ def transformer_host_forward(
     return out^
 
 
-# Lane fx-kv-inplace (2026-11-18), EXPERIMENT, default OFF
-# (-D MOJOLEARN_LLAMA_FAST_KV_STRIDE_CAP, transformer/impl/llama/modeling_llama.mojo
-# LLAMA_FAST_KV_STRIDE_CAP): the device keeps a full causal cache at stride
-# max_tokens, the oracle's own layout, so under the define a `TransformerState`
-# holds that layout on every column and this file moves the caches whole in
-# both directions (no repack to and from stride cached_tokens).
-comptime HOST_KV_STRIDE_CAP = is_defined["MOJOLEARN_LLAMA_FAST_KV_STRIDE_CAP"]()
+# TOMBSTONE: MOJOLEARN_LLAMA_FAST_KV_STRIDE_CAP (NOISE, A/B round 1 NVIDIA L40S, job nvc-ab-20261119T125554Z-6f7afc: causal-lm-generate 0.90 from one pair with 3-8 percent drift, causal-lm-generate-smollm2 1.00, transformer-decode 0.98, samba-decode 1.02) HOST_KV_STRIDE_CAP (the host block moving stride-max_tokens caches whole in both directions) deleted 2026-11-19 by lane/fx-arm-cleanup; code recoverable at a7c89e7558.
+# Restore: git apply experiments/removed/MOJOLEARN_LLAMA_FAST_KV_STRIDE_CAP.patch
 
 
 def transformer_host_backward(

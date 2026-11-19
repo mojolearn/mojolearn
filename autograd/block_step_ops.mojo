@@ -1801,12 +1801,8 @@ def _attn_watermark_grant(ctx: DeviceContext, mut sc: BlockStepScratch, e: Int) 
       the block forward's append (modeling_llama `kv_append2_kernel` and the
         two copies back): bit copies of scanned rows plus the new row, which
         the next call scans (L = 1) or the next whole scan covers (L > 1);
-      the fixed-stride append (MOJOLEARN_LLAMA_FAST_KV_STRIDE_CAP,
-        `kv_fixed_append2_kernel`): writes the new row only, in place, and
-        never the held scan scratch; the row scan then reads that row at
-        stride `cap` (lane fx-kv-inplace);
       `attn_append_restore` (a loop that ran bodies past its stop, lane
-        fx-kv-inplace: `llama_kv_cache_rewind` repacks or clears the
+        fx-kv-inplace: `llama_kv_cache_rewind` repacks the
         overrun): reset, and the loop then drops the entry;
       a new entry (`_AttnBlock`, `attn_step_adopt`; after `forget`, `clear`,
         a failed run's eviction, a loop that ran bodies past its stop): the

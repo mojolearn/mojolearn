@@ -6,7 +6,6 @@ from bindings.native_loaded_module_door import native_loaded_module, NativeModul
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from std.memory import unsafe_memcpy
-from std.sys.compile import is_defined
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.mode_metadata_native_door import _fields, _class_fields
 from bindings.native_error_class import error_without_class
@@ -313,12 +312,8 @@ def _transformer_cache_view(mut mods: NativeModules, buffer: TransformerBuffer, 
     return result
 
 
-# Lane fx-kv-inplace (2026-11-18), EXPERIMENT, default OFF
-# (-D MOJOLEARN_LLAMA_FAST_KV_STRIDE_CAP, transformer/impl/llama/modeling_llama.mojo
-# LLAMA_FAST_KV_STRIDE_CAP): a full causal `TransformerState` holds its caches
-# at stride max_tokens instead of packed at stride cached_tokens, so `keys()`
-# and `values()` return the used part as a copy, not as a view of the prefix.
-comptime _KV_STRIDE_CAP = is_defined["MOJOLEARN_LLAMA_FAST_KV_STRIDE_CAP"]()
+# TOMBSTONE: MOJOLEARN_LLAMA_FAST_KV_STRIDE_CAP (NOISE, A/B round 1 NVIDIA L40S, job nvc-ab-20261119T125554Z-6f7afc: causal-lm-generate 0.90 from one pair with 3-8 percent drift, causal-lm-generate-smollm2 1.00, transformer-decode 0.98, samba-decode 1.02) _KV_STRIDE_CAP (keys() / values() copying each stride-max_tokens row's used slots) deleted 2026-11-19 by lane/fx-arm-cleanup; code recoverable at a7c89e7558.
+# Restore: git apply experiments/removed/MOJOLEARN_LLAMA_FAST_KV_STRIDE_CAP.patch
 
 
 def transformer_state_read(mut mods: NativeModules, state: PythonObject, operation: String, context: PythonObject) raises -> PythonObject:
@@ -333,21 +328,6 @@ def transformer_state_read(mut mods: NativeModules, state: PythonObject, operati
         raise Error("TransformerState cache buffers are smaller than their declared capacity")
     var held = min(cached, window) if window > 0 else cached
     var dims: List[Int] = [b, kv, held, hd]
-    comptime if _KV_STRIDE_CAP:
-        if window == 0:
-            # The buffers hold each (batch, kv head) row at stride max_tokens:
-            # the used part is a copy of each row's first `cached` slots (the
-            # view branch below is not reached on a build with the define).
-            _ = _transformer_array_slots(mods, context)
-            var packed = generation_array(dims)
-            var packed_dst = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=packed._addr))
-            var strided = Pointer[Float32, ImmUntrackedOrigin](unsafe_from_address=buffer.address)
-            var slots = words[3]
-            for head in range(b * kv):  # cpu-route: byte-preserving copy of each cache row's used slots
-                if held != 0:
-                    unsafe_memcpy(dest=packed_dst + head * held * hd, src=strided + head * slots * hd, count=held * hd)
-            _ = buffer
-            return packed
     if window == 0:
         return _transformer_cache_view(mods, buffer, dims, context)
     _ = _transformer_array_slots(mods, context)
