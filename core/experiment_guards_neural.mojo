@@ -1107,6 +1107,19 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_DX_CONCAT.patch; record in docs/TOMBSTONES.md.
     comptime assert not is_defined["MOJOLEARN_GEMM_FAST_DX_CONCAT"](), "removed 2026-11-19 (lane/fx-verdicts3, A/B round 1 NVIDIA L40S, wheel 0c68d6cd27, job nvc-ab-20261119T125554Z-6f7afc, one run per arm, quality equal): the q/k/v fan-in dX as one concatenated product was arm/base 1.00 on lm-train-step and 0.99 on samba-train-step (noise) and changed bits; three products and (q + k) + v are the route; recoverable at 913fc44cfa"
     # ---- end lane fx-verdicts3
+    # ---- lane fx-arm-cleanup (2026-11-19): the three A/B round 1 noise arms the verdict lane left in the tree
+    # TOMBSTONE: MOJOLEARN_LLAMA_FAST_KV_STRIDE_CAP (NOISE, A/B round 1 NVIDIA L40S, wheel 0c68d6cd27, job nvc-ab-20261119T125554Z-6f7afc, one run per arm, ids, outputs and digests equal on 4 cells) deleted 2026-11-19 by lane/fx-arm-cleanup; code recoverable at a7c89e7558.
+    # Restore: git apply experiments/removed/MOJOLEARN_LLAMA_FAST_KV_STRIDE_CAP.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_LLAMA_FAST_KV_STRIDE_CAP"](), "removed 2026-11-19 (lane/fx-arm-cleanup, A/B round 1 NVIDIA L40S, wheel 0c68d6cd27, job nvc-ab-20261119T125554Z-6f7afc, one run per arm, digests equal): the full-causal KV cache at stride max_tokens appended in place was arm/base 0.90 on causal-lm-generate from one pair with 3-8 percent drift and 1.00, 0.98, 1.02 on the other three decode rows (noise); the cache packed at stride cached_tokens is the layout; recoverable at a7c89e7558"
+    # TOMBSTONE: MOJOLEARN_GEMM_FAST_WORKLIST (NOISE, A/B round 1 NVIDIA L40S, wheel 0c68d6cd27, job nvc-ab-20261119T125554Z-6f7afc, one run per arm, digests and quality equal) deleted 2026-11-19 by lane/fx-arm-cleanup; code recoverable at a7c89e7558.
+    # Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_WORKLIST.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_GEMM_FAST_WORKLIST"](), "removed 2026-11-19 (lane/fx-arm-cleanup, A/B round 1 NVIDIA L40S, wheel 0c68d6cd27, job nvc-ab-20261119T125554Z-6f7afc, one run per arm, digests and quality equal): independent GEMMs as one work-list launch of the packed body was arm/base 1.00 on lm-train-step, 1.00 on transformer-decode and 0.93 once on lm-forward (another base run of the row; noise); one launch per product is the route; recoverable at a7c89e7558"
+    # TOMBSTONE: MOJOLEARN_GEMM_FAST_EPI, its transformer-backward use (NOISE, A/B round 1 NVIDIA L40S, wheel 0c68d6cd27, job nvc-ab-20261119T125554Z-6f7afc, one run per arm, digests and quality equal: lm-train-step 0.98 = the row's other bases, samba-train-step 1.05) deleted 2026-11-19 by lane/fx-arm-cleanup; code recoverable at a7c89e7558.
+    # Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_EPI-transformer-backward.patch; record in docs/TOMBSTONES.md.
+    # NOT refused: the define still names the fused follower store of the packed sequence route (gemm/neural_dispatch.mojo
+    # GEMM_LEAF_PTR_EPI, sequence/gemm_packed_route.mojo SEQ_GEMM_PACKED_EPI; owed row gemm-seq-packed-epi-mlp). On a
+    # build with the define the transformer backward runs its default follower launches.
+    # ---- end lane fx-arm-cleanup
     return True
 
 

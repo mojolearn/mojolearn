@@ -8,9 +8,9 @@ runs on a granted cache; `-D MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK_OFF` is the w
 `s - 1` of every (batch, kv head) run of a key or value cache and reports a
 FLAT index of the buffer; the default refusal is `DeviceNonfiniteBatch`'s
 scan of the whole used prefix. On one device buffer laid out as the cache is,
-both scans run and their answers are compared, in both layouts the cache has:
-packed at stride `s` (default) and at the fixed stride `cap`
-(`-D MOJOLEARN_LLAMA_FAST_KV_STRIDE_CAP`). The layout is an argument of the
+both scans run and their answers are compared, at both row strides the scan
+takes: packed at stride `s` (the layout the linear cache has) and at a fixed
+stride `cap` wider than the used slots. The stride is an argument of the
 scan, so both are checked in every build.
   0 small cache, packed          1 small cache, fixed stride
   2 large cache, packed          3 large cache, fixed stride
@@ -36,8 +36,7 @@ infinity) and the flat index of the first non-finite float of the cache as
 this build lays it out; the expected index and kind are read from the device
 cache itself. The cache is granted (`wm_grant`), so in the default build
 the refusing scan is the row scan (the check requires the watermark to sit
-at `s - 1` there); under the watermark's _OFF define it is the whole scan. The stride arm
-moves the flat index, which the expectation follows.
+at `s - 1` there); under the watermark's _OFF define it is the whole scan.
 
 What a sabotage changes here: a row scan that reads row s - 2 or s, uses the
 packed stride on a fixed-stride cache (or the reverse), reports the scan
@@ -46,9 +45,8 @@ partials wrongly (part 1); a watermark advanced past a row nobody scanned, a
 refusal naming the other cache or another index, or no refusal at all for a
 value a step computed (part 2).
 
-pixi: check-llama-refuse-row-scan-watermark-off (the whole scan), -stride-cap
-(the fixed-stride arm with the row scan) and -watermark-off-stride-cap build
-this check under the other arms' defines.
+pixi: check-llama-refuse-row-scan-watermark-off builds this check with the
+whole scan at every step.
 """
 from std.memory import bitcast
 
@@ -268,14 +266,14 @@ def _produced_case(ctx: DeviceContext, value_cache: Bool) raises:
     require(kv.s == 4, "fixture: four positions should be cached, the cache holds " + String(kv.s))
 
     # What the device cache holds now, as this build lays it out.
-    var cells = kv.scan_cells()
+    var cells = kv.b * kv.n_kv * kv.s * kv.head_dim
     var keys = download[DType.float32](ctx, kv.k, cells)
     var vals = download[DType.float32](ctx, kv.v, cells)
     var first = _first_nonfinite(vals) if value_cache else _first_nonfinite(keys)
     var other = _first_nonfinite(keys) if value_cache else _first_nonfinite(vals)
     require(first >= 0, "FIXTURE ERROR: the overflowing step left no non-finite float in " + name)
     require(other < 0, "FIXTURE ERROR: the other cache is non-finite too, at " + String(other))
-    var slots = kv.cap if kv.fixed else kv.s
+    var slots = kv.s
     require((first // _HD) % slots == kv.s - 1,
             "FIXTURE ERROR: the first non-finite float of " + name + " (flat " + String(first)
             + ") is not in the row the last step appended")

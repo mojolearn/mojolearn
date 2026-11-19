@@ -115,7 +115,6 @@ from core.device_scan import device_first_nonfinite
 from autograd.refuse_scan import DeferredNonfiniteScan
 from core.step_phase import step_count_launch, step_count_sync
 from gemm.contract import OP_NT
-from gemm.checks.gemm_identical import GEMM_EPI_C_PLUS_CELL, GEMM_EPI_CELL_PLUS_C
 # Lane ag-pass6-host (2026-10-19, PASS6_IDEAS idea J), default on: the
 # refusal scan of d(residual2) writes its verdict to a device word and the
 # call reads it at its own closing wait (autograd/refuse_scan.mojo
@@ -139,19 +138,15 @@ from transformer.impl.llama.modeling_llama import (
     llama_key_lo,
     llama_key_span,
 )
-from gemm.neural_dispatch import NEURAL_GEMM_WORKLIST  # lane/fx-gemm-worklist (arm, default off)
 from autograd.kernels.transformer import (
     BWD_FUSE_GATED_SILU,
     BWD_FUSE_NORM2_RESIDUAL,
-    BWD_GEMM_EPI,
     BWD_TPB,
     IDN_BWD_ENTRY_ALIAS,
     _AFN_NORM1_RESID,
     LlamaBackwardStages,
     _rec,
     _route_a,
-    _route_a_epi,
-    _route_a_epi_takes,
     _route_b,
     _upload,
     bwd_add2_kernel,
@@ -200,9 +195,6 @@ comptime TF_DX_TMP0 = 1
 comptime TF_DX_TMP1 = 2
 comptime TF_DX_TMP0_ADD2 = 3
 comptime TF_DX_TMP2_ADD3 = 4
-# lane fx-gemm-epi (BWD_GEMM_EPI only): never recorded; _linear's local mark
-# that _dx_fanin_epi already wrote this member's dX.
-comptime TF_DX_JOINED = 5
 
 # Args slot i9 (TF_CARD_SLOT) of a TF_LINEAR or TF_ROPE node: which identity
 # card entries the rule records after its launches on a traced call (the
@@ -407,70 +399,8 @@ struct TransformerRules(BackwardRules):
             self._card(35, bst.norm1_dx, m * dm)
             self._card(36, bst.d_x, m * dm)
 
-    def _dx_fanin_epi(
-        self, mode: Int, card: Int, mut dc: DeviceBuffer[DType.float32], mut w: DeviceBuffer[DType.float32],
-        total: FP, m: Int, n: Int, k: Int,
-    ) raises:
-        # lane fx-gemm-epi (-D MOJOLEARN_GEMM_FAST_EPI=1, default off): S9 and
-        # S32 with the join in the GEMM's store. `total` is the fan-in's
-        # destination (every member's gradients[0]: writes_total). The first
-        # member's dX goes there plain; each later member joins it there by
-        # the follower kernel's own expression, in the follower's operand order:
-        #   S9   up -> total; gate: total = ftz(ftz(gate) + ftz(total))
-        #        (bwd_add2_kernel: ftz(ftz(a) + ftz(bb)), a = gate, bb = up)
-        #   S32  q -> total; k: total = ftz(ftz(total) + ftz(k));
-        #        v: total = ftz(ftz(total) + ftz(v))
-        #        (bwd_add3_kernel: acc = ftz(ftz(q) + ftz(k)), ftz(ftz(acc) + ftz(v)))
-        # Where the GEMM route has no fused store for a member's shape, that
-        # member's dX goes to its tmp buffer and the same follower kernel
-        # joins it (in place: one thread reads and writes one cell), one
-        # launch per fan-in as today. Same words, same order: bits unchanged.
-        ref bst = self.bst[]
-        var d = _view(self.ctx, total, m * k)
-        var takes = _route_a_epi_takes(OP_NT, m, n, k)
-        if mode == TF_DX_TMP0 or (mode == TF_DX_TMP1 and card == TF_CARD_UP):
-            # the first member of its fan-in (q; up)
-            _route_a(self.ctx, bst.gemm_workspace, d, dc, w, OP_NT, m, n, k)
-            bst.fanin_joined = False
-        elif mode == TF_DX_TMP1:
-            # k, after q
-            if takes:
-                _route_a_epi[GEMM_EPI_C_PLUS_CELL](self.ctx, bst.gemm_workspace, d, dc, w, OP_NT, m, n, k)
-                bst.fanin_joined = True
-            else:
-                _route_a(self.ctx, bst.gemm_workspace, bst.tmp1, dc, w, OP_NT, m, n, k)
-        elif mode == TF_DX_TMP0_ADD2:
-            # gate, after up
-            if takes:
-                _route_a_epi[GEMM_EPI_CELL_PLUS_C](self.ctx, bst.gemm_workspace, d, dc, w, OP_NT, m, n, k)
-            else:
-                _route_a(self.ctx, bst.gemm_workspace, bst.tmp0, dc, w, OP_NT, m, n, k)
-                self._add2(total, _fp(bst.tmp0), total, m * k)
-        elif mode == TF_DX_TMP2_ADD3:
-            # v, after q and k
-            if bst.fanin_joined and takes:
-                _route_a_epi[GEMM_EPI_C_PLUS_CELL](self.ctx, bst.gemm_workspace, d, dc, w, OP_NT, m, n, k)
-            else:
-                _route_a(self.ctx, bst.gemm_workspace, bst.tmp2, dc, w, OP_NT, m, n, k)
-                if bst.fanin_joined:
-                    # total holds ftz(ftz(q) + ftz(k)) already
-                    self._add2(total, total, _fp(bst.tmp2), m * k)
-                else:
-                    # In place, q read from the destination: a SECOND view of
-                    # `total` as the first addend, as `_add2` takes its
-                    # operands (one view per pointer argument; one variable
-                    # passed twice to a launch is refused as mutable aliasing).
-                    var dq = _view(self.ctx, total, m * k)
-                    step_count_launch()
-                    self.ctx.enqueue_function[bwd_add3_kernel](
-                        d.unsafe_ptr(), dq.unsafe_ptr(), bst.tmp1.unsafe_ptr(), bst.tmp2.unsafe_ptr(),
-                        Int32(m * k),
-                        grid_dim=(_blocks(m * k), 1, 1),
-                        block_dim=(BWD_TPB, 1, 1),
-                    )
-            bst.fanin_joined = False
-        else:
-            raise Error("transformer linear: unknown dX destination")
+    # TOMBSTONE: MOJOLEARN_GEMM_FAST_EPI, its transformer-backward use (NOISE, A/B round 1 NVIDIA L40S, job nvc-ab-20261119T125554Z-6f7afc: lm-train-step 0.98 = the row's other bases, samba-train-step 1.05) _dx_fanin_epi, its branch in _linear and TF_DX_JOINED deleted 2026-11-19 by lane/fx-arm-cleanup; code recoverable at a7c89e7558. The define stays for the packed sequence route's fused follower store (owed row gemm-seq-packed-epi-mlp).
+    # Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_EPI-transformer-backward.patch
 
     # TOMBSTONE: MOJOLEARN_GEMM_FAST_DX_CONCAT (NOISE, A/B round 1 NVIDIA L40S, job nvc-ab-20261119T125554Z-6f7afc: lm-train-step 1.00, samba-train-step 0.99) _dx_fanin_cat (the q, k, v members as one product) deleted 2026-11-19 by lane/fx-verdicts3; code recoverable at 913fc44cfa.
     # Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_DX_CONCAT.patch
@@ -491,50 +421,22 @@ struct TransformerRules(BackwardRules):
         var x = _view(self.ctx, inputs[0], m * k)
         var w = _view(self.ctx, inputs[1], n * k)
         var dw = _view(self.ctx, gradients[1], n * k)
-        # lane/fx-gemm-worklist (arm MOJOLEARN_GEMM_FAST_WORKLIST, default off: the six calls below are the
-        # immediate launches they were). Under the arm dW and dX of this node are queued on the workspace's work
-        # list: both read dC, neither reads the other. A node that completes its input's gradient (PLAIN, ADD2,
-        # ADD3) runs the list before anything reads it; a fan-in member that only fills tmp0 or tmp1 leaves its
-        # two products pending for the member that completes the fan-in, so gate,up go out as four products and
-        # q,k,v as six. Nothing between the members reads tmp0, tmp1 or the weight gradients, and the adds below
-        # already rely on every earlier member having run. The tape launches nothing after a member's apply (each
-        # fan-in weight is a leaf with this one consumer, so its gradient is written in place and never
-        # accumulated; rules_lm.mojo header): a driver that ties a fan-in member's weight to another node must
-        # not use the TMP modes under this arm. Call site: once per TF_LINEAR node of a backward.
-        _route_b[NEURAL_GEMM_WORKLIST](self.ctx, bst.gemm_workspace, dw, dc, x, OP_NT, m, n, k)
+        _route_b(self.ctx, bst.gemm_workspace, dw, dc, x, OP_NT, m, n, k)
         var mode = saved.i0
-        comptime if BWD_GEMM_EPI:
-            # lane fx-gemm-epi: the fan-in members under the arm
-            if mode != TF_DX_PLAIN:
-                self._dx_fanin_epi(mode, saved.i9, dc, w, gradients[0], m, n, k)
-                comptime if NEURAL_GEMM_WORKLIST:
-                    # lane/fx-gemm-worklist with the epilogue arm: the dX above took its own launch (an
-                    # epilogue product is never listed); the weight gradients queued by _route_b go out as
-                    # one list with the member that completes its fan-in. Without this no branch below
-                    # runs the list for a joined member and the last layer's would never launch.
-                    if mode == TF_DX_TMP0_ADD2 or mode == TF_DX_TMP2_ADD3:
-                        bst.gemm_workspace.list_run(self.ctx)
-                mode = TF_DX_JOINED
         if mode == TF_DX_PLAIN:
             var dx = _view(self.ctx, gradients[0], m * k)
-            _route_a[NEURAL_GEMM_WORKLIST](self.ctx, bst.gemm_workspace, dx, dc, w, OP_NT, m, n, k)
-            comptime if NEURAL_GEMM_WORKLIST:
-                bst.gemm_workspace.list_run(self.ctx)
+            _route_a(self.ctx, bst.gemm_workspace, dx, dc, w, OP_NT, m, n, k)
         elif mode == TF_DX_TMP0:
-            _route_a[NEURAL_GEMM_WORKLIST](self.ctx, bst.gemm_workspace, bst.tmp0, dc, w, OP_NT, m, n, k)
+            _route_a(self.ctx, bst.gemm_workspace, bst.tmp0, dc, w, OP_NT, m, n, k)
         elif mode == TF_DX_TMP1:
-            _route_a[NEURAL_GEMM_WORKLIST](self.ctx, bst.gemm_workspace, bst.tmp1, dc, w, OP_NT, m, n, k)
+            _route_a(self.ctx, bst.gemm_workspace, bst.tmp1, dc, w, OP_NT, m, n, k)
         elif mode == TF_DX_TMP0_ADD2:
             # S9: d(norm2.out) = tmp0 (gate) + tmp1 (up)
-            _route_a[NEURAL_GEMM_WORKLIST](self.ctx, bst.gemm_workspace, bst.tmp0, dc, w, OP_NT, m, n, k)
-            comptime if NEURAL_GEMM_WORKLIST:
-                bst.gemm_workspace.list_run(self.ctx)
+            _route_a(self.ctx, bst.gemm_workspace, bst.tmp0, dc, w, OP_NT, m, n, k)
             self._add2(gradients[0], _fp(bst.tmp0), _fp(bst.tmp1), m * k)
         elif mode == TF_DX_TMP2_ADD3:
             # S32: d(norm1.out) = (tmp0 (q) + tmp1 (k)) + tmp2 (v)
-            _route_a[NEURAL_GEMM_WORKLIST](self.ctx, bst.gemm_workspace, bst.tmp2, dc, w, OP_NT, m, n, k)
-            comptime if NEURAL_GEMM_WORKLIST:
-                bst.gemm_workspace.list_run(self.ctx)
+            _route_a(self.ctx, bst.gemm_workspace, bst.tmp2, dc, w, OP_NT, m, n, k)
             var d = _view(self.ctx, gradients[0], m * k)
             step_count_launch()
             self.ctx.enqueue_function[bwd_add3_kernel](
@@ -543,14 +445,8 @@ struct TransformerRules(BackwardRules):
                 grid_dim=(_blocks(m * k), 1, 1),
                 block_dim=(BWD_TPB, 1, 1),
             )
-        elif mode == TF_DX_JOINED:
-            pass
         else:
             raise Error("transformer linear: unknown dX destination")
-        comptime if NEURAL_GEMM_WORKLIST:
-            # A traced call reads this node's outputs in the cards below: nothing stays pending.
-            if self.trace_addr != 0:
-                bst.gemm_workspace.list_run(self.ctx)
         # cards, in the hand walk's order (TF_CARD_* above)
         var card = saved.i9
         if card == TF_CARD_DOWN:
