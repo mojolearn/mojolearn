@@ -161,6 +161,17 @@ pc_preflight() {   # vendor: PREFLIGHT lines; 0 when the job would start, 4 othe
             echo "PREFLIGHT ok B sets of $PC_B_ARMS checked"
         fi
     fi
+    if [ -n "${PC_PRIOR_WHEELS:-}" ]; then
+        if [ ! -s "$PC_PRIOR_WHEELS" ]; then pf_fail "PC_PRIOR_WHEELS $PC_PRIOR_WHEELS: no such file on the box (or empty)"
+        else
+            while read -r name dir commit; do
+                { [ -z "${name:-}" ] || [ "${name:0:1}" = "#" ]; } && continue
+                n=$(wheels_in "${dir:-/nonexistent}")
+                [ "$n" -eq 2 ] || pf_fail "prior wheel $name: ${dir:-?} holds $n of the 2 wheels"
+            done < "$PC_PRIOR_WHEELS"
+            echo "PREFLIGHT ok prior wheels of $PC_PRIOR_WHEELS checked"
+        fi
+    fi
     return $(( fails > 0 ? 4 : 0 ))
 }
 # <<< pc-preflight
@@ -445,6 +456,17 @@ OWED_PRIOR=(); [ -n "$LAST_PRIOR" ] && OWED_PRIOR=(--prior)   # measure_owed pla
 # ARM_ENV holds an env arm's variables.
 B_NAMES=()
 declare -A ARM_ENV
+# wheel_set_args <name> <wheel dir> <commit>: the install args of a wheel set built from COMMIT (one core and one $V
+# wheel in DIR), or a say line and rc 1. A B set and a prior wheel (PC_PRIOR_WHEELS, below) are installed the same way.
+wheel_set_args() {
+    local w bw=() a
+    for w in "$2"/mojolearn_core-*.whl "$2"/mojolearn_"$V"-*.whl; do [ -f "$w" ] && bw+=("$w"); done
+    # stderr: the caller captures stdout (the args); the job's log holds both
+    [ "${#bw[@]}" -eq 2 ] || { say "wheel set $1: $2 must hold one core and one $V wheel" >&2; return 1; }
+    a="--mojolearn-version $(basename "${bw[0]}" | cut -d- -f2) --candidate-source-commit $3"
+    for w in "${bw[@]}"; do a="$a --candidate-wheel $w"; done
+    echo "$a"
+}
 if [ "$OWED" = 1 ] && [ -n "${PC_B_ARMS:-}" ]; then
     [ -s "$PC_B_ARMS" ] || say "PC_B_ARMS=$PC_B_ARMS: no such file on the box (or empty); no B arm runs"
     while read -r name dir commit; do
@@ -464,15 +486,35 @@ if [ "$OWED" = 1 ] && [ -n "${PC_B_ARMS:-}" ]; then
             B_NAMES+=("$name")
             continue
         fi
-        bw=(); for w in "$dir"/mojolearn_core-*.whl "$dir"/mojolearn_"$V"-*.whl; do [ -f "$w" ] && bw+=("$w"); done
-        [ "${#bw[@]}" -eq 2 ] || { say "B set $name: $dir must hold one core and one $V wheel"; continue; }
-        a="--mojolearn-version $(basename "${bw[0]}" | cut -d- -f2) --candidate-source-commit $commit"
-        for w in "${bw[@]}"; do a="$a --candidate-wheel $w"; done
+        a=$(wheel_set_args "$name" "$dir" "$commit") || continue
         add_arm "$name" $a; B_NAMES+=("$name")
     done < "$PC_B_ARMS"
 fi
 B_CSV=$(IFS=,; echo "${B_NAMES[*]:-}")
 # <<< b-arms
+# >>> prior-wheels (tools/test_measure_owed.py runs this block with the b-arms one)
+# OUR OWN EARLIER BUILT WHEELS beside the candidate (lane fx-same-pod-prior; Andrew, 2026-11-19: a speed verdict compares
+# two wheels timed on the SAME host in the SAME job; the stored 0.8.55 board is a screen only). PC_PRIOR_WHEELS (a file
+# on the box, lines `<name> <wheel dir> <commit>`, measure_candidate.py stage --prior-wheel) is installed exactly as a
+# B set (wheel_set_args) and becomes the prior arm prior-<name>: the targeted job installs it in tg-install with the
+# candidate, smokes it with the candidate, times every listed row on it chunk by chunk right after the candidate (our
+# GPU arm only, one scored run, the same small-row median rule: the same board process), and the compare takes its
+# board as the verdict baseline (paper_compare.py --verdict-prior <first name>), the stored board as a screen column.
+PRIOR_WHEEL_NAMES=()
+if [ -n "${PC_PRIOR_WHEELS:-}" ]; then
+    if [[ "$PARTS" != *",targeted,"* && "$PARTS" != *",tg-"* ]]; then
+        say "PC_PRIOR_WHEELS is for the targeted job (PC_PARTS=targeted)"; exit 2
+    fi
+    [ -s "$PC_PRIOR_WHEELS" ] || { say "PC_PRIOR_WHEELS=$PC_PRIOR_WHEELS: no such file on the box (or empty)"; exit 2; }
+    while read -r name dir commit; do
+        { [ -z "${name:-}" ] || [ "${name:0:1}" = "#" ]; } && continue
+        [[ "$name" =~ ^[a-z0-9][a-z0-9.-]*$ ]] && [[ "${commit:-}" =~ ^[0-9a-f]{40}$ ]] || { say "bad PC_PRIOR_WHEELS line: $name"; exit 2; }
+        a=$(wheel_set_args "$name" "$dir" "$commit") || exit 2
+        add_arm "prior-$name" $a; PRIOR_ARMS+=("prior-$name"); PRIOR_WHEEL_NAMES+=("$name")
+    done < "$PC_PRIOR_WHEELS"
+    say "prior wheels (the verdict baseline: ${PRIOR_WHEEL_NAMES[0]:-none}): ${PRIOR_WHEEL_NAMES[*]:-none}"
+fi
+# <<< prior-wheels
 
 run_as() {   # arm: the board args that run on that arm's installed venv (no install)
     echo --python-env "${ARM_PY[$1]}" --skip-install --wheel-manifest "${ARM_MAN[$1]}" --mojolearn-version "$(arm_version "$1")"
@@ -743,7 +785,7 @@ if part tg-install || part tg-prep || part tg-smoke || part tg-board || part tg-
     cp "$PC_ROWS" "$TG/rows.tsv"
     phase tg-plan
     $PY tools/ops/targeted_rows.py plan --rows "$TG/rows.tsv" --vendor "$V" --planner tools/bench_board.py \
-        --recipes "$RECIPES" --out-dir "$TG" --chunk-s "${PC_TG_CHUNK_S:-600}" ${BASELINE_BOARD:+--one-arm} \
+        --recipes "$RECIPES" --out-dir "$TG" --chunk-s "${PC_TG_CHUNK_S:-600}" --prior-wheels "${#PRIOR_WHEEL_NAMES[@]}" ${BASELINE_BOARD:+--one-arm} \
         > "$RES/logs/tg-plan.log" 2>&1
     rc=$?; tail -n 2 "$RES/logs/tg-plan.log"
     if [ $rc -eq 0 ] && [ -n "$B_CSV" ]; then
@@ -969,8 +1011,7 @@ if part tg-install || part tg-prep || part tg-smoke || part tg-board || part tg-
                 fi
                 # a resumed submit: a unit whose arm board holds every race and whose base board every base race
                 # is done needs no process and no venv
-                st="${ids%.txt}.stored.txt"
-                if [ -s "$st" ]; then grep -vFx -f "$st" "$use" > "$use.base" || true; else cp "$use" "$use.base"; fi
+                cp "$use" "$use.base"
                 if [ "$(races_left "$use" "$RES/board-tg-ab-$arm-$rows/board.json")" -eq 0 ] 2> /dev/null \
                         && [ "$(races_left "$use.base" "$RES/board-tg-ab-$arm-base-$rows/board.json")" -eq 0 ] 2> /dev/null; then
                     if [ "$(nlines "$use")" -eq 0 ]; then say "owed $arm $rows: NOT TIMED, none of its races passed its smoke (logs/pass-ids-tg-ab-$arm.log; timed-check names it)"
@@ -990,14 +1031,20 @@ if part tg-install || part tg-prep || part tg-smoke || part tg-board || part tg-
                 fi
                 $PY tools/ops/targeted_rows.py chunks --ids "$use" --chunk-s "${PC_TG_CHUNK_S:-600}" \
                     --out-dir "$TGO/chunks-$arm-$rows" | tail -n 1
-                # STORED BASE (measure_owed.py; Andrew, 2026-11-17): the unit's races with a stored base time run
-                # the arm only, its rounds capped at that time; the base (the candidate) runs the others
-                sb="${ids%.txt}.base.json"; st="${ids%.txt}.stored.txt"; cap=()
-                [ -f "$sb" ] && cap=(--race-round-seconds "$sb")
+                # IN-JOB BASE CAP (measure_owed.py; lane fx-same-pod-prior, 2026-11-19, replacing the 2026-11-17
+                # STORED BASE from another host): base and arm back to back on every race; a race of the unit's
+                # .cap.txt has the arm's rounds capped at the time the base just took for it in this job
+                capf="${ids%.txt}.cap.txt"
                 for c in "$TGO/chunks-$arm-$rows"/chunk-*.txt; do
                     [ -f "$c" ] || continue
-                    if [ -s "$st" ]; then grep -vFx -f "$st" "$c" > "$c.base" || true; else cp "$c" "$c.base"; fi
+                    cp "$c" "$c.base"
                     tg_board candidate "$c.base" "$RES/board-tg-ab-$arm-base-$rows" "$abrows" "${SJT[@]}"; r=$?; [ $r -gt $rc ] && rc=$r
+                    cap=()
+                    if [ -s "$capf" ]; then
+                        $PY tools/measure_owed.py base-caps --board "$RES/board-tg-ab-$arm-base-$rows/board.json" \
+                            --ids "$c" --cap-ids "$capf" --out "$c.caps.json" | tail -n 1
+                        [ -s "$c.caps.json" ] && cap=(--race-round-seconds "$c.caps.json")
+                    fi
                     tg_board "$arm" "$c" "$RES/board-tg-ab-$arm-$rows" "$abrows" "${SJT[@]}" ${cap[@]+"${cap[@]}"}; r=$?; [ $r -gt $rc ] && rc=$r
                 done
                 EV_LEFT_MB=$(( EV_LEFT_MB - 2 * $(nlines "$use") * ${PC_EVIDENCE_MB_PER_RACE:-40} ))
@@ -1011,7 +1058,8 @@ if part tg-install || part tg-prep || part tg-smoke || part tg-board || part tg-
         # and the job's only failure was the compare's missing board. Each arm (the candidate on the listed rows, each
         # owed unit's arm and its base) with no timed race gets an UNTIMED line with why, and the phase fails
         $PY tools/ops/targeted_rows.py timed-check --results "$RES" --ids "$TG/race-ids-full.txt" \
-            --units "$TGO/units.tsv" ${PC_OWED_ARMS:+--arms "$PC_OWED_ARMS"} > "$RES/logs/tg-timed-check.log" 2>&1
+            --units "$TGO/units.tsv" ${PC_OWED_ARMS:+--arms "$PC_OWED_ARMS"} \
+            --prior-wheels "$(IFS=,; echo "${PRIOR_WHEEL_NAMES[*]:-}")" > "$RES/logs/tg-timed-check.log" 2>&1
         r=$?; grep -m 60 -e '^UNTIMED' -e '^TG-TIMED-CHECK' "$RES/logs/tg-timed-check.log" | cut -c1-400
         [ $r -gt $rc ] && rc=$r
         phase_end $rc
@@ -1026,8 +1074,10 @@ if part tg-install || part tg-prep || part tg-smoke || part tg-board || part tg-
             --why "no listed race of the candidate was timed in this job (logs/tg-timed-check.log)" | tail -n 1
         NR=()
         for f in "$TG/not-planned.json" "$TG/smoke-failed.json"; do [ -f "$f" ] && NR+=(--not-run "$f"); done
-        mapfile -t PB < <(prior_board_args tg-)
-        [ -n "$BASELINE_BOARD" ] && PB=(--stored-baseline-board "$BASELINE_BOARD")
+        mapfile -t PB < <(prior_board_args tg-)     # the PyPI priors, or (with a stored baseline) the prior wheels only
+        [ -n "$BASELINE_BOARD" ] && PB+=(--stored-baseline-board "$BASELINE_BOARD")
+        # a prior wheel timed in this job is the verdict baseline; the stored board is then a screen column (no flag)
+        [ ${#PRIOR_WHEEL_NAMES[@]} -gt 0 ] && PB+=(--verdict-prior "${PRIOR_WHEEL_NAMES[0]}")
         RF=()
         [ -f "$REF_COMPARE" ] && RF=(--reference-compare "$REF_COMPARE")
         $PY tools/paper_compare.py compare --recipes "$TG/recipes.json" --board "$RES/board-tg/board.json" "${NR[@]}" \
@@ -1037,7 +1087,7 @@ if part tg-install || part tg-prep || part tg-smoke || part tg-board || part tg-
         rc=$?; head -n 3 "$RES/logs/compare-tg.log"
         $PY tools/ops/targeted_rows.py summary --compare "$RES/compare-tg-$V.json" --rows "$TG/rows.tsv" \
             --results "$RES" --ids "$TG/race-ids-full.txt" --units "$TGO/units.tsv" \
-            --prior-versions "$([ -n "$BASELINE_BOARD" ] || echo "$PRIOR_VERSIONS")" \
+            --prior-versions "$(IFS=,; echo "${PRIOR_ARMS[*]#prior-}")" \
             --out "$RES/SUMMARY-TG-$V.txt" > "$RES/logs/summary-tg.log" 2>&1
         r=$?; head -n 3 "$RES/logs/summary-tg.log"; [ $r -gt $rc ] && rc=$r
         phase_end $rc
@@ -1248,8 +1298,16 @@ if [ "$OWED" = 1 ] && part owed && [ -s "$RES/plan-owed/units.tsv" ]; then
         [ "$arm" = candidate ] && [ "$rows" = full ] && continue   # timed with the paper races (part board)
         [ "$arm" = prior ] && [ "$rows" = full ] && continue       # timed in board-prior-$LAST_PRIOR (part prior)
         [ -n "${PC_OWED_ARMS:-}" ] && [[ ",$PC_OWED_ARMS," != *",$arm,"* ]] && continue   # a split submit
-        # a stored-base unit (measure_owed.py STORED BASE): its races' rounds capped at the stored base time
-        cap=(); [ -f "${ids%.txt}.base.json" ] && cap=(--race-round-seconds "${ids%.txt}.base.json")
+        # IN-JOB BASE CAP (measure_owed.py, 2026-11-19): a B unit's capped races stop at the time this job's base
+        # (the candidate's board, timed before: part board for full rows, its own unit first in units.tsv otherwise)
+        # took for them
+        cap=()
+        if [ -s "${ids%.txt}.cap.txt" ]; then
+            bb="$RES/board-candidate-$rows/board.json"; [ "$rows" = full ] && bb="$RES/board/board.json"
+            $PY tools/measure_owed.py base-caps --board "$bb" --ids "$ids" --cap-ids "${ids%.txt}.cap.txt" \
+                --out "${ids%.txt}.caps.json" | tail -n 1
+            [ -s "${ids%.txt}.caps.json" ] && cap=(--race-round-seconds "${ids%.txt}.caps.json")
+        fi
         if [ "$rows" = full ]; then
             # full rows: only the races whose smoke passed (the gate keys on family/lane/dataset, any venv)
             grep -Fx -f "$PASS_IDS" "$ids" > "$ids.pass" 2> /dev/null || true

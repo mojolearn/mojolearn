@@ -353,39 +353,35 @@ class PriorColumn(unittest.TestCase):
         self.assertEqual(PC.new_label(cand, ["0.8.67"]), "candidate aaaaaaaaaaaa (0.8.67)")
 
 
-class StoredBase(unittest.TestCase):
-    """Andrew, 2026-11-17 (the DBSCAN brute A/B): an ab row with a stored base times only its B arms, each race's
-    rounds capped at the stored base time; the report divides by the stored time and says it is stored and from
-    which host; a B run that reached the cap is NOT-FASTER-THAN-BASE."""
-    HOST = "pod-old/GPU-1"
-    ROW = {"id": "r-sb", "kind": "ab", "lane": "gmm", "dataset": "*", "rows": "full", "b_arms": ["b1"],
-           "decides": "x", "stored_base": {"source": "an older board", "version": "wheel abc", "host_id": HOST,
-                                           "cap": True,
-                                           "cells": {"algos/gmm/taxi/rows=full fit ours": 994212.7}}}
+class InJobBaseCap(unittest.TestCase):
+    """Lane fx-same-pod-prior (2026-11-19; it replaces the 2026-11-17 STORED BASE, which capped a B arm at a base time
+    stored from another host): an ab row with "cap_base" times its base (the candidate) and its B arm back to back in
+    the same job like every ab row; each B race's rounds are capped at the time this job's base took for it
+    (base-caps over the base board); a B run that reached the cap is NOT-FASTER-THAN-BASE."""
+    HOST = "pod-a/GPU-0"
+    ROW = {"id": "r-cb", "kind": "ab", "lane": "gmm", "dataset": "*", "rows": "full", "b_arms": ["b1"],
+           "decides": "x", "cap_base": True}
+    TAXI, ISTELLA = "algos/gmm/taxi/rows=full", "algos/gmm/istella/rows=full"
 
-    def test_plan_runs_only_the_b_arm_with_caps(self):
+    def test_plan_times_base_and_arm_and_lists_the_capped_races(self):
         doc = dict(OWED, rows=[self.ROW])
         units, smoke, drivers, missing, rowmap, bargs = MO.plan(doc, PAPER, fake_planner(), "nvidia", ["b1"])
-        self.assertEqual(units, {("b1", "full"): ["algos/gmm/taxi/rows=full"]})     # no candidate, no istella
-        self.assertIn("no stored base", missing["r-sb algos/gmm/istella/rows=full"])
-        self.assertEqual(smoke["candidate"], ["algos/gmm/taxi/rows=2000"])        # the smoke gate still applies
-        bases = MO.unit_bases(doc, rowmap, units)
-        self.assertEqual(bases[("b1", "full")]["round_seconds"], {"algos/gmm/taxi/rows=full": 995})
-        cell = bases[("b1", "full")]["cells"]["algos/gmm/taxi/rows=full fit ours"]
-        self.assertEqual((cell["host_id"], cell["ms"], cell["cap"]), (self.HOST, 994212.7, True))
-        # without "cap" the stored base still replaces the candidate, with no round cap
-        nocap = dict(OWED, rows=[dict(self.ROW, stored_base=dict(self.ROW["stored_base"], cap=False))])
-        u2, *_r, rm2, _b = MO.plan(nocap, PAPER, fake_planner(), "nvidia", ["b1"])
-        self.assertEqual(MO.unit_bases(nocap, rm2, u2)[("b1", "full")]["round_seconds"], {})
+        self.assertIn(("candidate", "full"), units)                  # the base is timed in this job
+        self.assertEqual(units[("b1", "full")], sorted([self.TAXI, self.ISTELLA]))
+        self.assertEqual(MO.unit_caps(doc, rowmap, units), {("b1", "full"): sorted([self.TAXI, self.ISTELLA])})
+        plain = dict(OWED, rows=[dict(self.ROW, cap_base=False)])
+        u2, *_r, rm2, _b = MO.plan(plain, PAPER, fake_planner(), "nvidia", ["b1"])
+        self.assertEqual(MO.unit_caps(plain, rm2, u2), {})
 
-    def test_cmd_plan_writes_the_unit_sidecars(self):
+    def test_cmd_plan_writes_the_cap_list_and_drops_stale_sidecars(self):
         with tempfile.TemporaryDirectory() as d:
             owed, paper, planner = (os.path.join(d, n) for n in ("owed.json", "paper.json", "planner.py"))
             json.dump(dict(OWED, rows=[self.ROW]), open(owed, "w"))
             json.dump(PAPER, open(paper, "w"))
             out = os.path.join(d, "plan")
             os.makedirs(out)
-            open(os.path.join(out, "ids-b1-full.stored.txt"), "w").write("stale\n")
+            for stale in ("ids-b1-full.stored.txt", "ids-b1-full.base.json"):
+                open(os.path.join(out, stale), "w").write("stale\n")
             fake = fake_planner()
             orig = MO.load_planner
             MO.load_planner = lambda path: fake
@@ -394,49 +390,59 @@ class StoredBase(unittest.TestCase):
                          "--vendor", "nvidia", "--b-arms", "b1", "--out-dir", out])
             finally:
                 MO.load_planner = orig
-            base = json.load(open(os.path.join(out, "ids-b1-full.base.json")))
-            self.assertEqual(base["round_seconds"], {"algos/gmm/taxi/rows=full": 995})
-            self.assertEqual(open(os.path.join(out, "ids-b1-full.stored.txt")).read(), "algos/gmm/taxi/rows=full\n")
-            # the bench_board reader of the same file
+            self.assertFalse(os.path.exists(os.path.join(out, "ids-b1-full.stored.txt")))
+            self.assertFalse(os.path.exists(os.path.join(out, "ids-b1-full.base.json")))
+            self.assertEqual(open(os.path.join(out, "ids-b1-full.cap.txt")).read().split(),
+                             sorted([self.TAXI, self.ISTELLA]))
+
+    def test_base_caps_come_from_this_jobs_base_board(self):
+        with tempfile.TemporaryDirectory() as d:
+            board = os.path.join(d, "board.json")
+            json.dump({"races": {
+                self.TAXI: {"cells": [{"arm": "ours", "status": "ok", "median_ms": 1170000.2},
+                                      {"arm": "cuml", "status": "ok", "median_ms": 5.0}]},
+                self.ISTELLA: {"cells": [{"arm": "ours", "status": "REFUSED(error: x)", "median_ms": None}]}}},
+                open(board, "w"))
+            ids, cap_ids, out = (os.path.join(d, n) for n in ("chunk.txt", "cap.txt", "caps.json"))
+            open(ids, "w").write("%s\n%s\n" % (self.TAXI, self.ISTELLA))
+            open(cap_ids, "w").write("%s\n%s\n" % (self.TAXI, self.ISTELLA))
+            self.assertEqual(MO.main(["base-caps", "--board", board, "--ids", ids, "--cap-ids", cap_ids,
+                                      "--out", out]), 0)
+            caps = json.load(open(out))["round_seconds"]
+            # this job's base time, whole seconds up; no cap where the base has no time (the family ceiling applies)
+            self.assertEqual(caps, {self.TAXI: 1171})
             import importlib.util
             spec = importlib.util.spec_from_file_location("bb_for_owed", os.path.join(HERE, "bench_board.py"))
             bb = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(bb)
-            caps = bb.race_round_seconds(os.path.join(out, "ids-b1-full.base.json"))
-            ctx = {"race_round_seconds": caps, "round_seconds": 0}
-            self.assertEqual(bb.round_seconds_for(ctx, {"id": "algos/gmm/taxi/rows=full"}, 1800), 995)
-            self.assertEqual(bb.round_seconds_for(ctx, {"id": "algos/gmm/istella/rows=full"}, 1800), 1800)
-            self.assertEqual(bb.round_seconds_for(dict(ctx, round_seconds=60), {"id": "x"}, 1800), 60)
+            ctx = {"race_round_seconds": bb.race_round_seconds(out), "round_seconds": 0}
+            self.assertEqual(bb.round_seconds_for(ctx, {"id": self.TAXI}, 1800), 1171)
+            self.assertEqual(bb.round_seconds_for(ctx, {"id": self.ISTELLA}, 1800), 1800)
+            # a race not in the unit's cap list is never capped
+            open(cap_ids, "w").write("")
+            MO.main(["base-caps", "--board", board, "--ids", ids, "--cap-ids", cap_ids, "--out", out])
+            self.assertEqual(json.load(open(out))["round_seconds"], {})
 
-    def report(self, d, b_cell, b_host="pod-a/GPU-0"):
+    def report(self, d, b_cell, row=None):
         plan_dir, res = os.path.join(d, "plan"), os.path.join(d, "res")
         os.makedirs(plan_dir)
-        json.dump({"r-sb": ["algos/gmm/taxi/rows=full"]}, open(os.path.join(plan_dir, "rowmap.json"), "w"))
+        json.dump({"r-cb": [self.TAXI]}, open(os.path.join(plan_dir, "rowmap.json"), "w"))
         json.dump({}, open(os.path.join(plan_dir, "not-planned.json"), "w"))
-        os.makedirs(os.path.join(res, "board-b1-full"))
-        json.dump({"box": {"host_probe": {"schema": "mojolearn-host-probe/1", "host_id": b_host}},
-                   "races": {"algos/gmm/taxi/rows=full": {"cells": [b_cell]}}},
-                  open(os.path.join(res, "board-b1-full", "board.json"), "w"))
-        return MO.report(dict(OWED, rows=[self.ROW]), plan_dir, res, "nvidia")
+        probe = {"host_probe": {"schema": "mojolearn-host-probe/1", "host_id": self.HOST}}
+        for sub, cell in (("board", {"arm": "ours", "status": "ok", "median_ms": 1170000.0}),
+                          ("board-b1-full", b_cell)):
+            os.makedirs(os.path.join(res, sub))
+            json.dump({"box": probe, "races": {self.TAXI: {"cells": [cell]}}},
+                      open(os.path.join(res, sub, "board.json"), "w"))
+        return MO.report(dict(OWED, rows=[row or self.ROW]), plan_dir, res, "nvidia")
 
-    def test_report_against_the_stored_base(self):
+    def test_report_against_this_jobs_base(self):
         with tempfile.TemporaryDirectory() as d:
-            rep = self.report(d, {"arm": "ours", "status": "ok", "median_ms": 497106.35})
-            (r,) = rep["rows"]
-            self.assertEqual(r["base_ms"], 994212.7)
+            (r,) = self.report(d, {"arm": "ours", "status": "ok", "median_ms": 585000.0})["rows"]
+            self.assertEqual(r["candidate_ms"], 1170000.0)
             self.assertAlmostEqual(r["b_ratio"]["b1"], 0.5)
             self.assertIn("b1:B-FASTER", r["flags"])
-            self.assertIn("BASE-STORED", r["flags"])
-            self.assertIn("BASE-OTHER-HOST", r["flags"])
-            text = MO.render_summary(rep)
-            self.assertIn("base STORED, not timed on this box: r-sb: wheel abc (an older board), host " + self.HOST,
-                          text)
-            self.assertIn("B arms ran on pod-a/GPU-0", text)
-            self.assertIn("base STORED", MO.render_md(rep))
-        with tempfile.TemporaryDirectory() as d:     # the same host: no BASE-OTHER-HOST
-            (r,) = self.report(d, {"arm": "ours", "status": "ok", "median_ms": 1.2e6}, self.HOST)["rows"]
-            self.assertIn("b1:B-SLOWER", r["flags"])
-            self.assertNotIn("BASE-OTHER-HOST", r["flags"])
+            self.assertNotIn("BASE-STORED", r["flags"])
 
     def test_a_run_stopped_at_the_cap_is_not_faster_than_base(self):
         with tempfile.TemporaryDirectory() as d:
@@ -447,17 +453,32 @@ class StoredBase(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:     # another failure is not a verdict
             (r,) = self.report(d, {"arm": "ours", "status": "REFUSED(error: x)", "median_ms": None})["rows"]
             self.assertIn("b1:B-NOT-RUN", r["flags"])
+        with tempfile.TemporaryDirectory() as d:     # a timeout of an uncapped row is no verdict either
+            (r,) = self.report(d, {"arm": "ours", "status": "REFUSED(timeout: null)", "median_ms": None},
+                               dict(self.ROW, cap_base=False))["rows"]
+            self.assertIn("b1:B-NOT-RUN", r["flags"])
 
     def test_committed_dbscan_rows(self):
         doc = json.load(open(os.path.join(PC.OUT_DIR, "owed-pre0867.json")))
         by = {r["id"]: r for r in doc["rows"]}
-        for rid, ms in (("dbscan-brute-edge-free-taxi", 994212.672), ("dbscan-brute-edge-free-istella", 595778.761)):
-            sb = by[rid]["stored_base"]
-            self.assertTrue(sb["cap"] and sb["host_id"] and sb["version"])
-            self.assertEqual(list(sb["cells"].values()), [ms])
+        for rid in ("dbscan-brute-edge-free-taxi", "dbscan-brute-edge-free-istella"):
+            self.assertTrue(by[rid].get("cap_base"))
+            self.assertNotIn("stored_base", by[rid])           # no base time from another host
         self.assertEqual(by["dbscan-brute-edge-free-taxi-250k"]["rows"], 250000)
         self.assertNotIn("stored_base", by["dbscan-brute-edge-free-taxi-250k"])    # base and arm back to back
         self.assertNotIn("dbscan-brute-edge-free-taxi-750k", by)
+        self.assertFalse([r["id"] for r in doc["rows"] if "stored_base" in r])
+
+    def test_job_caps_each_chunk_from_its_base_board(self):
+        with open(os.path.join(HERE, "ops", "paper_compare_job.sh")) as fh:
+            text = fh.read()
+        self.assertNotIn(".stored.txt", text)
+        self.assertNotIn('.base.json"', text)
+        i = text.index('tg_board candidate "$c.base" "$RES/board-tg-ab-$arm-base-$rows"')
+        j = text.index("measure_owed.py base-caps", i)
+        k = text.index('tg_board "$arm" "$c" "$RES/board-tg-ab-$arm-$rows"', j)
+        self.assertLess(i, j)
+        self.assertLess(j, k)
 
 
 class CommittedOwed(unittest.TestCase):
