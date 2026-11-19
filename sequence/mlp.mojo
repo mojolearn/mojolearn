@@ -17,6 +17,10 @@ epoch on the host (the reference's is numpy's RandomState, which is not
 restated).
 """
 from sequence.ops import FP, Args, add, fma3, gemm_dot, ld, mul, op_bias, op_colsum, op_gemm, st, sub, sumsq_fold
+from sequence.act_values import (
+    ACT_IDENTITY, ACT_LOGISTIC, ACT_TANH, ACT_RELU, ACT_SOFTMAX,
+    op_act, op_act_bwd, act_value, act_bwd_value,
+)
 from checks.numerics import ftz, identical_div, identical_exp, identical_log, identical_sigmoid, identical_tanh
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from sequence.adafactor import AF_NORM_BLOCK, af_fold_parts
@@ -82,11 +86,11 @@ comptime MLP_DEVICE_EPOCH_ORDER = MLP_EPOCH_DEV and is_defined[
 comptime MLP_L2_BLOCK = AF_NORM_BLOCK
 comptime MLP_ROW_BLOCK = 256
 
-comptime ACT_IDENTITY = 0
-comptime ACT_LOGISTIC = 1
-comptime ACT_TANH = 2
-comptime ACT_RELU = 3
-comptime ACT_SOFTMAX = 4
+# The activation codes, `op_act`, `op_act_bwd`, `act_value` and `act_bwd_value`
+# moved word for word to sequence/act_values.mojo (a module with no gemm
+# import, so the packed GEMM's store epilogue can call them; lane
+# fx-leftovers-product, 2026-11-19). Imported back at the top of this file:
+# every `from sequence.mlp import ...` of those names still resolves.
 
 comptime EPI_BIAS_ACT = 1
 comptime EPI_L2GRAD = 2
@@ -100,35 +104,6 @@ comptime LOSS_LOG = 2
 @always_inline
 def div(a: Float32, b: Float32) -> Float32:
     return ftz(identical_div(a, b))
-
-
-def op_act(t: Int, a: Args):
-    """p0[t] = act(p0[t]); i0 activation (not softmax)."""
-    var z = ld(a.p0, t)
-    var k = a.i0
-    if k == ACT_LOGISTIC:
-        z = ftz(identical_sigmoid(z))
-    elif k == ACT_TANH:
-        z = ftz(identical_tanh(z))
-    elif k == ACT_RELU:
-        z = z if z > Float32(0.0) else Float32(0.0)
-    st(a.p0, t, z)
-
-
-def op_act_bwd(t: Int, a: Args):
-    """p0[t] (delta) *= act'(p1[t]) written through the activation's output,
-    the reference's inplace_*_derivative; i0 activation."""
-    var d = ld(a.p0, t)
-    var z = ld(a.p1, t)
-    var k = a.i0
-    if k == ACT_LOGISTIC:
-        d = mul(mul(d, z), sub(Float32(1.0), z))
-    elif k == ACT_TANH:
-        d = mul(d, sub(Float32(1.0), mul(z, z)))
-    elif k == ACT_RELU:
-        if z == Float32(0.0):
-            d = Float32(0.0)
-    st(a.p0, t, d)
 
 
 # ------------------------------------------------------------------ the loss block
@@ -357,35 +332,9 @@ def op_gemm_epi_tail(t: Int, a: Args):
 # accumulator in registers and the cell is stored once. SAME BITS: the
 # reloaded word was ld(st(acc)) = ftz(ftz(acc)) = acc (fma3 already flushes),
 # and every other operand and operation is the follower's, in its order.
-# The bodies below are op_act's and op_act_bwd's verbatim (the hand path's
-# own ops are left as they are).
-@always_inline
-def act_value(z_in: Float32, k: Int) -> Float32:
-    """op_act's body on a value: act(z), activation code k (not softmax)."""
-    var z = z_in
-    if k == ACT_LOGISTIC:
-        z = ftz(identical_sigmoid(z))
-    elif k == ACT_TANH:
-        z = ftz(identical_tanh(z))
-    elif k == ACT_RELU:
-        z = z if z > Float32(0.0) else Float32(0.0)
-    return z
-
-
-@always_inline
-def act_bwd_value(d_in: Float32, z: Float32, k: Int) -> Float32:
-    """op_act_bwd's body on values: delta times act'(z), z the activation."""
-    var d = d_in
-    if k == ACT_LOGISTIC:
-        d = mul(mul(d, z), sub(Float32(1.0), z))
-    elif k == ACT_TANH:
-        d = mul(d, sub(Float32(1.0), mul(z, z)))
-    elif k == ACT_RELU:
-        if z == Float32(0.0):
-            d = Float32(0.0)
-    return d
-
-
+# The value bodies (`act_value`, `act_bwd_value`: op_act's and op_act_bwd's
+# verbatim) are in sequence/act_values.mojo; the hand path's own ops are
+# left as they are.
 @always_inline
 def gemm_epi_value(
     acc: Float32, ci: Int, n: Int, epi: Int, epi_arg: Int, p3: FP, f0: Float32, f1: Float32,

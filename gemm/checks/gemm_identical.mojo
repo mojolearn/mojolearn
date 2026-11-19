@@ -131,6 +131,11 @@ from core.step_phase import (
 )
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
+# lane fx-leftovers-product (2026-11-19): the activation followers' value
+# bodies, for the store epilogue kinds GEMM_EPI_BIAS_ACT and GEMM_EPI_ACT_BWD.
+# sequence/act_values.mojo imports sequence/ops.mojo and checks/numerics.mojo
+# only (no gemm import: no cycle).
+from sequence.act_values import act_value, act_bwd_value
 from std.sys import llvm_intrinsic
 from std.sys.compile import is_defined
 # TOMBSTONE: MOJOLEARN_SCOPED_GEMM_AUDIT (never measured, deleted) deleted 2026-11-09 by 0a1dfdf971; code recoverable at
@@ -8925,12 +8930,31 @@ comptime GEMM_EPI_CELL_PLUS_C = 2
 # lane/fx-gemm-worklist (2026-11-19, coordinator follow-up): kinds that read a SECOND buffer. They are served by
 # `identical_gemm_kpack_epi_ptr_kernel` only (below `_kpack_launch`), whose argument block carries the pointer
 # `epi_p` and one Int32 `epi_i`; the single-product kernel and the list kernel keep their arguments and pass the
-# body a dead `dst` / 0. `-D MOJOLEARN_GEMM_FAST_EPI=1` territory: NOT WIRED to any caller yet (no entry, no check).
+# body a dead `dst` / 0. `-D MOJOLEARN_GEMM_FAST_EPI=1` territory. Launcher: gemm/neural_dispatch.mojo
+# `identical_gemm_leaf_ptr_epi_into`; entry and rule: sequence/gemm_packed_route.mojo `seq_gemm_packed_epi_kind` /
+# `seq_gemm_packed_epi_launch`; call site: sequence/exec_device.mojo; check: autograd/checks/gemm_cases.mojo.
 #   GEMM_EPI_PLUS_BIAS    ftz(ftz(cell) + ftz(epi_p[j]))   `add_bias_kernel`
 #                         (transformer/impl/llama/modeling_llama.mojo): `ftz(ftz(y) + ftz(bias[col]))`, y the
 #                         stored product word, col = the cell's column; same operand order, same flushes.
 comptime GEMM_EPI_PTR_FIRST = 3
 comptime GEMM_EPI_PLUS_BIAS = 3
+# lane fx-leftovers-product (2026-11-19): the sequence followers of a product (sequence/mlp.mojo `gemm_epi_tail`),
+# each kind the follower's own function called on the cell (sequence/act_values.mojo), so there is ONE spelling:
+#   GEMM_EPI_BIAS_ACT     ftz(act_value(ftz(ftz(cell) + ftz(epi_p[j])), epi_i))
+#                         `op_bias` then `op_act`: `st(C, add(ld(C), ld(b[j])))` stores ftz(ftz(c) + ftz(b[j])) (the
+#                         outer `st` flush is idempotent on `add`'s result); `op_act` reloads that word (`ld` flushes
+#                         a flushed word), applies `act_value`'s branch for the activation code `epi_i` and stores it
+#                         through `st`'s flush. Same operands, same order, same flushes. An activation code with no
+#                         branch (identity, softmax) leaves the word, as `op_act` does.
+#   GEMM_EPI_ACT_BWD      ftz(act_bwd_value(ftz(cell), ftz(epi_p[i n + j]), epi_i))
+#                         `op_act_bwd`: d = ld(C[t]), z = ld(p1[t]) (the forward activation, dense, row stride n),
+#                         `act_bwd_value`'s branch, `st`. `mul` and `sub` are sequence/ops.mojo's (the follower's).
+# SAME BITS as the follower launch by the argument above `gemm_epi_cell`: the follower read the stored `ftz(root)`
+# word back and flushed it; here the same word is flushed in a register. PLUS_BIAS is `op_bias` alone as well
+# (`add(ld(C), ld(b[j]))` is `ftz(ftz(c) + ftz(b[j]))`, the expression above), so a sequence bias with no activation
+# takes kind 3.
+comptime GEMM_EPI_BIAS_ACT = 4
+comptime GEMM_EPI_ACT_BWD = 5
 
 
 @always_inline
@@ -9581,6 +9605,12 @@ def _kpack_kernel_body[
                         comptime if EPI == GEMM_EPI_PLUS_BIAS:
                             # `add_bias_kernel`'s expression on the stored word (lane/fx-gemm-worklist).
                             cell = ftz(ftz(cell) + ftz(epi_p.unsafe_load(gj)))
+                        elif EPI == GEMM_EPI_BIAS_ACT:
+                            # `op_bias` then `op_act` on the stored word (lane fx-leftovers-product).
+                            cell = ftz(act_value(ftz(ftz(cell) + ftz(epi_p.unsafe_load(gj))), Int(epi_i)))
+                        elif EPI == GEMM_EPI_ACT_BWD:
+                            # `op_act_bwd` on the stored word and the forward activation of the same cell.
+                            cell = ftz(act_bwd_value(ftz(cell), ftz(epi_p.unsafe_load(gi * n + gj)), Int(epi_i)))
                         else:
                             cell = gemm_epi_cell[EPI](cell, dst.unsafe_load(gi * n + gj))
                     dst.unsafe_store(gi * n + gj, cell)
@@ -9751,10 +9781,12 @@ def identical_gemm_kpack_epi_ptr_kernel[
     the all-leaves packed product whose store epilogue reads a SECOND
     buffer. The single-product kernel's argument block without the two group
     arguments, plus `epi_p` (the epilogue's operand: the bias row for
-    `GEMM_EPI_PLUS_BIAS`) and `epi_i` (one integer for a kind that needs it,
-    e.g. an activation code; unused by the kinds written so far). A kernel
-    of its own so that no existing launch gains an argument. Arm only
-    (`-D MOJOLEARN_GEMM_FAST_EPI=1`); nothing launches it yet."""
+    `GEMM_EPI_PLUS_BIAS` and `GEMM_EPI_BIAS_ACT`, the forward activations
+    for `GEMM_EPI_ACT_BWD`) and `epi_i` (the activation code of the two
+    activation kinds; unused by the bias alone). A kernel of its own so that
+    no existing launch gains an argument. Arm only
+    (`-D MOJOLEARN_GEMM_FAST_EPI=1`); launched by
+    `gemm/neural_dispatch.mojo` `identical_gemm_leaf_ptr_epi_into`."""
     comptime assert EPI >= GEMM_EPI_PTR_FIRST, (
         "identical_gemm_kpack_epi_ptr_kernel: for the epilogue kinds that read a second buffer"
     )
