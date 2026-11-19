@@ -109,7 +109,7 @@ def _host_dlogit_pass(logits: _P, maxima: _P, denom: _P, targets: _T, rows: Int,
 
 
 def _host_merge_pass(dst: _P, l: _P, r: _P, cells: Int, has_r: Int):
-    """`_gp_merge_kernel` on the host: one unit per dHidden cell."""
+    """`_gp_pair_kernel` (`has_r` 1) and `_gp_root_kernel` (`has_r` 0) on the host: one unit per dHidden cell."""
     var tasks = host_predict_task_count_work(cells, cells)
     var chunk = host_predict_chunk(cells, tasks)
 

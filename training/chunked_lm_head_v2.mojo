@@ -619,17 +619,31 @@ def _gp_dlogit_kernel(
     lmhead_gp_dlogit_body(cell, logits, maxima, denom, targets, Int(rows), Int(n), Int(chunk0))
 
 
-def _gp_merge_kernel(
-    dst: MutPointer[Float32, MutAnyOrigin],
-    l: MutPointer[Float32, MutAnyOrigin],
+def _gp_pair_kernel(
+    node: MutPointer[Float32, MutAnyOrigin],
     r: MutPointer[Float32, MutAnyOrigin],
-    cells: Int32, has_r: Int32,
+    cells: Int32,
 ):
-    """One thread per dHidden cell of one tree node over panel partials."""
+    """One thread per dHidden cell of one tree node over panel partials, in
+    place: `node` arrives holding the left child and leaves holding the
+    pair. One pointer serves both roles (a launch may not take one buffer's
+    pointer twice), the form of `_chunk_loss_kernel` above on `row_loss`."""
     var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if cell >= Int(cells):
         return
-    lmhead_gp_merge_body(cell, dst, l, r, Int(has_r))
+    lmhead_gp_merge_body(cell, node, node, r, 1)
+
+
+def _gp_root_kernel(
+    dst: MutPointer[Float32, MutAnyOrigin],
+    root: MutPointer[Float32, MutAnyOrigin],
+    cells: Int32,
+):
+    """One thread per dHidden cell: the tree's root, bit for bit."""
+    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if cell >= Int(cells):
+        return
+    lmhead_gp_merge_body(cell, dst, root, root, 0)
 
 
 def _gp_panel_workspace(rows: Int, n: Int, width: Int) -> Int:
@@ -735,8 +749,8 @@ def _gp_enqueue_merge(
     """Fold the two newest dHidden partials of the stack into the older one."""
     var l = stack.create_sub_buffer[DType.float32]((depth - 2) * cells, cells)
     var r = stack.create_sub_buffer[DType.float32]((depth - 1) * cells, cells)
-    ctx.enqueue_function[_gp_merge_kernel](
-        l.unsafe_ptr(), l.unsafe_ptr(), r.unsafe_ptr(), Int32(cells), Int32(1),
+    ctx.enqueue_function[_gp_pair_kernel](
+        l.unsafe_ptr(), r.unsafe_ptr(), Int32(cells),
         grid_dim=_gp_grid(cells), block_dim=LM_HEAD_V2_TPB,
     )
     _ = l
@@ -804,8 +818,8 @@ def chunked_lm_head_gp_backward_into(
             _gp_enqueue_merge(ctx, stack, depth, cells)
             depth -= 1
         var root = stack.create_sub_buffer[DType.float32](0, cells)
-        ctx.enqueue_function[_gp_merge_kernel](
-            d_hidden.unsafe_ptr(), root.unsafe_ptr(), root.unsafe_ptr(), Int32(cells), Int32(0),
+        ctx.enqueue_function[_gp_root_kernel](
+            d_hidden.unsafe_ptr(), root.unsafe_ptr(), Int32(cells),
             grid_dim=_gp_grid(cells), block_dim=LM_HEAD_V2_TPB,
         )
         _ = root
