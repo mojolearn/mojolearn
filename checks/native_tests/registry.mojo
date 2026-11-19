@@ -480,8 +480,7 @@ from checks.native_tests.autograd_view_cpu import register as register_autograd_
 from checks.native_tests.autograd_view_gpu import register as register_autograd_view_gpu
 from checks.native_tests.cluster_host_gemm_check import register as register_cluster_host_gemm_check
 from checks.native_tests.decomposition_variance_identity_check import register as register_decomposition_variance_identity_check
-# ensemble_builder_check is NOT registered (2026-11-19): ensemble/checks/builder_check.mojo is stale against
-# today's NodeQueue (no `push`; an initializer changed). Lane fx-ensemble-builder-check brings it up to date.
+from checks.native_tests.ensemble_builder_check import register as register_ensemble_builder_check
 from checks.native_tests.ensemble_builder_kernels_check import register as register_ensemble_builder_kernels_check
 from checks.native_tests.ensemble_criteria_check import register as register_ensemble_criteria_check
 from checks.native_tests.ensemble_cuml_oracle_check import register as register_ensemble_cuml_oracle_check
@@ -1053,6 +1052,7 @@ def all_checks() -> List[Check]:
     checks.append(register_autograd_view_gpu())
     checks.append(register_cluster_host_gemm_check())
     checks.append(register_decomposition_variance_identity_check())
+    checks.append(register_ensemble_builder_check())
     checks.append(register_ensemble_builder_kernels_check())
     checks.append(register_ensemble_criteria_check())
     checks.append(register_ensemble_cuml_oracle_check())
