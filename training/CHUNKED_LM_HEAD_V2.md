@@ -137,7 +137,12 @@ CE token-total tree, GEMM leaf), and mismatches are refused. Missing older
 metadata means baseline. Source only: no compilation, execution, verification,
 quality assessment or timing has been performed for these edits.
 
-## GEMM-panel arm (`-D MOJOLEARN_LMHEAD_FAST_GEMM_PANEL`, default off, A/B owed)
+## GEMM-panel arm (the default profile since 2026-11-19; `-D MOJOLEARN_LMHEAD_FAST_GEMM_PANEL_OFF` restores the scalar serial profile)
+
+Promoted on the A/B of 2026-11-19 (NVIDIA L40S, job nvc-ab-20261119T125554Z-6f7afc, base and arm in one job):
+train-chunked-lm-head-loss 33,016.9 -> 284.5 ms, the three FP64 differences smaller under the panels; numbers beside
+`LMHEAD_FAST_GEMM_PANEL` in `training/chunked_lm_head_panel_math.mojo`. "The arm" below is this profile; "the default
+profile" in the text below names the scalar serial profile it replaced.
 
 An experiment arm of the public door (`chunked_lm_head_v2_loss`,
 `chunked_lm_head_v2_train`) and of the executor op `lm_head_v2`

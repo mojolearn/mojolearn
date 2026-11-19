@@ -631,7 +631,8 @@
   "lmhead-gemm-panel": {
    "define": "MOJOLEARN_LMHEAD_FAST_GEMM_PANEL",
    "status": "define in code (training/chunked_lm_head_panel_math.mojo LMHEAD_FAST_GEMM_PANEL; read by training/chunked_lm_head_v2.mojo and training/checks/chunked_lm_head_oracle.mojo): B = training.chunked_lm_head_loss as GEMM logit panels with tree folds on the device and the host column together; A = the scalar serial profile, the default. Added by lane fx-lmhead-gemm (2026-11-18); default unchanged; bits change under B on every column",
-   "owed": "RUN"
+   "owed": "DECIDED",
+   "evidence": "A/B round 1 2026-11-19, NVIDIA L40S host bd9c355c19c0 (14-core cgroup), wheel 0c68d6cd27 and its B set, base and arm back to back in one pod job (nvc1-0006, tag nvc-ab-20261119T125554Z-6f7afc; ~/mojolearn-evidence/measure-candidate/build-0c68d6cd27/ab1/x/, tables ~/mojolearn-evidence/briefs-20261118/fx-verdicts3/tab-<arm>.txt), one scored run per arm: train-chunked-lm-head-loss 33,016.9 -> 284.5 ms (0.0086); quality vs FP64 better on loss and both gradients (9.26e-08 -> 5.13e-09, 1.47e-05 -> 1.04e-06, 5.21e-06 -> 5.70e-07); digest moves as designed; PROMOTED to the profile on every column and the host column (lane fx-verdicts3), MOJOLEARN_LMHEAD_FAST_GEMM_PANEL_OFF restores the scalar serial profile; the old define is refused"
   },
   "llama-refuse-watermark": {
    "define": "MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK",
@@ -767,6 +768,11 @@
   "gemm-seq-packed-off": {
    "define": "MOJOLEARN_GEMM_FAST_SEQ_PACKED_OFF",
    "status": "define in code (sequence/gemm_packed_route.mojo SEQ_GEMM_PACKED): B = the 16 x 16 sequence tile for every product (the default before 2026-11-19); A = the packed route, default since 2026-11-19 (lane fx-verdicts3). Same bits on both arms. Owed for the neighbouring and non-board shapes only",
+   "owed": "RUN"
+  },
+  "lmhead-gemm-panel-off": {
+   "define": "MOJOLEARN_LMHEAD_FAST_GEMM_PANEL_OFF",
+   "status": "define in code (training/chunked_lm_head_panel_math.mojo LMHEAD_FAST_GEMM_PANEL): B = the scalar serial profile of the chunked LM head (the default before 2026-11-19); A = GEMM panels and tree folds, the profile since 2026-11-19 (lane fx-verdicts3). The two arms are different bit versions. Owed for the neighbouring and non-board shapes; when timed, the scalar profile is deleted with the four tombstone parts",
    "owed": "RUN"
   }
  },
@@ -3640,7 +3646,7 @@
    "rows": "full",
    "vendor": "nvidia",
    "b_arms": [
-    "lmhead-gemm-panel"
+    "lmhead-gemm-panel-off"
    ],
    "shape": {
     "rows": 8192,
@@ -3658,7 +3664,7 @@
      "what": "the smollm2-135m head"
     }
    },
-   "decides": "promote B (GEMM panels and tree folds become the profile, the scalar serial kernels and oracle folds are deleted with the four tombstone parts) when B is faster on the NVIDIA L40S with loss_rel_err_vs_fp64, d_hidden_max_rel_diff_vs_fp64 and d_weight_max_rel_diff_vs_fp64 not worse than A; expected under 2 s against 33 s. Digests DO move under B (logit contraction and fold order) on every vendor and the host column together; they are compared across columns at the release verification, never against A. Time also the neighbouring shape and the non-board shape before the flip (no dimension targeting)"
+   "decides": "after the promotion of 2026-11-19 (lane fx-verdicts3; board shape 33,016.9 -> 284.5 ms): keep GEMM panels and tree folds (the candidate) unless the scalar serial profile (B, MOJOLEARN_LMHEAD_FAST_GEMM_PANEL_OFF) is faster with the three FP64 differences not worse; time the neighbouring shape and the non-board shape of this row (the board shape is decided). When the candidate holds there, the scalar serial kernels and oracle folds are deleted with the four tombstone parts. Digests differ between the arms by design"
   },
   {
    "id": "llama-refuse-watermark",

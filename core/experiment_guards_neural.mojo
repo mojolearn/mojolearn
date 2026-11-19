@@ -1088,6 +1088,9 @@ def _check_configuration() -> Bool:
     # MOJOLEARN_GEMM_FAST_SEQ_PACKED (sequence/gemm_packed_route.mojo): promoted to the default on the NVIDIA and AMD
     # columns; the old opt-in name is refused so a stale build line does not silently mean the default.
     comptime assert not is_defined["MOJOLEARN_GEMM_FAST_SEQ_PACKED"](), "promoted 2026-11-19 (lane/fx-verdicts3, A/B round 1 NVIDIA L40S, wheel 0c68d6cd27, job nvc-ab-20261119T125554Z-6f7afc, one run per arm, digests and quality equal on 8 cells, mlp-clf/mlp-reg fit 0.59-0.66, infer 0.43-0.68): large plain dense sequence GEMMs run the neural packed body with one leaf; drop -D MOJOLEARN_GEMM_FAST_SEQ_PACKED, use -D MOJOLEARN_GEMM_FAST_SEQ_PACKED_OFF for the 16 x 16 tile"
+    # MOJOLEARN_LMHEAD_FAST_GEMM_PANEL (training/chunked_lm_head_panel_math.mojo): promoted to the profile of the
+    # chunked LM head on every column and the host column (bits change together); the old opt-in name is refused.
+    comptime assert not is_defined["MOJOLEARN_LMHEAD_FAST_GEMM_PANEL"](), "promoted 2026-11-19 (lane/fx-verdicts3, A/B round 1 NVIDIA L40S, wheel 0c68d6cd27, job nvc-ab-20261119T125554Z-6f7afc, one run per arm, train-chunked-lm-head-loss 33,016.9 -> 284.5 ms, FP64 differences smaller on loss and both gradients; bits change on every column together): GEMM panels and tree folds are the chunked LM head profile; drop -D MOJOLEARN_LMHEAD_FAST_GEMM_PANEL, use -D MOJOLEARN_LMHEAD_FAST_GEMM_PANEL_OFF for the scalar serial profile"
     # ---- end lane fx-verdicts3
     return True
 

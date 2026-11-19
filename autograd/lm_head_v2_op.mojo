@@ -96,7 +96,7 @@ def _grid(n: Int) -> Int:
 
 
 # ------------------------------------------------- device, GEMM-panel arm
-# -D MOJOLEARN_LMHEAD_FAST_GEMM_PANEL (default off, A/B owed): the op runs the
+# The GEMM-panel profile (default since 2026-11-19; -D MOJOLEARN_LMHEAD_FAST_GEMM_PANEL_OFF: the scalar one): the op runs the
 # public door's forward and backward (training/chunked_lm_head_v2.mojo
 # `chunked_lm_head_gp_forward_into`, `chunked_lm_head_gp_backward_into`) over
 # the executor's own storage, so the door, the op and the oracle share one

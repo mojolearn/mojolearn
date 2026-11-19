@@ -112,7 +112,7 @@ def _gp_oracle(
     hidden: List[Float32], weight: List[Float32], targets: List[Int32],
     rows: Int, vocab: Int, width: Int, with_grad: Bool,
 ) raises -> ChunkedLMHeadV2Result:
-    """The oracle under `-D MOJOLEARN_LMHEAD_FAST_GEMM_PANEL` (default off):
+    """The oracle of the GEMM-panel profile (the default; `-D MOJOLEARN_LMHEAD_FAST_GEMM_PANEL_OFF` is the scalar one):
     the GEMM-panel arm's words (training/CHUNKED_LM_HEAD_V2.md, "GEMM-panel
     arm"), which the device door computes under the same define. The
     refusals are the default oracle's, in the same order and words, after
@@ -159,7 +159,7 @@ def chunked_lm_head_v2_oracle_forward(
     exactly this and then the two gradient folds, so the loss a caller gets
     from either is the same arithmetic in the same order."""
     comptime if LMHEAD_FAST_GEMM_PANEL:
-        # MOJOLEARN_LMHEAD_FAST_GEMM_PANEL (default off, A/B owed): the oracle moves with the device door.
+        # The GEMM-panel profile (default since 2026-11-19; _OFF: the scalar folds below): the oracle moves with the device door.
         return _gp_oracle(hidden, weight, targets, rows, vocab, width, False)
     if rows < 1 or vocab < 2 or width < 1:
         raise Error("chunked lm head v2: rows/width must be positive and vocab >= 2")
@@ -215,7 +215,7 @@ def chunked_lm_head_v2_oracle(
 ) raises -> ChunkedLMHeadV2Result:
     """Mean CE and LM-head gradients under the v2 serial chunk contract."""
     comptime if LMHEAD_FAST_GEMM_PANEL:
-        # MOJOLEARN_LMHEAD_FAST_GEMM_PANEL (default off, A/B owed): the oracle moves with the device door.
+        # The GEMM-panel profile (default since 2026-11-19; _OFF: the scalar folds below): the oracle moves with the device door.
         return _gp_oracle(hidden, weight, targets, rows, vocab, width, True)
     var fwd = chunked_lm_head_v2_oracle_forward(
         hidden, weight, targets, rows, vocab, width

@@ -61,7 +61,7 @@ def _host_loss_total(loss: _F, row_loss: _F, rows: Int):
     loss.unsafe_store(0, ftz(identical_div(ftz(level[0]), Float32(rows))))
 
 
-# -D MOJOLEARN_LMHEAD_FAST_GEMM_PANEL (default off, A/B owed): the op's host
+# The GEMM-panel profile (default since 2026-11-19; -D MOJOLEARN_LMHEAD_FAST_GEMM_PANEL_OFF: the scalar one): the op's host
 # arm runs the host column of the public door's arm
 # (training/chunked_lm_head_gemm_panel_host.mojo), the words the device op
 # computes under the same define (autograd/lm_head_v2_op.mojo). The op's own
