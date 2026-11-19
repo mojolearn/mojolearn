@@ -129,16 +129,55 @@ comptime GEMM_LEAF_ARM_NEURAL256 = 2
 comptime GEMM_LEAF_ARM_ALL256 = 3
 comptime GEMM_LEAF_ARM = 0
 comptime _NEURAL_GEMM_LEAF256 = GEMM_LEAF_ARM == GEMM_LEAF_ARM_ALL256
-comptime CONTRACT_K_LEAF_MIN = 256 if _NEURAL_GEMM_LEAF256 else 128
+# EXPERIMENT `-D MOJOLEARN_GEMM_FAST_LEAF512` (lane fx-gemm-leaf512,
+# 2026-11-19; default OFF, A/B OWED on the L40S, EXPERIMENTS.md row OPEN;
+# idea 3 / section S1 of briefs-20261118/ideas-gemm-headroom-RESULT.md).
+# BITS CHANGE: profile `mojolearn.identical.gemm.fp32.v2-leaf512`, the v1
+# formula with ONE constant changed (the shortest leaf 128 -> 512), on every
+# column at once because every column reads this constant through
+# `contract_leaf_size` and nothing else:
+#     L(k) = k               if k <= 512
+#            512             if ceil(k / 512) <= 1024
+#            ceil(k / 1024)  otherwise                    P = ceil(k / L)
+#     s_t(i, j) = chain over p in [t L, min((t+1) L, k)) ascending, seeded
+#                 +0.0:  acc = ftz(fma(ftz(A[i,p]), ftz(B[p,j]), acc))
+#     C[i, j]   = ftz(T(s_0 .. s_{P-1})),  T = the adjacent-pair balanced
+#                 tree of section 7.2, odd tail carried, every node ftz(x + y)
+# Why (hardware reasoning, any shape): a leaf boundary costs the device
+# kernels a flush, a fold push to a local-memory stack and a restart of the
+# window admission; four times longer leaves make it four times rarer, and a
+# product with k <= 512 becomes one chain a cell with no fold, no workspace
+# and no second (fold) launch. The serial FMA dependency per leaf is four
+# times longer; the kernels already run 32 independent chains a thread, so
+# that is not expected to bind (to be measured, not assumed).
+# This is the BUILD-WIDE contract: the classical, solver, loss, optimizer,
+# CNN, Mamba and transformer folds that take their leaves from
+# `contract_leaf_size` move with it, device and host column together (the
+# reader table is gemm/IDENTICAL_FP32_CONTRACT.md section 14). The small MLP
+# op keeps its measured leaf 128 explicitly (autograd/small_mlp_op.mojo).
+# No stored reference word is re-recorded while this is an arm.
+comptime GEMM_LEAF512 = (
+    identical_mode_enabled() and is_defined["MOJOLEARN_GEMM_FAST_LEAF512"]()
+)
+comptime CONTRACT_K_LEAF_MIN = (
+    512 if GEMM_LEAF512 else (256 if _NEURAL_GEMM_LEAF256 else 128)
+)
 comptime GEMM_NUMERICAL_PROFILE = (
-    "mojolearn.identical.gemm.fp32.ni08-leaf256" if _NEURAL_GEMM_LEAF256
-    else "mojolearn.identical.gemm.fp32.v1"
+    "mojolearn.identical.gemm.fp32.v2-leaf512" if GEMM_LEAF512
+    else (
+        "mojolearn.identical.gemm.fp32.ni08-leaf256" if _NEURAL_GEMM_LEAF256
+        else "mojolearn.identical.gemm.fp32.v1"
+    )
 )
 # Numerical-version metadata follows this shared host/device contract. These
 # experiment versions are not qualification claims and cannot borrow v1's
 # historical certification. Exact names distinguish the independent profiles.
-# Version 2 was the deleted leaf64 profile; it is not reused.
-comptime GEMM_NUMERICAL_PROFILE_VERSION = 3 if _NEURAL_GEMM_LEAF256 else 1
+# Version 2 was the deleted leaf64 profile; it is not reused. Version 4 is
+# the leaf-512 arm above (the "v2" in its NAME is the contract revision; the
+# integer stays unique across every profile that ever existed).
+comptime GEMM_NUMERICAL_PROFILE_VERSION = (
+    4 if GEMM_LEAF512 else (3 if _NEURAL_GEMM_LEAF256 else 1)
+)
 
 #: The cap on the number of leaves.
 #:

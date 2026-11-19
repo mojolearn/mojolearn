@@ -12,6 +12,10 @@ from max.gpu.host import DeviceContext,DeviceBuffer
 from checks.kernel_matrix import TARGET_COLUMN,COLUMN_NVIDIA
 from checks.numerics import ftz
 from checks.rtf_seam import rtf_mul_add
+from gemm.checks.gemm_epilogue import (
+    identical_gemm_epi_takes as _incumbent_epi_takes,
+    identical_gemm_epi_into as _incumbent_epi_into,
+)
 from core.step_phase import step_count_device_alloc,step_count_sync
 from gemm.checks.gemm_identical import (
     identical_gemm_into as _incumbent_into,
@@ -26,6 +30,15 @@ from gemm.experiments.neural_profile import (
     NEURAL_PROFILE_CHANGED,NEURAL_LEAF,NEURAL_CHAINS,neural_validate,
 )
 from gemm.experiments.neural_switches import ROLE_PROJECTION,ROLE_HEAD,ROLE_WGRAD
+# lane fx-gemm-seq-packed (2026-11-18): the names `identical_gemm_leaf_ptr_into` below reads; nothing else uses them here.
+from std.sys.compile import is_defined
+from checks.numerics import GLOBAL_NUMERIC_MODE,NUMERIC_IDENTICAL
+from checks.kernel_matrix import COLUMN_AMD,lib_smem_pages_for,lib_smem_page_fits_for
+from gemm.checks.gemm_identical import (
+    identical_gemm_kpack_kernel,_tile_grid,NI06_ONE_PAGE,TUNED_TPB,TUNED_TC,TUNED_RPT,
+    GEMM_KPACK_RPT,GEMM_KPACK_CPT,GEMM_KPACK_KS,GEMM_KPACK_FS,GEMM_KPACK_PAD,GEMM_KPACK_ALIGN,
+    GEMM_KPACK_PAGE_GUARD_BYTES,GEMM_TILE_MIN_BLOCKS_DEFAULT,
+)
 # (Sweep 2026-11-15: with MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE (lane/expdel2-25-neural) and the NN07/NN12/NN16 arms deleted,
 # NN01, NN02, NN07, NN09, NN10, NN11, NN12, NN15 and NN16 were all False. Removed with them: gemm/experiments/
 # neural_streaming.mojo, neural_tiled.mojo, neural_plans.mojo, neural_grouped.mojo; here NEURAL_PAIR_ENABLED,
@@ -152,6 +165,117 @@ def neural_model_leaf_into[MIN_LEAF: Int](ctx: DeviceContext,
     neural_profile_device[MIN_LEAF,NEURAL_CHAINS](ctx,c,a,b,m,n,k,op)
 
 
+# ---------------------------------------------------------------------------
+# lane fx-gemm-seq-packed (2026-11-18, idea 1 of briefs-20261118/ideas-gemm-headroom-RESULT.md):
+# THE PACKED BODY AT A CALLER'S PARTITION, OVER RAW POINTERS.
+# Reached only under -D MOJOLEARN_GEMM_FAST_SEQ_PACKED (sequence/gemm_packed_route.mojo, default OFF, A/B owed).
+# Every neural caller keeps `identical_gemm_into`, whose `(L, P)` is `contract_partition(k)` and nothing else.
+# ---------------------------------------------------------------------------
+#: The columns whose build carries `identical_gemm_kpack_kernel` with the gather staging and the hardware fold
+#: flush (the `kpack_hg` body): NVIDIA and AMD under IDENTICAL. Apple's packed page is bounded differently
+#: (`PLAN_APPLE_MMA` is its body) and the CPU column has no kernel.
+comptime GEMM_LEAF_PTR_COLUMN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and (
+    TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD
+)
+#: The two packed tiles the shipped dispatch already instantiates (`_shipped_body_kpack_hg`): the wide one,
+#: `GEMM_KPACK_RPT` rows a thread (128 x 64 cells on NVIDIA, 128 x 128 on AMD), and the stepped-down one,
+#: `TUNED_RPT` rows a thread (64 x 64 on NVIDIA, `gemm_nv_step_kpack_rows`; NVIDIA only there, so NVIDIA only here).
+comptime GEMM_LEAF_PTR_RPT_WIDE = GEMM_KPACK_RPT
+comptime GEMM_LEAF_PTR_RPT_SMALL = TUNED_RPT
+comptime GEMM_LEAF_PTR_SMALL_ON = TARGET_COLUMN == COLUMN_NVIDIA
+comptime GEMM_LEAF_PTR_BM_WIDE = GEMM_KPACK_RPT * (TUNED_TPB // TUNED_TC)
+comptime GEMM_LEAF_PTR_BM_SMALL = TUNED_RPT * (TUNED_TPB // TUNED_TC)
+comptime GEMM_LEAF_PTR_BN = GEMM_KPACK_CPT * TUNED_TC
+#: The kernel's staged window, in terms of `k` (one barrier and one gather round trip a window).
+comptime GEMM_LEAF_PTR_KS = GEMM_KPACK_KS
+#: The local fold stack of each instantiation: unused storage above the highest reachable level, never a bit
+#: (`_kpack_hg_run_with_ws`). 4 levels cover 8 leaves and are the wide NVIDIA kernel the shipped dispatch runs
+#: for short folds (the kernel admits FS 4 on NVIDIA only); every other instantiation keeps the profile-wide stack.
+comptime GEMM_LEAF_PTR_FS_WIDE = 4 if TARGET_COLUMN == COLUMN_NVIDIA else GEMM_KPACK_FS
+comptime GEMM_LEAF_PTR_FS_SMALL = GEMM_KPACK_FS
+#: The column's block floor: fewer packed tiles than this leave SMs / CUs idle (`GEMM_TILE_MIN_BLOCKS_DEFAULT`,
+#: measured per column for the neural tiles: 192 on the L40S's 142 SMs at two blocks an SM, 1024 on the MI325X's
+#: 304 CUs). The comptime default, so a route rule reads no process slot per call.
+comptime GEMM_LEAF_PTR_MIN_BLOCKS = GEMM_TILE_MIN_BLOCKS_DEFAULT
+
+
+def identical_gemm_leaf_ptr_into[RPT: Int,FS: Int](
+    ctx: DeviceContext,
+    c: MutPointer[Float32,MutAnyOrigin],
+    a: MutPointer[Float32,MutAnyOrigin],
+    b: MutPointer[Float32,MutAnyOrigin],
+    m: Int,n: Int,k: Int,leaf: Int,p_count: Int,
+    a_si: Int,a_sp: Int,b_sp: Int,b_sj: Int,
+) raises:
+    """One asynchronous all-leaves launch of the packed body (`identical_gemm_kpack_kernel`, the `kpack_hg`
+    spelling: padded 16-byte page, gather staging, hardware fold flush) with the partition `(leaf, p_count)`
+    GIVEN BY THE CALLER instead of `contract_partition(k)`, over raw device pointers and operand strides:
+
+        A_eff[i, p] = a[i * a_si + p * a_sp]      B_eff[p, j] = b[p * b_sp + j * b_sj]      C[i, j] = c[i * n + j]
+
+    The kernel reads `leaf` and `p_count` as arguments and nothing else about the partition (`_leaf_bounds`:
+    leaf t is `[t leaf, min((t + 1) leaf, k))`), so the order it computes is, per cell,
+
+        s_t = chain over p in leaf t, ascending, seeded +0.0: acc = ftz(fma(ftz(A_eff[i, p]), ftz(B_eff[p, j]), acc))
+        C[i, j] = ftz(T(ftz(s_0), ..., ftz(s_{P-1})))        T = the contract's 7.2 tree; no addition at P = 1
+
+    With `leaf = k, p_count = 1` that is ONE ascending chain over the whole of k and `C = ftz(ftz(acc_k)) =
+    acc_k`: the sequence GEMM's word (sequence/gemm_packed_route.mojo writes both orders out side by side).
+    The partition must cover k exactly (`(p_count - 1) leaf < k <= p_count leaf`) and fit the instantiation's
+    fold stack (`p_count <= 2^(FS - 1)`); anything else is refused before the launch. `c` must be dense
+    (row stride `n`) and must not overlap `a` or `b` (blocks store C while others gather the operands): the
+    caller's contract, as for every sequence GEMM kernel; no buffer is looked up here.
+
+    MIRRORS `gemm_identical._kpack_launch` (the page count, the page-fits assert, the grid) because that
+    launcher takes `DeviceBuffer`s and the sequence executor holds raw pointers: a view per operand per call
+    would be three constructions on a hot path. A change to the kernel's argument block (lane fx-gemm-worklist)
+    must be made here too. `RPT, FS` = `(GEMM_LEAF_PTR_RPT_WIDE, GEMM_LEAF_PTR_FS_WIDE)` or
+    `(GEMM_LEAF_PTR_RPT_SMALL, GEMM_LEAF_PTR_FS_SMALL)`: the two kernels the NVIDIA build already carries, so
+    the arm adds no kernel there."""
+    comptime assert GEMM_LEAF_PTR_COLUMN, "identical_gemm_leaf_ptr_into: IDENTICAL on the NVIDIA or AMD column only"
+    comptime assert RPT == GEMM_KPACK_RPT or RPT == TUNED_RPT, "identical_gemm_leaf_ptr_into: the wide or the stepped-down packed tile"
+    if m<=0 or n<=0:
+        return
+    if k<=0 or leaf<=0 or p_count<=0 or (p_count-1)*leaf>=k or p_count*leaf<k:
+        raise Error("identical_gemm_leaf_ptr_into: (leaf, p_count) does not partition k")
+    if p_count>(1<<(FS-1)):
+        raise Error("identical_gemm_leaf_ptr_into: more leaves than this kernel's fold stack covers")
+    comptime NTH = TUNED_TPB
+    comptime TR = NTH // TUNED_TC
+    comptime BM = RPT * TR
+    comptime BN = GEMM_KPACK_CPT * TUNED_TC
+    # `_kpack_launch`'s page: TR A line groups of `KS RPT + PAD` words and TC B line groups of `KS CPT + PAD`.
+    comptime PAGE_BYTES = (BM * GEMM_KPACK_KS + TR * GEMM_KPACK_PAD + BN * GEMM_KPACK_KS + TUNED_TC * GEMM_KPACK_PAD) * 4
+    comptime PAGES = 1 if (NI06_ONE_PAGE or is_defined["MOJOLEARN_GEMM_ONE_PAGE"]()) else lib_smem_pages_for[
+        TARGET_COLUMN, PAGE_BYTES + GEMM_KPACK_PAGE_GUARD_BYTES
+    ]()
+    comptime assert lib_smem_page_fits_for[TARGET_COLUMN, PAGE_BYTES](), (
+        "identical_gemm_leaf_ptr_into: one packed page of this geometry exceeds the column's shared limit"
+    )
+    comptime kern = identical_gemm_kpack_kernel[
+        RPT, GEMM_KPACK_CPT, TUNED_TC, GEMM_KPACK_KS, FS, PAGES, False, False,
+        GEMM_KPACK_PAD, GEMM_KPACK_ALIGN, 0, True, True
+    ]
+    var g = _tile_grid(m,n,BM,BN,False)
+    ctx.enqueue_function[kern](
+        c,
+        a,
+        b,
+        Int32(m),
+        Int32(n),
+        Int32(k),
+        Int32(leaf),
+        Int32(p_count),
+        Int32(a_si),
+        Int32(a_sp),
+        Int32(b_sp),
+        Int32(b_sj),
+        Int32(0),
+        Int32(0),
+        grid_dim=(g[0], 1, 1),
+        block_dim=(NTH, 1, 1),
+    )
+
 
 def identical_gemm[allow_vendor: Bool = True,ROLE: Int = ROLE_PROJECTION](
     ctx: DeviceContext,mut c: DeviceBuffer[DType.float32],mut a: DeviceBuffer[DType.float32],
@@ -169,6 +293,29 @@ def identical_gemm[allow_vendor: Bool = True,ROLE: Int = ROLE_PROJECTION](
         raise error
     ctx.synchronize()
     _ = workspace^
+
+
+# lane fx-gemm-epi (2026-11-18, -D MOJOLEARN_GEMM_FAST_EPI=1, default OFF, OPEN: no A/B yet): the store epilogue.
+# A product joined to the value already in its destination, in the product's own final store
+# (gemm/checks/gemm_epilogue.mojo; kinds and the unchanged-bits argument beside gemm_epi_cell in gemm_identical.mojo).
+# Two free functions, so a caller decides where its operands go before any launch and GemmWorkspace gains no method.
+def gemm_workspace_epi_takes(m: Int,n: Int,k: Int) -> Bool:
+    """Whether gemm_workspace_run_epi fuses the join at (m, n, k) on this build. False without the define, on a
+    column or plan with no fused store, and under a changed neural profile (its kernel has no epilogue): the caller
+    then runs GemmWorkspace.run and its follower launch, unchanged."""
+    comptime if NEURAL_GEMM_EXPERIMENT_ENABLED:
+        return False
+    return _incumbent_epi_takes(m,n,k)
+
+
+def gemm_workspace_run_epi[EPI: Int](ctx: DeviceContext,mut workspace: GemmWorkspace,
+    mut c: DeviceBuffer[DType.float32],mut a: DeviceBuffer[DType.float32],
+    mut b: DeviceBuffer[DType.float32],m: Int,n: Int,k: Int,op: Int) raises:
+    """GemmWorkspace.run with the join in the store: c = EPI(op(A) . op(B), c), EPI 1 = ftz(ftz(c) + ftz(cell)),
+    2 = ftz(ftz(cell) + ftz(c)). Call only where gemm_workspace_epi_takes(m, n, k) is True (raises otherwise, before
+    any launch). Same workspace sizing and the same asynchronous contract as run."""
+    workspace._ensure(ctx,identical_gemm_workspace_max_floats(m,n,k))
+    _incumbent_epi_into[EPI](ctx,c,a,b,workspace.buffer,m,n,k,op)
 
 
 # TOMBSTONE NN05 (MOJOLEARN_IDN_NEURAL_NN05, neural_gemm_pair=nn05, deleted

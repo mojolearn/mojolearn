@@ -923,6 +923,32 @@ def check_device_matches_oracle() raises:
         _oracle_case(ctx, OP_NT, 2, 2, 130900, String("k130900.P1023.odd"), False, cases, fails)
         _oracle_case(ctx, OP_NT, 2, 2, 131073, String("k131073.P1017.past.crossover"), False, cases, fails)
         _oracle_case(ctx, OP_NT, 1, 1, 4000000, String("k4M.P1024.cap"), False, cases, fails)
+        # lane fx-gemm-leaf512 (2026-11-19): the same comparison on both
+        # sides of 512 and at non-multiples of it. Under v1 these are more
+        # P cases (L = 128); under -D MOJOLEARN_GEMM_FAST_LEAF512 (L = 512)
+        # they are the profile's own edges: 511 and 512 one chain with no
+        # fold, 513 two leaves with a one-element tail, 1500 = 512 + 512 +
+        # 476 (P = 3, odd, ragged: the carry), 2049 (P = 5, carries twice,
+        # tail 1), 2600 (P = 6), 4096 (P = 8, exact). The label carries no P:
+        # the line prints L and P from contract_partition.
+        print("  -- synthetic: below, at and above 512, and non-multiples of it --")
+        _oracle_case(ctx, OP_NT, 4, 4, 511, String("k511"), False, cases, fails)
+        _oracle_case(ctx, OP_TN, 4, 4, 512, String("k512"), False, cases, fails)
+        _oracle_case(ctx, OP_NN, 4, 4, 513, String("k513.tail1"), False, cases, fails)
+        _oracle_case(ctx, OP_NT, 5, 7, 1500, String("5x7.k1500.ragged"), False, cases, fails)
+        _oracle_case(ctx, OP_TN, 17, 33, 2049, String("17x33.k2049.tail1"), False, cases, fails)
+        _oracle_case(ctx, OP_NN, 33, 17, 2600, String("33x17.k2600.ragged"), False, cases, fails)
+        _oracle_case(ctx, OP_NT, 4, 4, 4096, String("k4096.exact"), False, cases, fails)
+        # a product wide enough for the tuned and packed plans at one leaf
+        # under L = 512 (no fold, no workspace) and four leaves under v1
+        _oracle_case(ctx, OP_NT, 256, 256, 500, String("256x256.k500"), False, cases, fails)
+        _oracle_case(ctx, OP_NT, 256, 256, 1500, String("256x256.k1500.ragged"), False, cases, fails)
+        _oracle_all_plans_case(
+            ctx, OP_NT, 17, 33, 1500, String("allplans.17x33x1500.ragged"), cases, fails
+        )
+        _minus_zero_case(ctx, 5, 7, 1500, String("minuszero.k1500.carry"), cases, fails)
+        _minus_zero_case(ctx, 5, 7, 2600, String("minuszero.k2600"), cases, fails)
+        _minus_zero_case(ctx, 5, 7, 512, String("minuszero.k512"), cases, fails)
         print("  -- synthetic: ragged m and n that no tile divides --")
         _oracle_case(ctx, OP_NT, 5, 7, 300, String("5x7.P3"), False, cases, fails)
         _oracle_case(ctx, OP_NT, 17, 33, 300, String("17x33.P3"), False, cases, fails)

@@ -8798,6 +8798,92 @@ def _kpack_gather[
     return out
 
 
+#: lane/fx-gemm-loadahead (2026-11-19), `-D MOJOLEARN_GEMM_FAST_LOADAHEAD=1`
+#: (OPEN, default off, A/B owed on the L40S; docs/apple-fast/EXPERIMENTS.md):
+#: the LOOK-AHEAD DEPTH of the packed kernel's accumulate, in window steps.
+#: 1 (the define absent) is the shipped loop: the two shared loads of step
+#: `c` are issued immediately before the `RPT * CPT` FMAs that read them.
+#: At depth G the operands of G consecutive steps are loaded first and their
+#: FMAs follow, steps ascending.
+#:
+#: Why 2, from the hardware and not from any shape:
+#: - A shared-memory read (address add, memory access, write-back) returns
+#:   later than a register-to-register FMA does, and in the shipped loop its
+#:   first reader is the next instruction: the read's latency is exposed once
+#:   per step, in every warp of the block at the same moment because all of
+#:   them left the same barrier (ideas-gemm-headroom S2, hypothesis 2).
+#: - One step is `RPT * CPT` FMAs a thread (32 at the narrow 8x4 register
+#:   tile, never fewer than 16 at any geometry the kernel is launched with),
+#:   which is longer than a shared read by any account. So ONE step of
+#:   look-ahead already hides a read completely: at depth G only the first
+#:   step of each group waits, the exposed reads are 1/G of today's (1/2 at
+#:   2, 1/4 at 4, with the remaining gain halving each time).
+#: - The price is registers: `(RPT + CPT) * (G - 1)` more live operand words
+#:   a thread (12 at depth 2, 36 at depth 4 on the 8x4 tile) beside the 32
+#:   accumulators and 12 prefetch words, inside the 128 registers a thread
+#:   the narrow launch bound budgets so that two blocks share an SM
+#:   (`GEMM_KPACK_LAUNCH_BOUND`); the shipped body already spills there.
+#:   Depth 2 is the smallest depth that hides any read and the cheapest in
+#:   registers; `-D MOJOLEARN_GEMM_FAST_LOADAHEAD_STEPS=4` is the second arm.
+#: A depth that is not a power of two (a group is one vector load) or does
+#: not divide a geometry's `KS` compiles the shipped loop for that geometry
+#: (the kernel's own `comptime if`), so a group never reaches a line group's
+#: PAD words.
+#:
+#: SAME BITS, and why: the page is not written between the staging barrier
+#: and the end of the accumulate, so a word read earlier is the same word;
+#: the group load reads exactly the words `[c RPT, (c + G) RPT)` of the
+#: thread's line group that the G per-step loads read; and each cell still
+#: takes one step function per step with `c` ascending. Only WHEN a word is
+#: read moves. `gemm_step_arms_check` compares the device words of every
+#: kpack geometry with the host words and catches a slip.
+comptime GEMM_KPACK_LOADAHEAD = (
+    get_defined_int["MOJOLEARN_GEMM_FAST_LOADAHEAD_STEPS", 2]()
+    if is_defined["MOJOLEARN_GEMM_FAST_LOADAHEAD"]() else 1
+)
+
+# lane fx-gemm-epi (2026-11-18, `-D MOJOLEARN_GEMM_FAST_EPI=1`, default OFF,
+# OPEN: no A/B yet). THE STORE EPILOGUE: a product whose output is only ever
+# joined to the value already in its destination stores the join, so the
+# follower add launch (`autograd/kernels/transformer.mojo` `bwd_add2_kernel`,
+# `bwd_add3_kernel`) is not issued. The kinds are the follower's expressions,
+# character for character, with `cell` the product's stored cell (`ftz(root)`,
+# contract 5g) and `prior` the destination word read before the store:
+#   GEMM_EPI_C_PLUS_CELL  ftz(ftz(prior) + ftz(cell))   bwd_add3's two joins
+#                         `ftz(ftz(va) + ftz(vb))`, `ftz(ftz(acc) + ftz(vc))`
+#   GEMM_EPI_CELL_PLUS_C  ftz(ftz(cell) + ftz(prior))   bwd_add2
+#                         `ftz(ftz(a) + ftz(bb))` with a = this product
+# SAME BITS, by construction: the follower read the product back from memory
+# (the stored `ftz(root)` word) and flushed it again; here the same word is
+# flushed in a register (`ftz` is idempotent). One IEEE add, round to nearest
+# even, on the same two words in the same operand order, then the same flush.
+# NO CONTRACTION IS POSSIBLE on any column: both addends are results of `ftz`
+# (`checks/numerics.mojo`: NVIDIA `llvm.nvvm.fma.rn.ftz.f(x, 1.0, -0.0)` and a
+# NaN select, AMD a class test and a select, Apple a compare and a select, the
+# host the integer spelling), never of a bare product, so neither LLVM's
+# fp-contract nor ptxas has a multiply to fuse into this add; it is the add
+# `bwd_add2_kernel` compiles. Kinds that read a SECOND buffer (bias, bias +
+# ReLU, the activation derivative, a residual whose other term is not the
+# destination) need one more pointer in the kernel's argument block and are
+# not here: see the lane's RESULT file.
+comptime GEMM_EPI_NONE = 0
+comptime GEMM_EPI_C_PLUS_CELL = 1
+comptime GEMM_EPI_CELL_PLUS_C = 2
+
+
+@always_inline
+def gemm_epi_cell[EPI: Int](cell: Float32, prior: Float32) -> Float32:
+    """The stored word of a product cell under epilogue kind `EPI` (above).
+    `cell` is the product's own cell as the plain store writes it; `prior`
+    is the destination word loaded before the store."""
+    comptime assert EPI == GEMM_EPI_C_PLUS_CELL or EPI == GEMM_EPI_CELL_PLUS_C, (
+        "gemm_epi_cell: kind 1 (prior + cell) or 2 (cell + prior)"
+    )
+    comptime if EPI == GEMM_EPI_C_PLUS_CELL:
+        return ftz(ftz(prior) + ftz(cell))
+    return ftz(ftz(cell) + ftz(prior))
+
+
 @always_inline
 def _kpack_step[DIAG: Int](a: Float32, b: Float32, acc: Float32) -> Float32:
     """DEVIATION 2705: the per-step seam of `identical_gemm_kpack_kernel`.
@@ -8825,6 +8911,7 @@ def _kpack_kernel_body[
     DIAG: Int = 0,
     HWFOLD: Bool = False,
     GATHER: Bool = False,
+    EPI: Int = 0,
 ](
     dst: MutPointer[Float32, MutAnyOrigin],
     a: MutPointer[Float32, MutAnyOrigin],
@@ -9235,6 +9322,70 @@ def _kpack_kernel_body[
                         acc[u6 * CPT + v8] = _kpack_step[DIAG](
                             ra1[u6], rb1[v8], acc[u6 * CPT + v8]
                         )
+          elif GEMM_KPACK_LOADAHEAD > 1 and (GEMM_KPACK_LOADAHEAD & (GEMM_KPACK_LOADAHEAD - 1)) == 0 and KS % GEMM_KPACK_LOADAHEAD == 0:
+           # lane/fx-gemm-loadahead, `-D MOJOLEARN_GEMM_FAST_LOADAHEAD=1` (OPEN,
+           # default off; see `GEMM_KPACK_LOADAHEAD`). The admitted and the
+           # exact window with the operands of `GEMM_KPACK_LOADAHEAD` steps
+           # read by ONE load each (A: the `G RPT` words from step `lg G`, B:
+           # the `G CPT` words), then their FMAs. The words of step
+           # `lg G + ls` are elements `[ls RPT, (ls + 1) RPT)` of the A load
+           # and `[ls CPT, (ls + 1) CPT)` of the B load: the same addresses
+           # the per-step loads below read. Per cell the steps stay
+           # `lg G + ls` ascending through the same step function as the
+           # default branch below, so no bit can move; the ragged path and
+           # the DIAG 2 and 5 variants are not touched.
+           var la_fastw = False
+           comptime if ADMIT:
+            la_fastw = adm
+           if la_fastw:
+            comptime for lga in range(KS // GEMM_KPACK_LOADAHEAD):
+                var la_raa = as_.load[width=GEMM_KPACK_LOADAHEAD * RPT, alignment=ALIGN](
+                    abase + lga * GEMM_KPACK_LOADAHEAD * RPT
+                )
+                var la_rba = bs_.load[width=GEMM_KPACK_LOADAHEAD * CPT, alignment=ALIGN](
+                    bbase + lga * GEMM_KPACK_LOADAHEAD * CPT
+                )
+                comptime for lsa in range(GEMM_KPACK_LOADAHEAD):
+                    comptime for lua in range(NR):
+                        comptime for lva in range(NCOL):
+                            acc[lua * CPT + lva] = _admit_step(
+                                la_raa[lsa * RPT + lua], la_rba[lsa * CPT + lva], acc[lua * CPT + lva]
+                            )
+           else:
+            comptime for lg0 in range(KS // GEMM_KPACK_LOADAHEAD):
+                var la_ra = as_.load[width=GEMM_KPACK_LOADAHEAD * RPT, alignment=ALIGN](
+                    abase + lg0 * GEMM_KPACK_LOADAHEAD * RPT
+                )
+                var la_rb = bs_.load[width=GEMM_KPACK_LOADAHEAD * CPT, alignment=ALIGN](
+                    bbase + lg0 * GEMM_KPACK_LOADAHEAD * CPT
+                )
+                comptime for ls0 in range(GEMM_KPACK_LOADAHEAD):
+                    comptime if FASTK:
+                        # The DETECT seam: step `ls0`'s B words as the
+                        # `CPT`-wide vector `_fast_rows` takes (a copy of
+                        # register elements), its A words by row offset.
+                        var la_rbs = SIMD[DType.float32, CPT](0.0)
+                        comptime for lv1 in range(NCOL):
+                            la_rbs[lv1] = la_rb[ls0 * CPT + lv1]
+                        _fast_rows[NR, CPT, NCELL, GEMM_KPACK_LOADAHEAD * RPT, 1, ls0 * RPT](
+                            acc, la_ra, la_rbs, sub_seen
+                        )
+                    elif TUNED_STAGE_FTZ:
+                        comptime for lu2 in range(NR):
+                            comptime for lv2 in range(NCOL):
+                                acc[lu2 * CPT + lv2] = _kpack_step[DIAG](
+                                    la_ra[ls0 * RPT + lu2], la_rb[ls0 * CPT + lv2], acc[lu2 * CPT + lv2]
+                                )
+                    else:
+                        var la_bfl = SIMD[DType.float32, CPT](0.0)
+                        comptime for lv3 in range(NCOL):
+                            la_bfl[lv3] = _tuned_loaded_operand(la_rb[ls0 * CPT + lv3])
+                        comptime for lu3 in range(NR):
+                            var la_afl = _tuned_loaded_operand(la_ra[ls0 * RPT + lu3])
+                            comptime for lv4 in range(NCOL):
+                                acc[lu3 * CPT + lv4] = _kpack_step[DIAG](
+                                    la_afl, la_bfl[lv4], acc[lu3 * CPT + lv4]
+                                )
           else:
            var fastw = False
            comptime if ADMIT:
@@ -9331,6 +9482,14 @@ def _kpack_kernel_body[
     var outv = _fold_drain_local[NCELL, FS, HWFOLD](fl, occ)
     comptime if DIAG == 4 or DIAG == 5:
         outv = acc
+    # lane fx-gemm-epi: `EPI != 0` (all-leaves mode only) stores
+    # `gemm_epi_cell[EPI](cell, dst word)`, ONE store per cell: the destination
+    # is the epilogue's operand, so the detect seam's exact cell (FASTK) is
+    # chosen BEFORE the store, not written over it afterwards.
+    comptime assert EPI == GEMM_EPI_NONE or (not GROUP and not SAB and DIAG == 0), (
+        "identical_gemm_kpack_kernel: the store epilogue is the all-leaves"
+        " store of the clean body (no group nodes, no sabotage, no DIAG)"
+    )
     comptime for u4 in range(NR):
         comptime for v7 in range(NCOL):
             var gi = i0 + accrow + u4 * TR
@@ -9351,8 +9510,13 @@ def _kpack_kernel_body[
                         comptime if u4 == 0 and v7 == 0:
                             if tid == 0:
                                 cell = _gemm_step_arm_sabotage(cell)
+                    comptime if EPI != GEMM_EPI_NONE:
+                        comptime if FASTK:
+                            if _detect_recompute(sub_seen):
+                                cell = _rtf_cell(a, b, gi, gj, p_count, leaf, k, a_si, a_sp, b_sp, b_sj)
+                        cell = gemm_epi_cell[EPI](cell, dst.unsafe_load(gi * n + gj))
                     dst.unsafe_store(gi * n + gj, cell)
-    comptime if FASTK:
+    comptime if FASTK and EPI == GEMM_EPI_NONE:
         # lane/amd-step-time: a step result of my cells was subnormal; every
         # cell (or group node) this thread owns is recomputed exactly.
         if _detect_recompute(sub_seen):

@@ -21,7 +21,7 @@ from std.sys.compile import is_defined
 from max.gpu.host import DeviceContext, DeviceBuffer
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.multi_gpu import peer_clone
-from gemm.contract import contract_leaf_size
+from gemm.contract import CONTRACT_K_LEAF_MIN, contract_leaf_size
 from gemm.checks.gemm_identical import (
     identical_gemm_leaf_kernel, identical_gemm_fold_kernel,
     SPLITK_LEAF_TPB, SPLITK_FOLD_TPB,
@@ -60,7 +60,9 @@ def profile_dot_parallel(
     var count = Int(value)
     if count < 1 or count > 64 or GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
         raise Error("parallel solver requires IDENTICAL and 1..64 devices")
-    if k <= 128:
+    # one leaf has nothing to shard (v1: k <= 128; the profile's own bound,
+    # so -D MOJOLEARN_GEMM_FAST_LEAF512 keeps one-leaf dots on one device)
+    if k <= CONTRACT_K_LEAF_MIN:
         return False
     var leaf = contract_leaf_size(k)
     var leaves = (k + leaf - 1) // leaf

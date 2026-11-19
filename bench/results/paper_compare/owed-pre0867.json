@@ -667,6 +667,31 @@
    "define": "MOJOLEARN_SAMBA_FAST_STEP_REGISTRY_RESIDENT",
    "status": "define in code (core/weight_epoch.mojo SAMBA_STEP_REGISTRY_RESIDENT, read by training/samba_resident.mojo _step_registry_in / _step_registry_out and providers/python/samba_resident_pyapi_door.mojo: BOTH must be built with it, i.e. the whole wheel set): B = a Samba resident train step uploads and scans the registry only when the session's weight key is not current, scans the weights it wrote at its own closing wait, stamps the registry itself and keeps the key (the next step and the next forward skip the ~22 MB upload and the scan's wait); A = the default: registry host -> device and one scan with its own wait every step, the door stamps after the step. Same bytes in param, same kernels: digests must not move; read the stack's _samba_resident_uploads to prove which arm ran (B: it stops growing after the first step)",
    "owed": "RUN"
+  },
+  "gemm-loadahead-2": {
+   "define": "MOJOLEARN_GEMM_FAST_LOADAHEAD",
+   "status": "define in code (gemm/checks/gemm_identical.mojo GEMM_KPACK_LOADAHEAD, read by identical_gemm_kpack_kernel's accumulate; IDENTICAL, every vendor column compiles the same loop): B = the admitted and the exact window of the packed GEMM kernel read the operands of 2 consecutive steps with one shared load per operand, then run their FMAs, steps ascending per cell; A = the default: the two loads of each step issued immediately before its FMAs. Same words, same step function, same per-cell order: digests must not move. Build every binding that imports gemm/checks/gemm_identical.mojo with the define. Report ptxas registers and spill bytes of the kpack kernel for A and B",
+   "owed": "RUN"
+  },
+  "gemm-loadahead-4": {
+   "define": "MOJOLEARN_GEMM_FAST_LOADAHEAD,MOJOLEARN_GEMM_FAST_LOADAHEAD_STEPS=4",
+   "status": "define in code (gemm/checks/gemm_identical.mojo GEMM_KPACK_LOADAHEAD, read by identical_gemm_kpack_kernel's accumulate; IDENTICAL, every vendor column compiles the same loop): B = the admitted and the exact window of the packed GEMM kernel read the operands of 4 consecutive steps with one shared load per operand, then run their FMAs, steps ascending per cell; A = the default: the two loads of each step issued immediately before its FMAs. Same words, same step function, same per-cell order: digests must not move. Build every binding that imports gemm/checks/gemm_identical.mojo with the define. Report ptxas registers and spill bytes of the kpack kernel for A and B",
+   "owed": "RUN"
+  },
+  "gemm-leaf512": {
+   "define": "MOJOLEARN_GEMM_FAST_LEAF512",
+   "status": "define in code (gemm/contract.mojo GEMM_LEAF512 -> CONTRACT_K_LEAF_MIN 512, profile mojolearn.identical.gemm.fp32.v2-leaf512, version 4; IDENTICAL, no vendor branch): B = the contract's shortest leaf is 512 (one chain a cell up to k = 512, no fold and no workspace there; a quarter of the leaf boundaries above); A = the default leaf 128. BITS CHANGE under B on every column together: it is the build-wide leaf, so every fold that reads contract_leaf_size moves (GEMM, the classical moments and Gram, CD and SVM dots, loss and optimizer folds, CNN, Mamba, transformer), device and host from the one constant. The define must reach the whole wheel set, the host column included. The digests of A and B differ by design; quality is read from both arms' metrics",
+   "owed": "RUN"
+  },
+  "gemm-seq-packed": {
+   "define": "MOJOLEARN_GEMM_FAST_SEQ_PACKED",
+   "status": "define in code (sequence/gemm_packed_route.mojo SEQ_GEMM_PACKED, read by sequence/exec_device.mojo _launch; the launch is gemm/neural_dispatch.mojo identical_gemm_leaf_ptr_into; IDENTICAL, NVIDIA and AMD columns, never Apple, host column unchanged): B = a plain dense sequence GEMM (OP_GEMM, OP_GEMM_EPI, OP_AGK_GEMM_EPI; no accumulate, no column sums) with K >= 64, both edges >= 128 and at least the column's block floor of packed tiles (NVIDIA 192 tiles of 128 x 64, else of 64 x 64; AMD 1024 tiles of 128 x 128) runs the neural packed body with ONE leaf of K terms, and an epilogue runs as the OP_GEMM_EPI_TAIL follower launch; A = the 16 x 16 sequence tile with the epilogue in registers. Same chain per cell (k ascending from +0.0, flushed operands, one flushed FMA a term): digests must not move. Build every binding that imports sequence/exec_device.mojo (the sequence device executor's groups); the host bindings are untouched. MOJOLEARN_AG_PROFILE=1 names the route of each product (route=packed) to prove which arm ran",
+   "owed": "RUN"
+  },
+  "gemm-epi": {
+   "define": "MOJOLEARN_GEMM_FAST_EPI",
+   "status": "define in code (gemm/checks/gemm_epilogue.mojo GEMM_FAST_EPI / GEMM_EPI_FUSES; autograd/kernels/transformer.mojo BWD_GEMM_EPI; IDENTICAL, no poison build): B = a product whose output is joined to the value already in its destination stores the join in its own final store (the packed kernel's all-leaves store, or the fold-stack kernel after the unchanged group launch), so the transformer backward's two dX fan-ins (S9 bwd_add2_kernel, S32 bwd_add3_kernel) issue no follower launch: 2 launches a layer fewer (S9's add2 and S32's add3), 16 a step at 8 layers, and tmp0/tmp1/tmp2 are not written; A = the default: each dX into a tmp buffer, then one add kernel per fan-in. The join is the follower's expression on the same words in the same operand order (ftz(ftz(x) + ftz(y)), both addends flush results, nothing to contract): digests must not move. Fuses only where the shipped dispatch runs the packed body (NVIDIA today); AMD, Apple and declined sizes run the same follower kernels, same launch count as A",
+   "owed": "RUN"
   }
  },
  "rows": [
@@ -3872,6 +3897,234 @@
     "samba-step-registry-resident"
    ],
    "decides": "each B arm at least as fast as the candidate on SambaStack.train_step at every case (L = 300: a partial last chunk; a 6-layer stack; a small Mamba-3-only stack), and samba-step-registry-resident faster on the first forward after a step (no registry upload); a case that is slower blocks the promotion decided on the board rows"
+  },
+  {
+   "id": "fx-gemm-loadahead",
+   "source": "lane fx-gemm-loadahead (2026-11-19, idea 4 of ~/mojolearn-evidence/briefs-20261118/ideas-gemm-headroom-RESULT.md, SECOND PASS S2 hypothesis 2; report ~/mojolearn-evidence/briefs-20261118/fx-gemm-loadahead-RESULT.md)",
+   "kind": "ab",
+   "lane": [
+    "gemm",
+    "lm-train-step",
+    "lm-forward"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "gemm-loadahead-2",
+    "gemm-loadahead-4"
+   ],
+   "decides": "promote the faster B (depth 2 or 4) only if gemm (4096^3) and lm-train-step are faster on the NVIDIA L40S (same box, same job) with every digest equal to A's (the arm changes when an operand is read, never an FMA's operands or order) and neither fx-gemm-loadahead-shapes case slower; lm-forward must not be slower. Read ptxas -v for the kpack kernel on each arm: a B that raises spill bytes or drops to one block an SM (more than 128 registers a thread) and is slower is a register loss, not a verdict on the idea at the other depth. Noise or slower on both depths: delete the arm with the four tombstone parts. Expected 0 to +25% of the GEMM rate (low confidence: hypothesis 1 of S2 says the gather round trip bounds the window as well)"
+  },
+  {
+   "id": "fx-gemm-loadahead-shapes",
+   "source": "lane fx-gemm-loadahead (2026-11-19, idea 4 of ~/mojolearn-evidence/briefs-20261118/ideas-gemm-headroom-RESULT.md, SECOND PASS S2 hypothesis 2; report ~/mojolearn-evidence/briefs-20261118/fx-gemm-loadahead-RESULT.md); the neighbouring shape and the non-board size of both depths (no dimension targeting)",
+   "kind": "driver",
+   "driver": "gemm_shapes",
+   "vendor": "nvidia",
+   "shape": {
+    "cases": [
+     {
+      "m": 512,
+      "n": 4096,
+      "k": 4096
+     },
+     {
+      "m": 3000,
+      "n": 700,
+      "k": 900
+     }
+    ]
+   },
+   "arms": [
+    "candidate",
+    "gemm-loadahead-2",
+    "gemm-loadahead-4"
+   ],
+   "b_arms": [
+    "gemm-loadahead-2",
+    "gemm-loadahead-4"
+   ],
+   "decides": "each B depth at least as fast as the candidate on linalg.matmul at both cases (512 x 4096 x 4096: fewer tiles at the board's k; 3000 x 700 x 900: ragged tiles and a ragged last window, which the arm leaves on the shipped loop); a case that is slower blocks the promotion decided on the board rows; output words equal between the arms"
+  },
+  {
+   "id": "fx-gemm-leaf512",
+   "source": "lane fx-gemm-leaf512 (2026-11-19, idea 3 of ~/mojolearn-evidence/briefs-20261118/ideas-gemm-headroom-RESULT.md, SECOND PASS S1 and S6; report ~/mojolearn-evidence/briefs-20261118/fx-gemm-leaf512-RESULT.md)",
+   "kind": "ab",
+   "lane": [
+    "lm-train-step",
+    "lm-forward",
+    "mlp-train-step",
+    "gemm"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "gemm-leaf512"
+   ],
+   "decides": "promote B only if lm-train-step is faster on the NVIDIA L40S (same box, same job) and gemm (4096^3), lm-forward and mlp-train-step are not slower, with both arms' quality equal (loss and metric beside every time; the words differ by design: another rounding order of the same sums) and no fx-gemm-leaf512-shapes case slower. mlp-train-step is the control for the small MLP op, which keeps its own leaf 128 (autograd/small_mlp_op.mojo): a move there comes from the other products of the step. Expected (INFER, S1/S6): lm-train-step -0.9..-1.2 ms of 35.4; the firm part is structural (no fold and no second launch at k <= 512), the per-boundary saving is one extrapolated A/B point. Because the leaf is build-wide, a promotion also needs the classical rows of the next board run not slower (their P-keyed plans move). A loser is deleted with the four tombstone parts. On promotion every column and the host change together and the release's one verification records the new references"
+  },
+  {
+   "id": "fx-gemm-leaf512-shapes",
+   "source": "lane fx-gemm-leaf512 (2026-11-19, idea 3 of ~/mojolearn-evidence/briefs-20261118/ideas-gemm-headroom-RESULT.md, SECOND PASS S1 and S6; report ~/mojolearn-evidence/briefs-20261118/fx-gemm-leaf512-RESULT.md); the small-output shape of the brief, the neighbouring shape and the non-board size (no dimension targeting)",
+   "kind": "driver",
+   "driver": "gemm_shapes",
+   "vendor": "nvidia",
+   "shape": {
+    "cases": [
+     {
+      "m": 256,
+      "n": 256,
+      "k": 2048
+     },
+     {
+      "m": 1023,
+      "n": 1025,
+      "k": 2049
+     },
+     {
+      "m": 300,
+      "n": 300,
+      "k": 1500
+     },
+     {
+      "m": 2048,
+      "n": 384,
+      "k": 500
+     }
+    ]
+   },
+   "arms": [
+    "candidate",
+    "gemm-leaf512"
+   ],
+   "b_arms": [
+    "gemm-leaf512"
+   ],
+   "decides": "B at least as fast as the candidate on linalg.matmul at every case: 256 x 256 x 2048 (a small output, where the split plans' P-keyed rules move from 16 leaves to 4), 1023 x 1025 x 2049 (ragged tiles, a one-element last leaf), 300 x 300 x 1500 (non-board, a non-multiple of 512: P = 3) and 2048 x 384 x 500 (one chain a cell under B, four leaves under A); a slower case blocks the promotion decided on the board rows. The words differ between the arms by design"
+  },
+  {
+   "id": "gemm-seq-packed-mlp",
+   "source": "lane fx-gemm-seq-packed (2026-11-18; idea 1 of ~/mojolearn-evidence/briefs-20261118/ideas-gemm-headroom-RESULT.md; report ~/mojolearn-evidence/briefs-20261118/fx-gemm-seq-packed-RESULT.md): default-off arm, never timed",
+   "kind": "ab",
+   "lane": [
+    "mlp-clf",
+    "mlp-reg"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "gemm-seq-packed"
+   ],
+   "decides": "promote B only if the mlp-clf and mlp-reg fits (istella and taxi) are faster on the NVIDIA L40S (same box, same job) with quality equal and every digest equal (the arm changes no arithmetic: a digest that moves is a bug in the arm, not a bit version), and the infer rows are not slower. On the board's shape (batch 4096, hidden 256, 256) B moves three of the five large products a step (forward 4096 x 256 over K = features and K = 256, dX 4096 x 256 over K = 256: 256 packed tiles of 64 x 64) and adds one follower launch to each; the two weight gradients (256 x 256 and features x 256 over K = 4096: 16 packed tiles) stay on the 16 x 16 tile by the fill rule, so the first-pass estimate of -0.5 ms a step is an upper bound that assumed all five moved. A loser is deleted with the four tombstone parts"
+  },
+  {
+   "id": "gemm-seq-packed-shapes",
+   "source": "lane fx-gemm-seq-packed (2026-11-18; idea 1 of ~/mojolearn-evidence/briefs-20261118/ideas-gemm-headroom-RESULT.md; report ~/mojolearn-evidence/briefs-20261118/fx-gemm-seq-packed-RESULT.md); the neighbouring shape, the non-board size and a control under the rule's block floor (no dimension targeting)",
+   "kind": "driver",
+   "driver": "mlp_fit",
+   "shape": {
+    "cases": [
+     {
+      "rows": 200000,
+      "features": 128,
+      "hidden": [
+       256
+      ],
+      "classes": 7,
+      "max_iter": 3,
+      "batch_size": 4096
+     },
+     {
+      "rows": 200000,
+      "features": 300,
+      "hidden": [
+       512,
+       512
+      ],
+      "classes": 7,
+      "max_iter": 3,
+      "batch_size": 2048
+     },
+     {
+      "rows": 200000,
+      "features": 96,
+      "hidden": [
+       192
+      ],
+      "classes": 7,
+      "max_iter": 3,
+      "batch_size": 8192
+     },
+     {
+      "rows": 200000,
+      "features": 128,
+      "hidden": [
+       256
+      ],
+      "classes": 7,
+      "max_iter": 3,
+      "batch_size": 1024
+     }
+    ]
+   },
+   "arms": [
+    "candidate",
+    "gemm-seq-packed"
+   ],
+   "b_arms": [
+    "gemm-seq-packed"
+   ],
+   "decides": "B at least as fast as the candidate on MLPClassifier.fit at the three routed cases: batch 4096 x hidden 256 over K = 128 (the neighbouring shape 4096 x 256 x 128, the stepped-down packed tile), batch 2048 x hidden 512, 512 (2048 x 512 x 512 and x 300, non-board), batch 8192 x hidden 192 over K = 96 (non-board edges that are not tile multiples: 192 wide tiles, the floor itself). The fourth case (batch 1024 x 256: 64 packed tiles, under the floor) takes the 16 x 16 tile on both arms and is the control: a move there is box noise. A routed case that is slower blocks the promotion decided on the board rows"
+  },
+  {
+   "id": "fx-gemm-epi-rows",
+   "source": "lane fx-gemm-epi (2026-11-18, idea 5 of ~/mojolearn-evidence/briefs-20261118/ideas-gemm-headroom-RESULT.md; report ~/mojolearn-evidence/briefs-20261118/fx-gemm-epi-RESULT.md): default-off arm, never timed",
+   "kind": "ab",
+   "lane": [
+    "lm-train-step",
+    "transformer-train-step",
+    "samba-train-step"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "gemm-epi"
+   ],
+   "decides": "promote B only if lm-train-step is faster on the NVIDIA L40S (same box, same job) with the loss and every digest equal (the arm changes no arithmetic: a moved digest is a bug, not a result). Expected -0.15 to -0.5 ms of about 35 (16 add launches a step and the tmp buffers' read-back traffic); a result inside the noise floor is a loser and is deleted with the four tombstone parts. samba-train-step reaches the arm through its attention layers and must not be slower. First run gemm/checks/gemm_epilogue_check.mojo on the arm build (fused store against the two-launch form and the host words, both launch forms must report as run). Before a flip, time the neighbouring shape and the non-board size (no dimension targeting): the transformer train step at d_model 512 and a decoder layer backward at 1536 tokens x 320 wide (row fx-gemm-epi-sizes)"
+  },
+  {
+   "id": "fx-gemm-epi-sizes",
+   "source": "lane fx-gemm-epi (2026-11-18, idea 5 of ~/mojolearn-evidence/briefs-20261118/ideas-gemm-headroom-RESULT.md; report ~/mojolearn-evidence/briefs-20261118/fx-gemm-epi-RESULT.md); the neighbouring shape and the non-board size of the arm (no dimension targeting)",
+   "kind": "ab",
+   "lane": [
+    "transformer-train-step"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "gemm-epi"
+   ],
+   "shape": {
+    "cases": [
+     {
+      "note": "neighbouring shape",
+      "d_model": 512,
+      "batch_tokens": 2048
+     },
+     {
+      "note": "non-board size",
+      "d_model": 320,
+      "batch_tokens": 1536,
+      "intermediate": 960
+     }
+    ]
+   },
+   "decides": "B at least as fast as the candidate at both cases, digests equal; a slower case blocks the promotion decided on fx-gemm-epi-rows. OWED TOOLING: the board harness has no driver for a transformer train step at a caller-given d_model (drivers today: cnn_widths, f16_widen, kde_widths, mamba_backward, mlp_fit, pandas_input, samba_step, samba_train_step, while_loop); until one exists these two cases are timed with the lm-train-step recipe at the stated widths"
   }
  ]
 }
