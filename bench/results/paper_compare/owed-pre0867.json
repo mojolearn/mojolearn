@@ -389,8 +389,9 @@
   },
   "clip-packed": {
    "define": "MOJOLEARN_CLIP_PACKED",
-   "status": "define in code (training/optimizer_public.mojo CLIP_PACKED (public_clip)): B = gather into one packed buffer, clip, scatter (the former MOJOLEARN_CLIP_PACKED=1); same device buffer, offsets and clip; A = grad-norm clip in place from each tensor's own memory (the former default). A transport/route choice: digests must not move.",
-   "owed": "RUN"
+   "status": "deleted 2026-11-19 (lane fx-old-arms-triage): opt-in arm, no A/B recorded in four weeks; was: define in code (training/optimizer_public.mojo CLIP_PACKED (public_clip)): B = gather into one packed buffer, clip, scatter (the former MOJOLEARN_CLIP_PACKED=1); same device buffer, offsets and clip; A = grad-norm clip in place from each tensor's own memory (the former default). A transport/route choice: digests must not move.",
+   "owed": "DECIDED",
+   "evidence": "no A/B in four weeks: run-time switch since 2026-09-30, build define since 2026-11-15, never timed; deleted under AGENTS.md part 5 (docs/TOMBSTONES.md mojolearn_clip_packed-fx-old-arms-triage)"
   },
   "ivf-scan-grouped-off": {
    "define": "MOJOLEARN_IVF_SCAN_GROUPED_OFF",
@@ -415,13 +416,15 @@
   },
   "device-arena": {
    "define": "MOJOLEARN_DEVICE_ARENA",
-   "status": "define in code (core/device_arena.mojo DEVICE_ARENA_ON: B = sessions carve their buffers from one arena (the Apple column's default); A = one allocation per buffer (NVIDIA/AMD default, chosen by reasoning). No bit change)",
-   "owed": "RUN"
+   "status": "deleted 2026-11-19 (lane fx-old-arms-triage): NVIDIA/AMD opt-in arm, no A/B recorded in four weeks; was: define in code (core/device_arena.mojo DEVICE_ARENA_ON: B = sessions carve their buffers from one arena (the Apple column's default); A = one allocation per buffer (NVIDIA/AMD default, chosen by reasoning). No bit change)",
+   "owed": "DECIDED",
+   "evidence": "no A/B in four weeks: run-time switch since 2026-10-01, build define since 2026-11-15; built for ab4 (nvc-ab-20261118T201200Z-d21ba0) but that job ended after two arms; deleted under AGENTS.md part 5 (docs/TOMBSTONES.md mojolearn_device_arena-fx-old-arms-triage)"
   },
   "byte-lm-keep-context": {
    "define": "MOJOLEARN_BYTE_LM_KEEP_CONTEXT",
-   "status": "define in code (training/byte_lm_session_ops.mojo, byte_lm_stateless_run.mojo, byte_lm_stateless_logits.mojo BYTE_LM_KEEP_CONTEXT: B = the device context is kept across stateless calls (no per-call context build); A = a context per call. No bit change)",
-   "owed": "RUN"
+   "status": "deleted 2026-11-19 (lane fx-old-arms-triage): opt-in arm, no A/B recorded in four weeks; was: define in code (training/byte_lm_session_ops.mojo, byte_lm_stateless_run.mojo, byte_lm_stateless_logits.mojo BYTE_LM_KEEP_CONTEXT: B = the device context is kept across stateless calls (no per-call context build); A = a context per call. No bit change)",
+   "owed": "DECIDED",
+   "evidence": "no A/B in four weeks: run-time switch since 2026-10-21, build define since 2026-11-15; built for ab4 (nvc-ab-20261118T201200Z-d21ba0) but that job ended after two arms; deleted under AGENTS.md part 5 (docs/TOMBSTONES.md mojolearn_byte_lm_keep_context-fx-old-arms-triage)"
   },
   "mamba3-legacy-setup": {
    "define": "MOJOLEARN_MAMBA3_LEGACY_SETUP",
@@ -431,8 +434,9 @@
   },
   "swiglu-fused": {
    "define": "MOJOLEARN_SWIGLU_FUSED",
-   "status": "define in code (transformer/impl/llama/modeling_llama.mojo SWIGLU_FUSED: B = the forward-only fused SiLU*gate (one launch instead of two per layer); A = two launches. Same saved stages)",
-   "owed": "RUN"
+   "status": "deleted 2026-11-19 (lane fx-old-arms-triage): opt-in arm, no A/B recorded in four weeks; was: define in code (transformer/impl/llama/modeling_llama.mojo SWIGLU_FUSED: B = the forward-only fused SiLU*gate (one launch instead of two per layer); A = two launches. Same saved stages)",
+   "owed": "DECIDED",
+   "evidence": "no A/B in four weeks: run-time switch since 2026-09-30, build define since 2026-11-15; built for ab4 (nvc-ab-20261118T201200Z-d21ba0) but that job ended after two arms; deleted under AGENTS.md part 5 (docs/TOMBSTONES.md mojolearn_swiglu_fused-fx-old-arms-triage)"
   },
   "transformer-legacy-setup": {
    "define": "MOJOLEARN_TRANSFORMER_LEGACY_SETUP",
@@ -441,8 +445,9 @@
   },
   "transformer-norm-dw-own-ws": {
    "define": "MOJOLEARN_TRANSFORMER_NORM_DW_OWN_WS",
-   "status": "define in code (autograd/kernels/transformer.mojo TRANSFORMER_NORM_DW_OWN_WS: B = identical_gemm with its own workspace and two waits for the norm weight gradients; A = the routed form on the backward's workspace)",
-   "owed": "RUN"
+   "status": "deleted 2026-11-19 (lane fx-old-arms-triage): old path beside the default, no A/B recorded in four weeks; was: define in code (autograd/kernels/transformer.mojo TRANSFORMER_NORM_DW_OWN_WS: B = identical_gemm with its own workspace and two waits for the norm weight gradients; A = the routed form on the backward's workspace)",
+   "owed": "DECIDED",
+   "evidence": "no A/B in four weeks: run-time switch since 2026-10-20, build define since 2026-11-15, never timed; deleted under AGENTS.md part 5 (docs/TOMBSTONES.md mojolearn_transformer_norm_dw_own_ws-fx-old-arms-triage)"
   },
   "transformer-session-fresh-off": {
    "define": "MOJOLEARN_TRANSFORMER_SESSION_FRESH_OFF",

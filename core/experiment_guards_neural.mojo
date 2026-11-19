@@ -1107,6 +1107,23 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_DX_CONCAT.patch; record in docs/TOMBSTONES.md.
     comptime assert not is_defined["MOJOLEARN_GEMM_FAST_DX_CONCAT"](), "removed 2026-11-19 (lane/fx-verdicts3, A/B round 1 NVIDIA L40S, wheel 0c68d6cd27, job nvc-ab-20261119T125554Z-6f7afc, one run per arm, quality equal): the q/k/v fan-in dX as one concatenated product was arm/base 1.00 on lm-train-step and 0.99 on samba-train-step (noise) and changed bits; three products and (q + k) + v are the route; recoverable at 913fc44cfa"
     # ---- end lane fx-verdicts3
+    # ---- lane fx-old-arms-triage (2026-11-19): arms with no A/B in four weeks (AGENTS.md "An unmeasured arm is deleted")
+    # TOMBSTONE: MOJOLEARN_CLIP_PACKED (opt-in arm, no A/B recorded in four weeks) deleted 2026-11-19 by lane/fx-old-arms-triage; code recoverable at a7c89e7558.
+    # Restore: git apply experiments/removed/MOJOLEARN_CLIP_PACKED.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_CLIP_PACKED"](), "removed 2026-11-19 (lane/fx-old-arms-triage, opt-in arm, no A/B recorded in four weeks): the packed grad-norm clip on one optimizer device (run-time switch since 2026-09-30, build define since 2026-11-15) had no A/B in four weeks; the in-place clip stays, the packed buffer stays for several optimizer devices; code at a7c89e7558; restore: experiments/removed/MOJOLEARN_CLIP_PACKED.patch"
+    # TOMBSTONE: MOJOLEARN_DEVICE_ARENA (NVIDIA/AMD opt-in arm, no A/B recorded in four weeks) deleted 2026-11-19 by lane/fx-old-arms-triage; code recoverable at a7c89e7558.
+    # Restore: git apply experiments/removed/MOJOLEARN_DEVICE_ARENA.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_DEVICE_ARENA"](), "removed 2026-11-19 (lane/fx-old-arms-triage, NVIDIA/AMD opt-in arm, no A/B recorded in four weeks): session arenas on NVIDIA/AMD (run-time switch since 2026-10-01, build define since 2026-11-15) had no A/B in four weeks; arenas stay on the Apple column, -D MOJOLEARN_DEVICE_ARENA_OFF stays; code at a7c89e7558; restore: experiments/removed/MOJOLEARN_DEVICE_ARENA.patch"
+    # TOMBSTONE: MOJOLEARN_SWIGLU_FUSED (opt-in arm, no A/B recorded in four weeks) deleted 2026-11-19 by lane/fx-old-arms-triage; code recoverable at a7c89e7558.
+    # Restore: git apply experiments/removed/MOJOLEARN_SWIGLU_FUSED.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_SWIGLU_FUSED"](), "removed 2026-11-19 (lane/fx-old-arms-triage, opt-in arm, no A/B recorded in four weeks): the forward-only fused SiLU*gate launch (run-time switch since 2026-09-30, build define since 2026-11-15) had no A/B in four weeks; the S20/S21 launches stay; code at a7c89e7558; restore: experiments/removed/MOJOLEARN_SWIGLU_FUSED.patch"
+    # TOMBSTONE: MOJOLEARN_TRANSFORMER_NORM_DW_OWN_WS (old path, no A/B recorded in four weeks) deleted 2026-11-19 by lane/fx-old-arms-triage; code recoverable at a7c89e7558.
+    # Restore: git apply experiments/removed/MOJOLEARN_TRANSFORMER_NORM_DW_OWN_WS.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_TRANSFORMER_NORM_DW_OWN_WS"](), "removed 2026-11-19 (lane/fx-old-arms-triage, old path, no A/B recorded in four weeks): the norm dW through identical_gemm (run-time switch since 2026-10-20, build define since 2026-11-15) had no A/B in four weeks; the routed workspace.run stays; code at a7c89e7558; restore: experiments/removed/MOJOLEARN_TRANSFORMER_NORM_DW_OWN_WS.patch"
+    # TOMBSTONE: MOJOLEARN_BYTE_LM_KEEP_CONTEXT (opt-in arm, no A/B recorded in four weeks) deleted 2026-11-19 by lane/fx-old-arms-triage; code recoverable at a7c89e7558.
+    # Restore: git apply experiments/removed/MOJOLEARN_BYTE_LM_KEEP_CONTEXT.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_BYTE_LM_KEEP_CONTEXT"](), "removed 2026-11-19 (lane/fx-old-arms-triage, opt-in arm, no A/B recorded in four weeks): the byte LM keeper context (run-time switch since 2026-10-21, build define since 2026-11-15) had no A/B in four weeks; the process-lifetime neural context stays; code at a7c89e7558; restore: experiments/removed/MOJOLEARN_BYTE_LM_KEEP_CONTEXT.patch"
+    # ---- end lane fx-old-arms-triage
     return True
 
 

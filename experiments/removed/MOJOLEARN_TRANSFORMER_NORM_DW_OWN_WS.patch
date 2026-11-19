@@ -1,0 +1,58 @@
+diff --git a/autograd/kernels/transformer.mojo b/autograd/kernels/transformer.mojo
+index 8d9bf7034c..c33f7d7ecc 100644
+--- a/autograd/kernels/transformer.mojo
++++ b/autograd/kernels/transformer.mojo
+@@ -3352,8 +3352,18 @@ def bwd_rms_norm[which: Int](
+     _bwd_rms_norm_dw_tick[which](ctx, pc)
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_TRANSFORMER_NORM_DW_OWN_WS (old path beside the default, no A/B recorded in four weeks: the run-time switch since 2026-10-20, a build define since 2026-11-15) deleted 2026-11-19 by lane/fx-old-arms-triage; code recoverable at a7c89e7558.
+-# Restore: git apply experiments/removed/MOJOLEARN_TRANSFORMER_NORM_DW_OWN_WS.patch; record in docs/TOMBSTONES.md.
++comptime TRANSFORMER_NORM_DW_OWN_WS = is_defined["MOJOLEARN_TRANSFORMER_NORM_DW_OWN_WS"]()
++"""`-D MOJOLEARN_TRANSFORMER_NORM_DW_OWN_WS` restores `identical_gemm` (its
++own workspace, two waits) for the norm weight gradients: the B arm against
++the routed form below, the default (unchanged). It was a getenv per backward
++layer until lane envgate-neural-lm (2026-11-15). RUN OWED on NVIDIA
++(bench/results/paper_compare/owed-pre0867.json "transformer-norm-dw-own-ws";
++docs/apple-fast/EXPERIMENTS.md)."""
++
++
++def _norm_dw_own_workspace() -> Bool:
++    """See TRANSFORMER_NORM_DW_OWN_WS: a build constant."""
++    return TRANSFORMER_NORM_DW_OWN_WS
+ 
+ 
+ def bwd_rms_norm_routed[which: Int](
+@@ -3401,7 +3411,10 @@ def bwd_rms_norm_routed[which: Int](
+         ):
+             _bwd_rms_norm_dw_tick[which](ctx, pc)
+             return
+-    workspace.run(ctx, dw_out, ones, dprod, 1, dm, m, OP_NN)
++    if _norm_dw_own_workspace():
++        identical_gemm(ctx, dw_out, ones, dprod, 1, dm, m, OP_NN)
++    else:
++        workspace.run(ctx, dw_out, ones, dprod, 1, dm, m, OP_NN)
+     _bwd_rms_norm_dw_tick[which](ctx, pc)
+ 
+ 
+diff --git a/tools/neural_experiments.py b/tools/neural_experiments.py
+index efbe6a3728..e480dacf4e 100644
+--- a/tools/neural_experiments.py
++++ b/tools/neural_experiments.py
+@@ -55,6 +55,7 @@ EXPERIMENTS = {
+     "speculative_attn": {"MOJOLEARN_ATTN_SPECULATIVE": "1"},
+     "no_layer_sync": {"MOJOLEARN_BYTE_LM_LAYER_SYNC": "0"},
+     "mamba3_no_retain_stages": {"MOJOLEARN_MAMBA3_RETAIN_STAGES": "0"},
++    "norm_dw_own_ws": {"MOJOLEARN_TRANSFORMER_NORM_DW_OWN_WS": "1"},
+     # the S16 q/k backward arms (lane/neural-net-experiment, the S16 pass):
+     # the default is `regs` since lane/neural-pass4 (`regs2` before); each
+     # arm is the same chains in the same order
+@@ -74,7 +75,7 @@ EXPERIMENTS = {
+                "MOJOLEARN_BYTE_LM_LAYER_SYNC": "0"},
+ }
+ SETS = {
+-    "priority": ["baseline", "mamba3_no_retain_stages"],
++    "priority": ["baseline", "mamba3_no_retain_stages", "norm_dw_own_ws"],
+     # the S16 arms on the Mamba lanes (run with --lane mamba3-forward --lane
+     # samba-train-step, or the timing tool for the per-kernel walls)
+     "s16": ["baseline", "s16_naive", "s16_shared", "s16_regs2", "s16_smem48"],

@@ -944,6 +944,11 @@ in the tables after the sections.
 | [`MOJOLEARN_OPTIMIZER_RESIDENT_OFF`](#mojolearn_optimizer_resident_off-fx-verdicts2) | Training (optimizer: per-call step instead of resident state) | removed (decided B arm: L40S B 1.129 geomean over 5 cells, samba-train-step 1.97) | 2026-11-18 | [MOJOLEARN_OPTIMIZER_RESIDENT_OFF.patch](../experiments/removed/MOJOLEARN_OPTIMIZER_RESIDENT_OFF.patch) |
 | [`MOJOLEARN_XCNN_FAST_TYPED_DOOR`](#mojolearn_xcnn_fast_typed_door-fx-verdicts3) | CNN pools (typed boundary tables ahead of the pool door; boundary pilot) | removed (decided B arm: L40S B 0.92-1.08 over 12 pool cells, ten within 1 %, noise) | 2026-11-19 | [MOJOLEARN_XCNN_FAST_TYPED_DOOR.patch](../experiments/removed/MOJOLEARN_XCNN_FAST_TYPED_DOOR.patch) |
 | [`MOJOLEARN_GEMM_FAST_DX_CONCAT`](#mojolearn_gemm_fast_dx_concat-fx-verdicts3) | Neural (transformer backward q/k/v fan-in dX as one concatenated product, IDENTICAL, bits change) | removed (decided B arm: L40S B 1.00 lm-train-step, 0.99 samba-train-step, noise) | 2026-11-19 | [MOJOLEARN_GEMM_FAST_DX_CONCAT.patch](../experiments/removed/MOJOLEARN_GEMM_FAST_DX_CONCAT.patch) |
+| [`MOJOLEARN_CLIP_PACKED`](#mojolearn_clip_packed-fx-old-arms-triage) | Training (grad-norm clip on one optimizer device: gather/pack, opt-in) | removed (opt-in arm, no A/B recorded in four weeks) | 2026-11-19 | [MOJOLEARN_CLIP_PACKED.patch](../experiments/removed/MOJOLEARN_CLIP_PACKED.patch) |
+| [`MOJOLEARN_DEVICE_ARENA`](#mojolearn_device_arena-fx-old-arms-triage) | Core (neural sessions carve buffers from an arena on NVIDIA/AMD, opt-in) | removed (NVIDIA/AMD opt-in arm, no A/B recorded in four weeks) | 2026-11-19 | [MOJOLEARN_DEVICE_ARENA.patch](../experiments/removed/MOJOLEARN_DEVICE_ARENA.patch) |
+| [`MOJOLEARN_SWIGLU_FUSED`](#mojolearn_swiglu_fused-fx-old-arms-triage) | Neural (transformer forward-only fused SiLU*gate, opt-in) | removed (opt-in arm, no A/B recorded in four weeks) | 2026-11-19 | [MOJOLEARN_SWIGLU_FUSED.patch](../experiments/removed/MOJOLEARN_SWIGLU_FUSED.patch) |
+| [`MOJOLEARN_TRANSFORMER_NORM_DW_OWN_WS`](#mojolearn_transformer_norm_dw_own_ws-fx-old-arms-triage) | Neural (transformer backward norm dW through identical_gemm's own workspace; old path) | removed (old path beside the default, no A/B recorded in four weeks) | 2026-11-19 | [MOJOLEARN_TRANSFORMER_NORM_DW_OWN_WS.patch](../experiments/removed/MOJOLEARN_TRANSFORMER_NORM_DW_OWN_WS.patch) |
+| [`MOJOLEARN_BYTE_LM_KEEP_CONTEXT`](#mojolearn_byte_lm_keep_context-fx-old-arms-triage) | Neural (byte LM keeper context, DEVIATION 2513, opt-in) | removed (opt-in arm, no A/B recorded in four weeks) | 2026-11-19 | [MOJOLEARN_BYTE_LM_KEEP_CONTEXT.patch](../experiments/removed/MOJOLEARN_BYTE_LM_KEEP_CONTEXT.patch) |
 
 | [`MOJOLEARN_IDN_M1_SCAN`](#mojolearn_idn_m1_scan) | Neural (Mamba-1 scan selector, IDENTICAL) | removed (opt-in arms, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_M1_SCAN.patch](../experiments/removed/MOJOLEARN_IDN_M1_SCAN.patch) |
 | [`MOJOLEARN_IDN_M2_CB_LOWER_OFF`](#mojolearn_idn_m2_cb_lower_off) | Neural (Mamba-2 oracle cb.G triangle, IDENTICAL) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_M2_CB_LOWER_OFF.patch](../experiments/removed/MOJOLEARN_IDN_M2_CB_LOWER_OFF.patch) |
@@ -22899,3 +22904,42 @@ Checks are not experiments: no define, no refusal, no grid entry and no patch of
   stays unused; `tools/fixture_rng_census.py` reports 0 stale).
 - Kept: every orphan check that carries an inline TOMBSTONE marker, every probe of the paused Apple `fast` programme, and
   the 133 family checks registered by this lane (`checks/native_tests/registry.mojo`, block "lane fx-checks-orphans").
+
+## Unmeasured and decided arms: lane fx-old-arms-triage (2026-11-19)
+
+Rule: AGENTS.md part 5 "An unmeasured arm is deleted" (Andrew, 2026-11-15) and "Experiments" (a measured loser never stays). Every default path is byte-identical; no bit changes on any column. Code recoverable at `a7c89e7558` (the lane base, integration head `preinteg/wave2-20261113`). Triage table: `~/mojolearn-evidence/briefs-20261118/fx-old-arms-triage-RESULT.md`.
+
+### mojolearn_clip_packed-fx-old-arms-triage
+
+- What it was: `-D MOJOLEARN_CLIP_PACKED` (the run-time `MOJOLEARN_CLIP_PACKED=1` from 2026-09-30, a build define since lane envgate-train-seq-mamba 2026-11-15) made `public_clip` (training/optimizer_public.mojo) gather the tensors into the packed buffer even on one optimizer device, instead of clipping in place from their own memory.
+- Verdict: No A/B in four weeks (EXPERIMENTS.md row: DEFAULT = today's (A) 2026-11-15; B arm owed, never run). Deleted under AGENTS.md part 5. The packed buffer stays for several optimizer devices.
+- Files: training/optimizer_public.mojo (`CLIP_PACKED`, its term in `single_unpacked`), python/mojolearn/_training_impl.py (comment), tools/priority_pass_run.py (the clip-grad-norm env row).
+- Patch: `experiments/removed/MOJOLEARN_CLIP_PACKED.patch`. EXPERIMENTS.md: the `MOJOLEARN_CLIP_PACKED` row of lane fx-old-arms-triage. Refusal: core/experiment_guards_neural.mojo. No grid_controls entry.
+
+### mojolearn_device_arena-fx-old-arms-triage
+
+- What it was: `-D MOJOLEARN_DEVICE_ARENA` (the run-time `MOJOLEARN_DEVICE_ARENA=1` from 2026-10-01, a build define since lane envgate-neural-lm 2026-11-15) turned the session arenas (core/device_arena.mojo `DEVICE_ARENA_ON`) on for the NVIDIA and AMD columns.
+- Verdict: No A/B in four weeks (EXPERIMENTS.md row: DEFAULT unchanged 2026-11-15; B arm owed, never run). Deleted under AGENTS.md part 5. Arenas stay on the Apple column and `-D MOJOLEARN_DEVICE_ARENA_OFF` stays.
+- Files: core/device_arena.mojo (`DEVICE_ARENA_ON`'s first term, docstrings).
+- Patch: `experiments/removed/MOJOLEARN_DEVICE_ARENA.patch`. EXPERIMENTS.md: the `MOJOLEARN_DEVICE_ARENA` row of lane fx-old-arms-triage. Refusal: core/experiment_guards_neural.mojo. No grid_controls entry.
+
+### mojolearn_swiglu_fused-fx-old-arms-triage
+
+- What it was: `-D MOJOLEARN_SWIGLU_FUSED` (the run-time `MOJOLEARN_SWIGLU_FUSED=1` from 2026-09-30, a build define since lane envgate-neural-lm 2026-11-15) made `llama_mlp_forward` (transformer/impl/llama/modeling_llama.mojo) launch `swiglu_fused_kernel` (S20 + S21 in one launch) on forward-only calls with the trace off.
+- Verdict: No A/B in four weeks (EXPERIMENTS.md row: DEFAULT unchanged 2026-11-15; B arm owed, never run). Deleted under AGENTS.md part 5. `swiglu_fused_kernel` stays: the Apple AFN block launches it. `llama_mlp_forward` lost its `forward_only` parameter, which only this arm read.
+- Files: transformer/impl/llama/modeling_llama.mojo (`SWIGLU_FUSED`, `swiglu_fused_enabled`, the `swiglu_fused` branch in `llama_mlp_forward` and its S21 skip, the `forward_only` parameter and its three keyword arguments), tools/neural_experiments.py (the swiglu_fused env arm and its set entries).
+- Patch: `experiments/removed/MOJOLEARN_SWIGLU_FUSED.patch`. EXPERIMENTS.md: the `MOJOLEARN_SWIGLU_FUSED` row of lane fx-old-arms-triage. Refusal: core/experiment_guards_neural.mojo. No grid_controls entry.
+
+### mojolearn_transformer_norm_dw_own_ws-fx-old-arms-triage
+
+- What it was: `-D MOJOLEARN_TRANSFORMER_NORM_DW_OWN_WS` (the run-time switch from 2026-10-20, a build define since lane envgate-neural-lm 2026-11-15) made `bwd_rms_norm_routed` (autograd/kernels/transformer.mojo) compute the norm weight gradient with `identical_gemm` (its own workspace, two waits) instead of the block's retained `GemmWorkspace.run`.
+- Verdict: No A/B in four weeks (EXPERIMENTS.md row: DEFAULT unchanged 2026-11-15; B arm owed, never run). Deleted under AGENTS.md part 5. The routed form stays (same plan, same bits).
+- Files: autograd/kernels/transformer.mojo (`TRANSFORMER_NORM_DW_OWN_WS`, `_norm_dw_own_workspace`, the branch), tools/neural_experiments.py (the norm_dw_own_ws env arm).
+- Patch: `experiments/removed/MOJOLEARN_TRANSFORMER_NORM_DW_OWN_WS.patch`. EXPERIMENTS.md: the `MOJOLEARN_TRANSFORMER_NORM_DW_OWN_WS` row of lane fx-old-arms-triage. Refusal: core/experiment_guards_neural.mojo. No grid_controls entry.
+
+### mojolearn_byte_lm_keep_context-fx-old-arms-triage
+
+- What it was: `-D MOJOLEARN_BYTE_LM_KEEP_CONTEXT` (the run-time `MOJOLEARN_BYTE_LM_KEEP_CONTEXT=1` from 2026-10-21, a build define since lane envgate-neural-lm 2026-11-15) created one extra never-released DeviceContext (`_ContextKeeper`, `BYTE_LM_CONTEXT_KEEPER`) before the byte LM session, stateless-run and stateless-logits contexts: a diagnostic mitigation for a second-context hang seen on one RTX 4090 pod.
+- Verdict: No A/B in four weeks (EXPERIMENTS.md row: DEFAULT unchanged 2026-11-15; B arm owed, never run). Deleted under AGENTS.md part 5. The keeper struct and slot went with it (nothing else read them); the neural context is process-lifetime (core/neural_context.mojo).
+- Files: training/byte_lm_binding_impl.mojo (`_ContextKeeper`, `BYTE_LM_CONTEXT_KEEPER`), training/byte_lm_session_ops.mojo, training/byte_lm_stateless_run.mojo, training/byte_lm_stateless_logits.mojo (the define, `keep_context` and its branch), bindings/_mojolearn_byte_lm.mojo (import), tools/byte_lm_session_check.py and tools/byte_lm_gpu_logits_sweep.py (docstrings).
+- Patch: `experiments/removed/MOJOLEARN_BYTE_LM_KEEP_CONTEXT.patch`. EXPERIMENTS.md: the `MOJOLEARN_BYTE_LM_KEEP_CONTEXT` row of lane fx-old-arms-triage. Refusal: core/experiment_guards_neural.mojo. No grid_controls entry.
