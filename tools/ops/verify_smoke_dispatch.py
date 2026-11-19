@@ -3,6 +3,8 @@
 """Start .github/workflows/verify-smoke.yml on one measurement build's packed core wheel.
 
     python3 tools/ops/verify_smoke_dispatch.py --wheel-dir <work dir>/<commit12>/linux/final [--ref BRANCH] [--dry-run]
+    python3 tools/ops/verify_smoke_dispatch.py --workflow fast-trial --wheel-dir ... [--families 0x7fffff]
+        [--exact-families MASK] [--shards N]     (the per-estimator fast trial, .github/workflows/fast-trial.yml)
 
 The wheels are packed on this Mac (tools/release.py candidate, linux-pack); release-linux-build.yml uploads no wheel.
 So, as tools/release_identity_wheels.py does for cpu-identity-gate.yml, the core wheel goes to R2 (credentials stay
@@ -29,6 +31,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = "verify-smoke.yml"
+FAST_TRIAL_WORKFLOW = "fast-trial.yml"
 EVIDENCE = Path(os.environ.get("MOJOLEARN_EVIDENCE_ROOT", os.path.expanduser("~/mojolearn-evidence")))
 #: the last census dispatched per --ref: {ref: {commit, wheel, sha256, inputs, token, made}}
 CENSUS_RECORDS = EVIDENCE / "verify-smoke" / "census-records.json"
@@ -113,6 +116,52 @@ def record_census(ref, entry, records_path=CENSUS_RECORDS):
     os.replace(tmp, records_path)
 
 
+def upload_wheel(wheel, key, days):
+    """PUT the wheel to R2 at KEY (credentials stay on this Mac); returns a presigned GET valid for DAYS. The one
+    upload path of every workflow that tests a packed measurement wheel (verify-smoke.yml, fast-trial.yml)."""
+    sys.path.insert(0, str(ROOT / "tools"))
+    import bincache
+    import box_persist
+    creds = box_persist.load_creds()
+    status = bincache.http_put(bincache.presign("PUT", key, 3600, creds), str(wheel))
+    if status not in (200, 201):
+        raise SystemExit(f"verify smoke: R2 upload of {wheel.name} failed (HTTP {status})")
+    return bincache.presign("GET", key, int(days * 86400), creds)
+
+
+def fast_trial_argv(ref, commit, wheel_name, url, digest, token, families, exact="", shards=1):
+    """The `gh workflow run fast-trial.yml` command (inputs as verify-smoke.yml's, plus the trial's)."""
+    return ["gh", "workflow", "run", FAST_TRIAL_WORKFLOW, "--ref", ref, "-f", f"ref={commit}",
+            "-f", f"wheel_url={url}", "-f", f"wheel_name={wheel_name}", "-f", f"wheel_sha256={digest}",
+            "-f", f"families={families}", "-f", f"exact_families={exact}", "-f", f"shards={int(shards)}",
+            "-f", f"token={token}"]
+
+
+def dispatch_fast_trial(wheel_dir, ref="", commit="", families="0x7fffff", exact="", shards=1, dry=False, days=2):
+    """Dispatch .github/workflows/fast-trial.yml on the core wheel (same upload and key as the smoke)."""
+    wheel = core_wheel(wheel_dir)
+    if not commit:
+        commit = json.loads((Path(wheel_dir) / "candidate.json").read_text())["source_commit"]
+    ref = ref or current_branch()
+    digest = sha256(wheel)
+    token = hashlib.sha256(f"fast-trial {commit} {time.time()}".encode()).hexdigest()[:12]
+    key = f"verify-smoke/{commit[:12]}/{wheel.name}"
+    if dry:
+        print("FAST-TRIAL would upload " + wheel.name + " to R2 " + key + " and run: "
+              + " ".join(fast_trial_argv(ref, commit, wheel.name, "<presigned>", digest, token, families, exact,
+                                         shards)))
+        return token
+    url = upload_wheel(wheel, key, days)
+    p = subprocess.run(fast_trial_argv(ref, commit, wheel.name, url, digest, token, families, exact, shards),
+                       cwd=ROOT, capture_output=True, text=True)
+    if p.returncode != 0:
+        raise SystemExit(f"fast trial: gh workflow run failed: {(p.stderr or p.stdout).strip()[-400:]}")
+    print(f"FAST-TRIAL dispatched {FAST_TRIAL_WORKFLOW} on --ref {ref} for {commit[:12]} ({wheel.name}) families "
+          f"{families} exact {exact or '-'}; run-name 'fast-trial {commit} {families} {exact} {token}'; "
+          f"artifact fast-trial-{commit}; find it: gh run list --workflow {FAST_TRIAL_WORKFLOW} -L 5")
+    return token
+
+
 def dispatch(wheel_dir, ref="", commit="", dry=False, days=2, census=None, record=True):
     """Upload the core wheel, dispatch the workflow; returns the token its run-name carries. census: None applies
     the skip rule, True forces the frames census, False skips it. record=False (the pre-build probe wheel, whose
@@ -133,14 +182,7 @@ def dispatch(wheel_dir, ref="", commit="", dry=False, days=2, census=None, recor
               f"-f ref={commit} -f wheel_url=<presigned> -f wheel_name={wheel.name} -f wheel_sha256={digest} "
               f"-f token={token}" + (" -f census_stands=..." if census_args else ""))
         return token
-    sys.path.insert(0, str(ROOT / "tools"))
-    import bincache
-    import box_persist
-    creds = box_persist.load_creds()
-    status = bincache.http_put(bincache.presign("PUT", key, 3600, creds), str(wheel))
-    if status not in (200, 201):
-        raise SystemExit(f"verify smoke: R2 upload of {wheel.name} failed (HTTP {status})")
-    url = bincache.presign("GET", key, int(days * 86400), creds)
+    url = upload_wheel(wheel, key, days)
     argv = ["gh", "workflow", "run", WORKFLOW, "--ref", ref, "-f", f"ref={commit}", "-f", f"wheel_url={url}",
             "-f", f"wheel_name={wheel.name}", "-f", f"wheel_sha256={digest}", "-f", f"token={token}"] + census_args
     p = subprocess.run(argv, cwd=ROOT, capture_output=True, text=True)
@@ -164,7 +206,15 @@ def main(argv=None):
     g.add_argument("--census", dest="census", action="store_true", default=None,
                    help="take the frames census even when nothing it reads changed")
     g.add_argument("--no-census", dest="census", action="store_false", help="skip the frames census")
+    ap.add_argument("--workflow", choices=("verify-smoke", "fast-trial"), default="verify-smoke",
+                    help="fast-trial: the per-estimator fast trial (.github/workflows/fast-trial.yml) on the same wheel")
+    ap.add_argument("--families", default="0x7fffff", help="fast-trial: trial mask of door families")
+    ap.add_argument("--exact-families", default="", help="fast-trial: a second trial with exactly this set")
+    ap.add_argument("--shards", type=int, default=1, help="fast-trial: matrix runners")
     a = ap.parse_args(argv)
+    if a.workflow == "fast-trial":
+        dispatch_fast_trial(a.wheel_dir, a.ref, a.commit, a.families, a.exact_families, a.shards, a.dry_run)
+        return 0
     dispatch(a.wheel_dir, a.ref, a.commit, a.dry_run, census=a.census)
     return 0
 
