@@ -4089,8 +4089,15 @@ class Release(release_identity_wheels.IdentityOnWheels):
                 audit_and_strip(package)
         else:
             import concurrent.futures as cf
+            tag, step = getattr(self._tl, "tag", ""), getattr(self._tl, "step", None)
+
+            def in_step(package):
+                # the step's log prefix and ledger context are thread-local (run_step sets them on its own thread)
+                self._tl.tag, self._tl.step = tag, step
+                return audit_and_strip(package)
+
             with cf.ThreadPoolExecutor(max_workers=min(len(rest), os.cpu_count() or 1)) as pool:
-                for done in [pool.submit(audit_and_strip, package) for package in rest]:
+                for done in [pool.submit(in_step, package) for package in rest]:
                     done.result()
         if self.dry:
             return ("would pack " + ", ".join(SPLIT_PACKAGES[k][0] for k in self.split_packages())

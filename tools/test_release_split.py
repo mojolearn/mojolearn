@@ -220,8 +220,10 @@ class Pack(SplitBase):
         self.assertIn("--profile", calls[0])
         self.assertEqual(calls[0][calls[0].index("--profile") + 1], "release-split")
         audits = [pathlib.Path(c[2]).name.split("-")[0] for c in calls if c[:2] == ["bash", "packaging/linux/audit.sh"]]
-        self.assertEqual(audits, ["mojolearn_core", "mojolearn_nvidia", "mojolearn_amd",
-                                  "mojolearn"], "the core first, the file-free Linux mojolearn last")
+        # the core first; the plugins and the file-free Linux mojolearn then audit at once off the Mac (lane
+        # fx-pack-offload: each reads only the core beside it), so their order is not fixed
+        self.assertEqual(audits[0], "mojolearn_core", "the core first")
+        self.assertEqual(sorted(audits[1:]), ["mojolearn", "mojolearn_amd", "mojolearn_nvidia"])
         self.assertEqual(sum(1 for c in calls if c[1].endswith("strip_wheel_dir_entries.py")), 4)
         self.assertTrue(finals["linux"].name.startswith("mojolearn_core-"), finals["linux"])
         self.assertTrue(finals["linux-meta"].name.startswith("mojolearn-"), finals["linux-meta"])
