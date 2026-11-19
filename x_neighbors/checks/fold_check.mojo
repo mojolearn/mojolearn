@@ -27,7 +27,7 @@ from x_neighbors.host_ops import (
 )
 
 
-def main() raises:
+def run_checks() raises:
     var tr = IdentityTrace()
     var n = 33
     var k = 11

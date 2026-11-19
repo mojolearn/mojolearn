@@ -220,7 +220,7 @@ def _violations(f: FitOut) raises -> Int:
     return wrong
 
 
-def main() raises:
+def run_checks() raises:
     var ctx = DeviceContext()
     print("sampled_cols_check --", N_COLS, "columns, max_features 0.25")
     print()

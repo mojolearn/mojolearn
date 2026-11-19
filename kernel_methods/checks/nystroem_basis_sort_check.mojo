@@ -272,7 +272,7 @@ def check_nystroem_fit_at_bench_size() raises:
     )
 
 
-def main() raises:
+def run_checks() raises:
     comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
         raise Error("the Nystroem basis sort seam check requires IDENTICAL")
     check_basis_sort_matches_counting_rank()

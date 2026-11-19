@@ -92,7 +92,7 @@ def _check_small_bodies(m: Int, n: Int, k: Int) raises:
         assert_true(((m + rows - 1) // rows) * ((n + 63) // 64) >= gemm_tile_min_blocks())
 
 
-def main() raises:
+def run_checks() raises:
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and TARGET_COLUMN == COLUMN_APPLE:
         # The measured board rows (d_model 768) still take the 64x64 plan.
         assert_true(choose_gemm_plan(1024, 768, 768) == PLAN_TUNED_64_4X4)

@@ -146,7 +146,7 @@ def _one(m: Int, n: Int, k: Int, op: Int, wide: Bool, mut failed: Int) raises:
         _ = ctx^
 
 
-def main() raises:
+def run_checks() raises:
     print("== gemm/checks/gemm_int_slices_check.mojo  column " + column_name(TARGET_COLUMN)
           + "  plan " + int_slices_plan_name() + "  sabotage " + String(INT_SLICES_SABOTAGE) + " ==")
     var failed = 0
