@@ -3,7 +3,9 @@
 """Transport for the host-pointer GEMM surfaces (lane/gap-neural-models, 2026-10-02).
 
 NO ARITHMETIC. Copies, pooled allocations and waits only, so nothing here can
-move a bit of any GEMM profile.
+move a bit of any GEMM profile. One exception, off by default: with
+-D MOJOLEARN_IDENTITY_FAST_NAN_CANON `gemm_down_f32` rewrites the NaN words of
+the downloaded product to the one canonical word (core/nan_canon.mojo).
 
 WHY. `linalg.matmul` at the board shape (4096^3, 64 MB per operand) paid, per
 call: three fresh device allocations plus the dispatcher's fresh workspace,
@@ -33,6 +35,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN
 from core.shared_slot import SharedSlot
+from core.nan_canon import NAN_CANON_ON, nan_canon_f32
 
 comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
 
@@ -221,8 +224,22 @@ def gemm_up_u16(ctx: DeviceContext, lease: GemmHostLease, mut dst: DeviceBuffer[
         ctx.enqueue_copy(dst_buf=dst.create_sub_buffer[DType.uint16](0, n), src_ptr=src)
 
 
+@always_inline
+def _down_canon(dst: F32P, n: Int):
+    """The NaN words of a downloaded GEMM result `dst[0, n)` made the one
+    canonical word (core/nan_canon.mojo), across the host's cores. Compiles
+    to nothing unless -D MOJOLEARN_IDENTITY_FAST_NAN_CANON is set."""
+    comptime if NAN_CANON_ON:
+        _ = nan_canon_f32(dst, n)
+
+
 def gemm_down_f32(ctx: DeviceContext, lease: GemmHostLease, src: DeviceBuffer[DType.float32], dst: F32P, n: Int) raises:
-    """`src[0, n)` into host floats `dst[0, n)`, then waits."""
+    """`src[0, n)` into host floats `dst[0, n)`, then waits.
+    Every caller hands a float32 product C (fp32, fused, bf16, int8, int15),
+    so this is where a GEMM result leaves the device: with
+    -D MOJOLEARN_IDENTITY_FAST_NAN_CANON (default off) each chunk's NaN
+    words become the one canonical word right after its host copy, while the
+    copy engine fills the other half (`_down_canon`). No other word moves."""
     if n <= 0:
         ctx.synchronize()
         return
@@ -230,6 +247,7 @@ def gemm_down_f32(ctx: DeviceContext, lease: GemmHostLease, src: DeviceBuffer[DT
     if addr == 0:
         ctx.enqueue_copy(dst_ptr=dst, src_buf=src.create_sub_buffer[DType.float32](0, n))
         ctx.synchronize()
+        _down_canon(dst, n)
         return
     var stage = F32P(unsafe_from_address=addr)
     # Double-buffered: chunk i's DMA runs while chunk i-1 (retired by the
@@ -244,9 +262,11 @@ def gemm_down_f32(ctx: DeviceContext, lease: GemmHostLease, src: DeviceBuffer[DT
         ctx.enqueue_copy(dst_ptr=half, src_buf=src.create_sub_buffer[DType.float32](off, cnt))
         if i > 0:
             _par_copy(dst + prev_off, stage + ((i - 1) % 2) * GEMM_STAGE_FLOATS, prev_cnt)
+            _down_canon(dst + prev_off, prev_cnt)
         ctx.synchronize()
         prev_off = off
         prev_cnt = cnt
         off += cnt
         i += 1
     _par_copy(dst + prev_off, stage + ((i - 1) % 2) * GEMM_STAGE_FLOATS, prev_cnt)
+    _down_canon(dst + prev_off, prev_cnt)
