@@ -17,7 +17,8 @@ def ops_session_create_py[E: Exec & Movable & Deinitable, KIND: Int](
     # x_cnn one: its CNN block ops drain the session queue before each x_cnn
     # entry (autograd/block_step_ops.mojo BlockStepScratch.cnn_other_queue).
     # Nothing on a host session reads the flag.
-    ops_session[E, KIND](sid)[].steps.cnn_other_queue = True
+    var opened = ops_session[E, KIND](sid)
+    opened[].steps.cnn_other_queue = True
     var owner = SessionLifetime[E, KIND](sid)
     # Construct the fixed ABI result directly with the supported native
     # list constructor, transferring the native owner exactly once.
