@@ -70,7 +70,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from core.device_scan import device_classify_nonfinite, device_first_nonfinite
 from core.identity_trace import IdentityTrace
-from core.weight_epoch import RegistryKey
+from core.weight_epoch import RegistryKey, SAMBA_STEP_REGISTRY_RESIDENT, registry_epoch_bump
 from embedding.checks.embedding_identical import identical_embedding_forward_into
 from embedding.checks.embedding_oracle import EmbConfig
 from gemm.contract import OP_NT
