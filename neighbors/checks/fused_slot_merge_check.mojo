@@ -26,7 +26,7 @@ from neighbors.checks.knn_identity_check import (
 )
 
 
-def main() raises:
+def run_checks() raises:
     comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
         raise Error("the slot-merge seam check requires IDENTICAL")
     check_fused_griddimx_merge()

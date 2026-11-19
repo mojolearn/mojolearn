@@ -6,5 +6,5 @@ two-launch form and the host column, word for word."""
 from gemm.checks.gemm_epilogue_suite import run_checks
 
 
-def main() raises:
+def run_checks() raises:
     run_checks()
