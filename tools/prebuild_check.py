@@ -357,6 +357,10 @@ def parse_group_jobs(jobs):
     last = {}
     for j in jobs:
         retry = j["name"].startswith("device-parse retry ")
+        # no group needed a retry: GitHub shows the unexpanded matrix job (`device-parse retry ${{ matrix.key }} sm_89`)
+        # as skipped; a skipped retry is not an attempt (2026-11-19: it failed the pre-build check of 5b58d98aed)
+        if retry and j.get("conclusion") == "skipped":
+            continue
         key = j["name"].replace("device-parse retry ", "device-parse ", 1)
         if retry or key not in last:
             last[key] = j

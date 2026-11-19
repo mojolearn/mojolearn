@@ -242,3 +242,15 @@ def test_prebuild_counts_a_parse_group_by_its_last_attempt():
     assert sorted(j["name"] for j in last) == ["device-parse _n sm_89", "device-parse _t_p2of2 sm_89",
                                                "device-parse retry _t_p1of2 sm_89", "host-parse _h"]
     assert [j["name"] for j in last if j["conclusion"] != "success"] == ["device-parse _n sm_89"]
+
+
+def test_prebuild_ignores_the_skipped_retry_job_when_no_group_needed_one():
+    # 2026-11-19: with no retry needed GitHub lists the unexpanded matrix job as skipped; counted as a group, it failed
+    # the pre-build check of a run whose every parse job had passed
+    spec = importlib.util.spec_from_file_location("prebuild_check", ROOT / "tools/prebuild_check.py")
+    pc = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(pc)
+    jobs = [{"name": "device-parse a sm_89", "conclusion": "success"},
+            {"name": "device-parse retry ${{ matrix.key }} sm_89", "conclusion": "skipped"}]
+    last = pc.parse_group_jobs(jobs)
+    assert [j["name"] for j in last] == ["device-parse a sm_89"] and all(j["conclusion"] == "success" for j in last)
