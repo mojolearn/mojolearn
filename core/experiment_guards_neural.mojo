@@ -1152,6 +1152,9 @@ def _check_configuration() -> Bool:
     # stateless block forward; its stack-layer use is deleted (TOMBSTONE in autograd/block_step_ops.mojo, patch
     # experiments/removed/MOJOLEARN_LLAMA_FAST_STAGE_KEEP-stack-layer.patch). The old opt-in name is refused.
     comptime assert not is_defined["MOJOLEARN_LLAMA_FAST_STAGE_KEEP"](), "promoted 2026-11-19 (lane/fx-verdicts4, A/B round 2 NVIDIA L40S, wheel 0c68d6cd27, job nvc-ab-20261119T154232Z-0642a5, one run per arm, digests equal on 9 cells, transformer-forward 0.953, TransformerBlock.forward at four driver shapes 0.87-0.97): a stateless forward-only block run keeps its stage bytes by default; its stack-layer use was 1.03 on samba-forward and is deleted. Remove -D MOJOLEARN_LLAMA_FAST_STAGE_KEEP; -D MOJOLEARN_LLAMA_FAST_STAGE_KEEP_OFF restores the reset before every call"
+    # TOMBSTONE: MOJOLEARN_CNN_FAST_FLAT_UPDATE (NOISE, A/B round 2 NVIDIA L40S, wheel 0c68d6cd27, job nvc-ab-20261119T154232Z-0642a5, one run per arm, digests equal) deleted 2026-11-19 by lane/fx-verdicts4; code recoverable at 8f3f639b13.
+    # Restore: git apply experiments/removed/MOJOLEARN_CNN_FAST_FLAT_UPDATE.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_CNN_FAST_FLAT_UPDATE"](), "removed 2026-11-19 (lane/fx-verdicts4, A/B round 2 NVIDIA L40S, wheel 0c68d6cd27, job nvc-ab-20261119T154232Z-0642a5, one run per arm, digests equal): Program.fit's flat one-launch optimizer update was arm/base 0.97 on cnn-clf fit (187.1 -> 181.4 ms) where the row's two bases are 12 % apart (noise); code at 8f3f639b13, experiments/removed/MOJOLEARN_CNN_FAST_FLAT_UPDATE.patch"
     # ---- end lane fx-verdicts4
     return True
 
