@@ -9,27 +9,27 @@ from std.python import Python, PythonObject
 from core.shared_slot import SharedSlot
 from bindings.py_keys import py_key, py_op_add
 
-comptime TSA_OP_KPSS_TEST = 0
-comptime TSA_OP_SELECT_D = 1
-comptime TSA_OP_HW_INITIALIZE = 2
-comptime TSA_OP_HW_FORECAST = 3
-comptime TSA_OP_HW_ATTRIBUTE = 4
-comptime TSA_OP_HW_COMPONENT = 5
-comptime TSA_OP_HW_SAVE = 6
-comptime TSA_OP_HW_FIT = 7
-comptime TSA_OP_HW_PREDICT = 8
-comptime TSA_OP_HW_SCORE = 9
-comptime TSA_OP_ARIMA_INITIALIZE = 10
-comptime TSA_OP_ARIMA_PARAMETER = 11
-comptime TSA_OP_ARIMA_REPR = 12
-comptime TSA_OP_ARIMA_FIT = 13
-comptime TSA_OP_ARIMA_FORECAST = 14
-comptime TSA_OP_ARIMA_PREDICT = 15
-comptime TSA_OP_AUTOARIMA_SEARCH = 16
-comptime TSA_OP_AUTOARIMA_INITIALIZE = 17
-comptime TSA_OP_AUTOARIMA_FORECAST = 18
-comptime TSA_OP_AUTOARIMA_FIT = 19
-comptime TSA_OP_AUTOARIMA_PREDICT = 20
+comptime TSA_OPN_KPSS_TEST = 0
+comptime TSA_OPN_SELECT_D = 1
+comptime TSA_OPN_HW_INITIALIZE = 2
+comptime TSA_OPN_HW_FORECAST = 3
+comptime TSA_OPN_HW_ATTRIBUTE = 4
+comptime TSA_OPN_HW_COMPONENT = 5
+comptime TSA_OPN_HW_SAVE = 6
+comptime TSA_OPN_HW_FIT = 7
+comptime TSA_OPN_HW_PREDICT = 8
+comptime TSA_OPN_HW_SCORE = 9
+comptime TSA_OPN_ARIMA_INITIALIZE = 10
+comptime TSA_OPN_ARIMA_PARAMETER = 11
+comptime TSA_OPN_ARIMA_REPR = 12
+comptime TSA_OPN_ARIMA_FIT = 13
+comptime TSA_OPN_ARIMA_FORECAST = 14
+comptime TSA_OPN_ARIMA_PREDICT = 15
+comptime TSA_OPN_AUTOARIMA_SEARCH = 16
+comptime TSA_OPN_AUTOARIMA_INITIALIZE = 17
+comptime TSA_OPN_AUTOARIMA_FORECAST = 18
+comptime TSA_OPN_AUTOARIMA_FIT = 19
+comptime TSA_OPN_AUTOARIMA_PREDICT = 20
 
 
 struct TsaKeys(Defaultable, Movable):
@@ -355,27 +355,27 @@ def _tsa_keys_fill(nk: UnsafePointer[TsaKeys, MutUntrackedOrigin]) raises:
     nk[].k_x0_ = py_key("x0_")
     nk[].k_x_ = py_key("x_")
     var ops = Python.dict()
-    py_op_add(ops, "kpss_test", TSA_OP_KPSS_TEST)
-    py_op_add(ops, "select_d", TSA_OP_SELECT_D)
-    py_op_add(ops, "hw_initialize", TSA_OP_HW_INITIALIZE)
-    py_op_add(ops, "hw_forecast", TSA_OP_HW_FORECAST)
-    py_op_add(ops, "hw_attribute", TSA_OP_HW_ATTRIBUTE)
-    py_op_add(ops, "hw_component", TSA_OP_HW_COMPONENT)
-    py_op_add(ops, "hw_save", TSA_OP_HW_SAVE)
-    py_op_add(ops, "hw_fit", TSA_OP_HW_FIT)
-    py_op_add(ops, "hw_predict", TSA_OP_HW_PREDICT)
-    py_op_add(ops, "hw_score", TSA_OP_HW_SCORE)
-    py_op_add(ops, "arima_initialize", TSA_OP_ARIMA_INITIALIZE)
-    py_op_add(ops, "arima_parameter", TSA_OP_ARIMA_PARAMETER)
-    py_op_add(ops, "arima_repr", TSA_OP_ARIMA_REPR)
-    py_op_add(ops, "arima_fit", TSA_OP_ARIMA_FIT)
-    py_op_add(ops, "arima_forecast", TSA_OP_ARIMA_FORECAST)
-    py_op_add(ops, "arima_predict", TSA_OP_ARIMA_PREDICT)
-    py_op_add(ops, "autoarima_search", TSA_OP_AUTOARIMA_SEARCH)
-    py_op_add(ops, "autoarima_initialize", TSA_OP_AUTOARIMA_INITIALIZE)
-    py_op_add(ops, "autoarima_forecast", TSA_OP_AUTOARIMA_FORECAST)
-    py_op_add(ops, "autoarima_fit", TSA_OP_AUTOARIMA_FIT)
-    py_op_add(ops, "autoarima_predict", TSA_OP_AUTOARIMA_PREDICT)
+    py_op_add(ops, "kpss_test", TSA_OPN_KPSS_TEST)
+    py_op_add(ops, "select_d", TSA_OPN_SELECT_D)
+    py_op_add(ops, "hw_initialize", TSA_OPN_HW_INITIALIZE)
+    py_op_add(ops, "hw_forecast", TSA_OPN_HW_FORECAST)
+    py_op_add(ops, "hw_attribute", TSA_OPN_HW_ATTRIBUTE)
+    py_op_add(ops, "hw_component", TSA_OPN_HW_COMPONENT)
+    py_op_add(ops, "hw_save", TSA_OPN_HW_SAVE)
+    py_op_add(ops, "hw_fit", TSA_OPN_HW_FIT)
+    py_op_add(ops, "hw_predict", TSA_OPN_HW_PREDICT)
+    py_op_add(ops, "hw_score", TSA_OPN_HW_SCORE)
+    py_op_add(ops, "arima_initialize", TSA_OPN_ARIMA_INITIALIZE)
+    py_op_add(ops, "arima_parameter", TSA_OPN_ARIMA_PARAMETER)
+    py_op_add(ops, "arima_repr", TSA_OPN_ARIMA_REPR)
+    py_op_add(ops, "arima_fit", TSA_OPN_ARIMA_FIT)
+    py_op_add(ops, "arima_forecast", TSA_OPN_ARIMA_FORECAST)
+    py_op_add(ops, "arima_predict", TSA_OPN_ARIMA_PREDICT)
+    py_op_add(ops, "autoarima_search", TSA_OPN_AUTOARIMA_SEARCH)
+    py_op_add(ops, "autoarima_initialize", TSA_OPN_AUTOARIMA_INITIALIZE)
+    py_op_add(ops, "autoarima_forecast", TSA_OPN_AUTOARIMA_FORECAST)
+    py_op_add(ops, "autoarima_fit", TSA_OPN_AUTOARIMA_FIT)
+    py_op_add(ops, "autoarima_predict", TSA_OPN_AUTOARIMA_PREDICT)
     nk[].ops = ops
     nk[].ready = True
 

@@ -88,42 +88,42 @@ from bindings.classical_labels_door import (
     ClassicalLabels,
 from bindings.x_linear_keys_unpack import (
     x_linear_keys,
-    X_LINEAR_OP_CD_FIT,
-    X_LINEAR_OP_CD_PREDICT,
-    X_LINEAR_OP_CD_SCORE,
-    X_LINEAR_OP_CLASSIFIER_PREDICT,
-    X_LINEAR_OP_CLASSIFIER_SCORE,
-    X_LINEAR_OP_DECISION_FUNCTION,
-    X_LINEAR_OP_FIT_ARD,
-    X_LINEAR_OP_FIT_BAYES,
-    X_LINEAR_OP_FIT_ELASTIC_NET_CV,
-    X_LINEAR_OP_FIT_GLM,
-    X_LINEAR_OP_FIT_HUBER,
-    X_LINEAR_OP_FIT_LARS,
-    X_LINEAR_OP_FIT_LASSO_CV,
-    X_LINEAR_OP_FIT_LASSO_LARS,
-    X_LINEAR_OP_FIT_LOGISTIC_CV,
-    X_LINEAR_OP_FIT_ONE_CLASS,
-    X_LINEAR_OP_FIT_PA_CLASSIFIER,
-    X_LINEAR_OP_FIT_PA_REGRESSOR,
-    X_LINEAR_OP_FIT_PERCEPTRON,
-    X_LINEAR_OP_FIT_QUANTILE,
-    X_LINEAR_OP_FIT_RIDGE_CLASSIFIER,
-    X_LINEAR_OP_FIT_RIDGE_CV,
-    X_LINEAR_OP_FIT_SGD_CLASSIFIER,
-    X_LINEAR_OP_FIT_SGD_REGRESSOR,
-    X_LINEAR_OP_ISOTONIC_FIT,
-    X_LINEAR_OP_ISOTONIC_FIT_TRANSFORM,
-    X_LINEAR_OP_ISOTONIC_PREDICT,
-    X_LINEAR_OP_ISOTONIC_SCORE,
-    X_LINEAR_OP_ISOTONIC_TRANSFORM,
-    X_LINEAR_OP_LRCV_PREDICT_PROBA,
-    X_LINEAR_OP_ONE_CLASS_DECISION_FUNCTION,
-    X_LINEAR_OP_ONE_CLASS_PREDICT,
-    X_LINEAR_OP_ONE_CLASS_SCORE_SAMPLES,
-    X_LINEAR_OP_REGRESSOR_PREDICT,
-    X_LINEAR_OP_REGRESSOR_PREDICT_SCORE,
-    X_LINEAR_OP_SGD_PREDICT_PROBA,
+    X_LINEAR_OPN_CD_FIT,
+    X_LINEAR_OPN_CD_PREDICT,
+    X_LINEAR_OPN_CD_SCORE,
+    X_LINEAR_OPN_CLASSIFIER_PREDICT,
+    X_LINEAR_OPN_CLASSIFIER_SCORE,
+    X_LINEAR_OPN_DECISION_FUNCTION,
+    X_LINEAR_OPN_FIT_ARD,
+    X_LINEAR_OPN_FIT_BAYES,
+    X_LINEAR_OPN_FIT_ELASTIC_NET_CV,
+    X_LINEAR_OPN_FIT_GLM,
+    X_LINEAR_OPN_FIT_HUBER,
+    X_LINEAR_OPN_FIT_LARS,
+    X_LINEAR_OPN_FIT_LASSO_CV,
+    X_LINEAR_OPN_FIT_LASSO_LARS,
+    X_LINEAR_OPN_FIT_LOGISTIC_CV,
+    X_LINEAR_OPN_FIT_ONE_CLASS,
+    X_LINEAR_OPN_FIT_PA_CLASSIFIER,
+    X_LINEAR_OPN_FIT_PA_REGRESSOR,
+    X_LINEAR_OPN_FIT_PERCEPTRON,
+    X_LINEAR_OPN_FIT_QUANTILE,
+    X_LINEAR_OPN_FIT_RIDGE_CLASSIFIER,
+    X_LINEAR_OPN_FIT_RIDGE_CV,
+    X_LINEAR_OPN_FIT_SGD_CLASSIFIER,
+    X_LINEAR_OPN_FIT_SGD_REGRESSOR,
+    X_LINEAR_OPN_ISOTONIC_FIT,
+    X_LINEAR_OPN_ISOTONIC_FIT_TRANSFORM,
+    X_LINEAR_OPN_ISOTONIC_PREDICT,
+    X_LINEAR_OPN_ISOTONIC_SCORE,
+    X_LINEAR_OPN_ISOTONIC_TRANSFORM,
+    X_LINEAR_OPN_LRCV_PREDICT_PROBA,
+    X_LINEAR_OPN_ONE_CLASS_DECISION_FUNCTION,
+    X_LINEAR_OPN_ONE_CLASS_PREDICT,
+    X_LINEAR_OPN_ONE_CLASS_SCORE_SAMPLES,
+    X_LINEAR_OPN_REGRESSOR_PREDICT,
+    X_LINEAR_OPN_REGRESSOR_PREDICT_SCORE,
+    X_LINEAR_OPN_SGD_PREDICT_PROBA,
 )
 from bindings.py_keys import py_op_code
 from bindings.py_balanced import py_item
@@ -155,10 +155,6 @@ comptime _XL_M_SCORE = 5
 comptime _XL_M_PREDICT_PROBA = 6
 comptime _XL_M_SCORE_SAMPLES = 7
 comptime _XL_M_TRANSFORM = 8
-# xl_isotonic's three forms (the public predict is its transform).
-comptime _XL_ISO_FIT = 0
-comptime _XL_ISO_FIT_TRANSFORM = 1
-comptime _XL_ISO_TRANSFORM = 2
 comptime _ROWS_SGD_PROBA = 2
 comptime _ROWS_LRCV_PROBA = 3
 # `_lbfgs_work`'s memory.
@@ -858,7 +854,7 @@ def _xl_offset(fields: PythonObject, context: PythonObject) raises -> Float64:
     return value
 
 
-def xl_one_class(model: PythonObject, op: Int, source: PythonObject, context: PythonObject) raises -> PythonObject:
+def xl_one_class(model: PythonObject, operation: Int, source: PythonObject, context: PythonObject) raises -> PythonObject:
     """SGDOneClassSVM.decision_function / score_samples / predict."""
     var nk = x_linear_keys()
     var fields = py_fields(model)
@@ -868,7 +864,7 @@ def xl_one_class(model: PythonObject, op: Int, source: PythonObject, context: Py
     _xl_width(x.view(), fields, model)
     var offset = _xl_offset(fields, context)
     var result = PythonObject(None)
-    if op == X_LINEAR_OP_ONE_CLASS_PREDICT:
+    if operation == X_LINEAR_OPN_ONE_CLASS_PREDICT:
         # `Array.from_list([-offset], '<f4')`; codes -1 / +1, as int64
         var icpt = labels_full_f32(1, -offset, context)
         var codes = _xl_codes(model, x.view(), py_item(fields, nk[].k_coef_), icpt, False, -1, 1, entries, context)
@@ -878,7 +874,7 @@ def xl_one_class(model: PythonObject, op: Int, source: PythonObject, context: Py
         _ = codes  # keep the Python object alive through the native call above
         result = wide
     else:
-        var intercept = PythonObject(-offset) if op == X_LINEAR_OP_ONE_CLASS_DECISION_FUNCTION else PythonObject(0.0)
+        var intercept = PythonObject(-offset) if operation == X_LINEAR_OPN_ONE_CLASS_DECISION_FUNCTION else PythonObject(0.0)
         result = _xl_decision(model, x.view(), py_item(fields, nk[].k_coef_), intercept, LINK_IDENTITY, True, entries, context)
     _ = x^
     return result
@@ -1337,20 +1333,20 @@ def _xl_class_codes(model: PythonObject, source: PythonObject, n: Int, context: 
     return labels^
 
 
-def xl_fit_sgd_classifier(model: PythonObject, args: PythonObject, op: Int, context: PythonObject) raises -> PythonObject:
+def xl_fit_sgd_classifier(model: PythonObject, args: PythonObject, operation: Int, context: PythonObject) raises -> PythonObject:
     """SGDClassifier.fit(X, y, sample_weight) ("sgd"), Perceptron.fit(X, y,
     sample_weight) ("perceptron") and PassiveAggressiveClassifier.fit(X, y)
     ("pa"): one SGD fit over the class codes."""
     var nk = x_linear_keys()
     var fields = py_fields(model)
     var losses = py_item(context, nk[].k_xl_sgd_clf_loss)
-    if op == X_LINEAR_OP_FIT_PERCEPTRON:
+    if operation == X_LINEAR_OPN_FIT_PERCEPTRON:
         _xl_sgd_refuse(model, py_item(fields, nk[].k_early_stopping), PythonObject(False), py_item(fields, nk[].k_warm_start))
     else:
         _xl_sgd_refuse(model, py_item(fields, nk[].k_early_stopping), py_item(fields, nk[].k_average), py_item(fields, nk[].k_warm_start))
-    if op == X_LINEAR_OP_FIT_SGD_CLASSIFIER and not py_contains(losses, py_item(fields, nk[].k_loss)):
+    if operation == X_LINEAR_OPN_FIT_SGD_CLASSIFIER and not py_contains(losses, py_item(fields, nk[].k_loss)):
         raise Error("mojolearn SGDClassifier: loss must be one of " + _sorted_repr(losses))
-    if op == X_LINEAR_OP_FIT_PA_CLASSIFIER:
+    if operation == X_LINEAR_OPN_FIT_PA_CLASSIFIER:
         if not py_contains(Python.tuple("hinge", "squared_hinge"), py_item(fields, nk[].k_loss)):
             raise Error("mojolearn PassiveAggressiveClassifier: loss must be 'hinge' or 'squared_hinge'")
         if not _gt(py_item(fields, nk[].k_C), PythonObject(0)):
@@ -1364,7 +1360,7 @@ def xl_fit_sgd_classifier(model: PythonObject, args: PythonObject, op: Int, cont
     var k = len(labels.classes)
     py_setitem(fields, nk[].k_classes_, labels.classes)
     var fit: Tuple[PythonObject, PythonObject]
-    if op == X_LINEAR_OP_FIT_SGD_CLASSIFIER:
+    if operation == X_LINEAR_OPN_FIT_SGD_CLASSIFIER:
         var batch_sum = _xl_sgd_auto_sum(py_item(fields, nk[].k_batch_size), py_item(fields, nk[].k_loss), py_item(fields, nk[].k_learning_rate), context)
         fit = _xl_sgd(model, fields, entries, x.view(), codes, labels_address(codes), k, _int(losses[py_item(fields, nk[].k_loss)]),
                       py_item(fields, nk[].k_penalty), py_item(fields, nk[].k_learning_rate), py_item(fields, nk[].k_alpha), py_item(fields, nk[].k_l1_ratio), py_item(fields, nk[].k_eta0),
@@ -1373,7 +1369,7 @@ def xl_fit_sgd_classifier(model: PythonObject, args: PythonObject, op: Int, cont
                       py_item(fields, nk[].k_class_weight), labels.classes, labels.codes, py_item(fields, nk[].k_batch_size), batch_sum, 4096,
                       context)
         _ = codes  # keep the Python object alive through the native call above
-    elif op == X_LINEAR_OP_FIT_PERCEPTRON:
+    elif operation == X_LINEAR_OPN_FIT_PERCEPTRON:
         fit = _xl_sgd(model, fields, entries, x.view(), codes, labels_address(codes), k, _int(py_item(losses, nk[].k_perceptron)),
                       py_item(fields, nk[].k_penalty), PythonObject("constant"), py_item(fields, nk[].k_alpha), py_item(fields, nk[].k_l1_ratio), py_item(fields, nk[].k_eta0),
                       PythonObject(0.5), PythonObject(0.1), py_item(fields, nk[].k_fit_intercept), py_item(fields, nk[].k_max_iter), py_item(fields, nk[].k_tol),
@@ -1629,16 +1625,16 @@ def _xl_isotonic_transform(model: PythonObject, fields: PythonObject, entries: X
     return out
 
 
-def xl_isotonic(model: PythonObject, form: Int, args: PythonObject, context: PythonObject) raises -> PythonObject:
+def xl_isotonic(model: PythonObject, operation: Int, args: PythonObject, context: PythonObject) raises -> PythonObject:
     """IsotonicRegression.fit / fit_transform / transform / predict."""
     var nk = x_linear_keys()
     var fields = py_fields(model)
-    if form == _XL_ISO_FIT or form == _XL_ISO_FIT_TRANSFORM:
+    if operation == X_LINEAR_OPN_ISOTONIC_FIT or operation == X_LINEAR_OPN_ISOTONIC_FIT_TRANSFORM:
         _xl_isotonic_check(fields)
         var entries = _xl_entries(fields, context)
         var x = _xl_column(args[0], "X", context)
         _xl_isotonic_fit(model, fields, entries, x.view(), args[1], args[2], context)
-        if form == _XL_ISO_FIT:
+        if operation == X_LINEAR_OPN_ISOTONIC_FIT:
             _ = x^
             return model
         # `self.fit(X, y, sample_weight).transform(X)`: the column this call
@@ -2658,11 +2654,11 @@ def x_linear_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObject
         # One lookup with the caller's own str (bindings/py_keys.mojo): the
         # former door copied the name into a String, classified it by up to
         # 17 compares (`_xl_method`) and walked a chain of up to 40 more.
-        var op = py_op_code(nk[].ops, call[1])
+        var operation = py_op_code(nk[].ops, call[1])
         var args = call[2]
         var context = call[3]
         classical_connect_numpy(context)
-        var result = _xl_public_operation(model, op, call[1], args, context)
+        var result = _xl_public_operation(model, operation, call[1], args, context)
         return result.steal_data()
     except error:
         if String(error).startswith("NotFittedError:"):
@@ -2684,7 +2680,7 @@ def x_linear_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObject
         return raise_python_exception(error_without_class(error, "ValueError"), ExceptionType.ValueError)
 
 
-def _xl_method(op: Int) -> Int:
+def _xl_method(operation: Int) -> Int:
     """The public method an x_linear operation serves (`_XL_M_NONE` for
     none, and for an unknown operation, which `_xl_dispatch` refuses). The
     coordinate-descent door (ElasticNet/Lasso `cd_*`) runs the same native
@@ -2693,32 +2689,32 @@ def _xl_method(op: Int) -> Int:
     Integer compares on the operation code (lane fx-boundary-core,
     2026-11-19; was x_linear/door_run.mojo `_xl_method`, a prefix test and
     up to 16 String compares per call that returned the method as a String)."""
-    if (op == X_LINEAR_OP_FIT_SGD_CLASSIFIER or op == X_LINEAR_OP_FIT_PERCEPTRON or op == X_LINEAR_OP_FIT_PA_CLASSIFIER
-            or op == X_LINEAR_OP_FIT_RIDGE_CLASSIFIER or op == X_LINEAR_OP_FIT_SGD_REGRESSOR
-            or op == X_LINEAR_OP_FIT_PA_REGRESSOR or op == X_LINEAR_OP_FIT_ONE_CLASS or op == X_LINEAR_OP_FIT_GLM
-            or op == X_LINEAR_OP_FIT_HUBER or op == X_LINEAR_OP_FIT_BAYES or op == X_LINEAR_OP_FIT_ARD
-            or op == X_LINEAR_OP_FIT_LARS or op == X_LINEAR_OP_FIT_LASSO_LARS or op == X_LINEAR_OP_FIT_QUANTILE
-            or op == X_LINEAR_OP_FIT_RIDGE_CV or op == X_LINEAR_OP_FIT_LASSO_CV or op == X_LINEAR_OP_FIT_ELASTIC_NET_CV
-            or op == X_LINEAR_OP_FIT_LOGISTIC_CV or op == X_LINEAR_OP_ISOTONIC_FIT or op == X_LINEAR_OP_CD_FIT):
+    if (operation == X_LINEAR_OPN_FIT_SGD_CLASSIFIER or operation == X_LINEAR_OPN_FIT_PERCEPTRON or operation == X_LINEAR_OPN_FIT_PA_CLASSIFIER
+            or operation == X_LINEAR_OPN_FIT_RIDGE_CLASSIFIER or operation == X_LINEAR_OPN_FIT_SGD_REGRESSOR
+            or operation == X_LINEAR_OPN_FIT_PA_REGRESSOR or operation == X_LINEAR_OPN_FIT_ONE_CLASS or operation == X_LINEAR_OPN_FIT_GLM
+            or operation == X_LINEAR_OPN_FIT_HUBER or operation == X_LINEAR_OPN_FIT_BAYES or operation == X_LINEAR_OPN_FIT_ARD
+            or operation == X_LINEAR_OPN_FIT_LARS or operation == X_LINEAR_OPN_FIT_LASSO_LARS or operation == X_LINEAR_OPN_FIT_QUANTILE
+            or operation == X_LINEAR_OPN_FIT_RIDGE_CV or operation == X_LINEAR_OPN_FIT_LASSO_CV or operation == X_LINEAR_OPN_FIT_ELASTIC_NET_CV
+            or operation == X_LINEAR_OPN_FIT_LOGISTIC_CV or operation == X_LINEAR_OPN_ISOTONIC_FIT or operation == X_LINEAR_OPN_CD_FIT):
         return _XL_M_FIT
-    if op == X_LINEAR_OP_ISOTONIC_FIT_TRANSFORM:
+    if operation == X_LINEAR_OPN_ISOTONIC_FIT_TRANSFORM:
         return _XL_M_FIT_TRANSFORM
     # "regressor_predict_score" (lane fx-rows-rest, 2026-11-18): the regressors'
     # predict for a package-internal caller that reads float32 words (a meta
     # door, an explainer, a native scorer); the same lifecycle as predict.
-    if (op == X_LINEAR_OP_REGRESSOR_PREDICT or op == X_LINEAR_OP_REGRESSOR_PREDICT_SCORE
-            or op == X_LINEAR_OP_CLASSIFIER_PREDICT or op == X_LINEAR_OP_ONE_CLASS_PREDICT
-            or op == X_LINEAR_OP_ISOTONIC_PREDICT or op == X_LINEAR_OP_CD_PREDICT):
+    if (operation == X_LINEAR_OPN_REGRESSOR_PREDICT or operation == X_LINEAR_OPN_REGRESSOR_PREDICT_SCORE
+            or operation == X_LINEAR_OPN_CLASSIFIER_PREDICT or operation == X_LINEAR_OPN_ONE_CLASS_PREDICT
+            or operation == X_LINEAR_OPN_ISOTONIC_PREDICT or operation == X_LINEAR_OPN_CD_PREDICT):
         return _XL_M_PREDICT
-    if op == X_LINEAR_OP_DECISION_FUNCTION or op == X_LINEAR_OP_ONE_CLASS_DECISION_FUNCTION:
+    if operation == X_LINEAR_OPN_DECISION_FUNCTION or operation == X_LINEAR_OPN_ONE_CLASS_DECISION_FUNCTION:
         return _XL_M_DECISION_FUNCTION
-    if op == X_LINEAR_OP_CLASSIFIER_SCORE or op == X_LINEAR_OP_ISOTONIC_SCORE or op == X_LINEAR_OP_CD_SCORE:
+    if operation == X_LINEAR_OPN_CLASSIFIER_SCORE or operation == X_LINEAR_OPN_ISOTONIC_SCORE or operation == X_LINEAR_OPN_CD_SCORE:
         return _XL_M_SCORE
-    if op == X_LINEAR_OP_SGD_PREDICT_PROBA or op == X_LINEAR_OP_LRCV_PREDICT_PROBA:
+    if operation == X_LINEAR_OPN_SGD_PREDICT_PROBA or operation == X_LINEAR_OPN_LRCV_PREDICT_PROBA:
         return _XL_M_PREDICT_PROBA
-    if op == X_LINEAR_OP_ONE_CLASS_SCORE_SAMPLES:
+    if operation == X_LINEAR_OPN_ONE_CLASS_SCORE_SAMPLES:
         return _XL_M_SCORE_SAMPLES
-    if op == X_LINEAR_OP_ISOTONIC_TRANSFORM:
+    if operation == X_LINEAR_OPN_ISOTONIC_TRANSFORM:
         return _XL_M_TRANSFORM
     return _XL_M_NONE
 
@@ -2742,81 +2738,81 @@ def _xl_method_name(method: Int) -> String:
     return "fit"
 
 
-def _xl_dispatch(model: PythonObject, op: Int, name: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+def _xl_dispatch(model: PythonObject, operation: Int, name: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     var nk = x_linear_keys()
         var result = PythonObject(None)
-        if op == X_LINEAR_OP_REGRESSOR_PREDICT or op == X_LINEAR_OP_REGRESSOR_PREDICT_SCORE:
+        if operation == X_LINEAR_OPN_REGRESSOR_PREDICT or operation == X_LINEAR_OPN_REGRESSOR_PREDICT_SCORE:
             result = xl_regressor_predict(model, args, context)
-        elif op == X_LINEAR_OP_DECISION_FUNCTION:
+        elif operation == X_LINEAR_OPN_DECISION_FUNCTION:
             result = xl_classifier_decision(model, args[0], context)
-        elif op == X_LINEAR_OP_CLASSIFIER_PREDICT:
+        elif operation == X_LINEAR_OPN_CLASSIFIER_PREDICT:
             result = xl_classifier_predict(model, args[0], context)
-        elif op == X_LINEAR_OP_CLASSIFIER_SCORE:
+        elif operation == X_LINEAR_OPN_CLASSIFIER_SCORE:
             result = xl_classifier_score(model, args, context)
-        elif op == X_LINEAR_OP_SGD_PREDICT_PROBA:
+        elif operation == X_LINEAR_OPN_SGD_PREDICT_PROBA:
             result = xl_predict_proba(model, args[0], False, context)
-        elif op == X_LINEAR_OP_LRCV_PREDICT_PROBA:
+        elif operation == X_LINEAR_OPN_LRCV_PREDICT_PROBA:
             result = xl_predict_proba(model, args[0], True, context)
-        elif op == X_LINEAR_OP_FIT_SGD_CLASSIFIER:
-            result = xl_fit_sgd_classifier(model, args, op, context)
-        elif op == X_LINEAR_OP_FIT_PERCEPTRON:
-            result = xl_fit_sgd_classifier(model, args, op, context)
-        elif op == X_LINEAR_OP_FIT_PA_CLASSIFIER:
-            result = xl_fit_sgd_classifier(model, args, op, context)
-        elif op == X_LINEAR_OP_FIT_RIDGE_CLASSIFIER:
+        elif operation == X_LINEAR_OPN_FIT_SGD_CLASSIFIER:
+            result = xl_fit_sgd_classifier(model, args, operation, context)
+        elif operation == X_LINEAR_OPN_FIT_PERCEPTRON:
+            result = xl_fit_sgd_classifier(model, args, operation, context)
+        elif operation == X_LINEAR_OPN_FIT_PA_CLASSIFIER:
+            result = xl_fit_sgd_classifier(model, args, operation, context)
+        elif operation == X_LINEAR_OPN_FIT_RIDGE_CLASSIFIER:
             result = xl_fit_ridge_classifier(model, args, context)
-        elif op == X_LINEAR_OP_FIT_SGD_REGRESSOR:
+        elif operation == X_LINEAR_OPN_FIT_SGD_REGRESSOR:
             result = xl_fit_sgd_regressor(model, args, False, context)
-        elif op == X_LINEAR_OP_FIT_PA_REGRESSOR:
+        elif operation == X_LINEAR_OPN_FIT_PA_REGRESSOR:
             result = xl_fit_sgd_regressor(model, args, True, context)
-        elif op == X_LINEAR_OP_FIT_ONE_CLASS:
+        elif operation == X_LINEAR_OPN_FIT_ONE_CLASS:
             result = xl_fit_one_class(model, args, context)
-        elif op == X_LINEAR_OP_ONE_CLASS_DECISION_FUNCTION:
-            result = xl_one_class(model, op, args[0], context)
-        elif op == X_LINEAR_OP_ONE_CLASS_SCORE_SAMPLES:
-            result = xl_one_class(model, op, args[0], context)
-        elif op == X_LINEAR_OP_ONE_CLASS_PREDICT:
-            result = xl_one_class(model, op, args[0], context)
-        elif op == X_LINEAR_OP_FIT_GLM:
+        elif operation == X_LINEAR_OPN_ONE_CLASS_DECISION_FUNCTION:
+            result = xl_one_class(model, operation, args[0], context)
+        elif operation == X_LINEAR_OPN_ONE_CLASS_SCORE_SAMPLES:
+            result = xl_one_class(model, operation, args[0], context)
+        elif operation == X_LINEAR_OPN_ONE_CLASS_PREDICT:
+            result = xl_one_class(model, operation, args[0], context)
+        elif operation == X_LINEAR_OPN_FIT_GLM:
             result = xl_fit_glm(model, args, context)
-        elif op == X_LINEAR_OP_FIT_HUBER:
+        elif operation == X_LINEAR_OPN_FIT_HUBER:
             result = xl_fit_huber(model, args, context)
-        elif op == X_LINEAR_OP_FIT_BAYES:
+        elif operation == X_LINEAR_OPN_FIT_BAYES:
             result = xl_fit_bayes(model, args, context)
-        elif op == X_LINEAR_OP_FIT_ARD:
+        elif operation == X_LINEAR_OPN_FIT_ARD:
             result = xl_fit_ard(model, args, context)
-        elif op == X_LINEAR_OP_FIT_LARS:
+        elif operation == X_LINEAR_OPN_FIT_LARS:
             result = xl_fit_lars(model, args, False, context)
-        elif op == X_LINEAR_OP_FIT_LASSO_LARS:
+        elif operation == X_LINEAR_OPN_FIT_LASSO_LARS:
             result = xl_fit_lars(model, args, True, context)
-        elif op == X_LINEAR_OP_FIT_QUANTILE:
+        elif operation == X_LINEAR_OPN_FIT_QUANTILE:
             result = xl_fit_quantile(model, args, context)
-        elif op == X_LINEAR_OP_ISOTONIC_FIT:
-            result = xl_isotonic(model, _XL_ISO_FIT, args, context)
-        elif op == X_LINEAR_OP_ISOTONIC_FIT_TRANSFORM:
-            result = xl_isotonic(model, _XL_ISO_FIT_TRANSFORM, args, context)
-        elif op == X_LINEAR_OP_ISOTONIC_TRANSFORM or op == X_LINEAR_OP_ISOTONIC_PREDICT:
-            result = xl_isotonic(model, _XL_ISO_TRANSFORM, args, context)
-        elif op == X_LINEAR_OP_ISOTONIC_SCORE:
+        elif operation == X_LINEAR_OPN_ISOTONIC_FIT:
+            result = xl_isotonic(model, operation, args, context)
+        elif operation == X_LINEAR_OPN_ISOTONIC_FIT_TRANSFORM:
+            result = xl_isotonic(model, operation, args, context)
+        elif operation == X_LINEAR_OPN_ISOTONIC_TRANSFORM or operation == X_LINEAR_OPN_ISOTONIC_PREDICT:
+            result = xl_isotonic(model, X_LINEAR_OPN_ISOTONIC_TRANSFORM, args, context)
+        elif operation == X_LINEAR_OPN_ISOTONIC_SCORE:
             # RegressorScoreMixin.score: metrics.r2_score(y, predict(X),
             # sample_weight, numeric_mode=self.numeric_mode) on the float32
             # prediction, which is handed straight to the R^2 kernel.
-            var prediction = xl_isotonic(model, _XL_ISO_TRANSFORM, Python.tuple(args[0]), context)
+            var prediction = xl_isotonic(model, X_LINEAR_OPN_ISOTONIC_TRANSFORM, Python.tuple(args[0]), context)
             result = PythonObject(labels_r2(args[1], prediction, args[2],
                                             py_get(py_fields(model), nk[].k_numeric_mode), context))
-        elif op == X_LINEAR_OP_FIT_RIDGE_CV:
+        elif operation == X_LINEAR_OPN_FIT_RIDGE_CV:
             result = xl_fit_ridge_cv(model, args, context)
-        elif op == X_LINEAR_OP_FIT_LASSO_CV:
+        elif operation == X_LINEAR_OPN_FIT_LASSO_CV:
             result = xl_fit_lasso_cv(model, args, context)
-        elif op == X_LINEAR_OP_FIT_ELASTIC_NET_CV:
+        elif operation == X_LINEAR_OPN_FIT_ELASTIC_NET_CV:
             result = xl_fit_elastic_net_cv(model, args, context)
-        elif op == X_LINEAR_OP_FIT_LOGISTIC_CV:
+        elif operation == X_LINEAR_OPN_FIT_LOGISTIC_CV:
             result = xl_fit_logistic_cv(model, args, context)
-        elif op == X_LINEAR_OP_CD_FIT:
+        elif operation == X_LINEAR_OPN_CD_FIT:
             result = xl_cd_fit(model, args, context)
-        elif op == X_LINEAR_OP_CD_PREDICT:
+        elif operation == X_LINEAR_OPN_CD_PREDICT:
             result = xl_cd_predict(model, args[0], context)
-        elif op == X_LINEAR_OP_CD_SCORE:
+        elif operation == X_LINEAR_OPN_CD_SCORE:
             result = xl_cd_score(model, args, context)
         else:
             raise Error("unknown native x_linear operation " + String(py=name))
@@ -2866,16 +2862,16 @@ def _xl_widen(result: PythonObject, context: PythonObject) raises -> PythonObjec
     return wide
 
 
-def _xl_public_operation(model: PythonObject, op: Int, name: PythonObject, args: PythonObject,
+def _xl_public_operation(model: PythonObject, operation: Int, name: PythonObject, args: PythonObject,
                          context: PythonObject) raises -> PythonObject:
     """The linear expansion estimators' whole public operation: fitted and
     feature-name checks, fit bookkeeping (depth, fitted flag, feature names,
     public class labels), the algorithm, and NumPy results for callers
     outside the package (the former Python `_mode` wrappers)."""
     var nk = x_linear_keys()
-    var method = _xl_method(op)
+    var method = _xl_method(operation)
     if method == _XL_M_NONE:
-        return _xl_dispatch(model, op, name, args, context)
+        return _xl_dispatch(model, operation, name, args, context)
     var fields = py_fields(model)
     _xl_lifecycle_admit(model, fields)
     var fitting = method == _XL_M_FIT or method == _XL_M_FIT_TRANSFORM
@@ -2887,7 +2883,7 @@ def _xl_public_operation(model: PythonObject, op: Int, name: PythonObject, args:
     var initial_depth = estimator_fit_begin(fields) if fitting else 0
     var result = PythonObject(None)
     try:
-        result = _xl_dispatch(model, op, name, args, context)
+        result = _xl_dispatch(model, operation, name, args, context)
     except error:
         if fitting:
             estimator_fit_end(model, initial_depth)
@@ -2899,9 +2895,9 @@ def _xl_public_operation(model: PythonObject, op: Int, name: PythonObject, args:
     if fitting:
         estimator_fit_end(model, initial_depth)
     if fitting:
-        var classifier = (op == X_LINEAR_OP_FIT_SGD_CLASSIFIER or op == X_LINEAR_OP_FIT_PERCEPTRON
-                          or op == X_LINEAR_OP_FIT_PA_CLASSIFIER or op == X_LINEAR_OP_FIT_RIDGE_CLASSIFIER
-                          or op == X_LINEAR_OP_FIT_LOGISTIC_CV)
+        var classifier = (operation == X_LINEAR_OPN_FIT_SGD_CLASSIFIER or operation == X_LINEAR_OPN_FIT_PERCEPTRON
+                          or operation == X_LINEAR_OPN_FIT_PA_CLASSIFIER or operation == X_LINEAR_OPN_FIT_RIDGE_CLASSIFIER
+                          or operation == X_LINEAR_OPN_FIT_LOGISTIC_CV)
         estimator_fit_complete(model, args[0], classifier, context)
         if method == _XL_M_FIT:
             return result
@@ -2918,7 +2914,7 @@ def _xl_public_operation(model: PythonObject, op: Int, name: PythonObject, args:
     # +114 ms on a 334 ms row against 0.8.55, whose callers read the float32
     # output). The widening is exact, so the float32 words are the same words.
     # The public predict (operation "regressor_predict") is unchanged: float64.
-    if (method == _XL_M_SCORE or op == X_LINEAR_OP_REGRESSOR_PREDICT_SCORE or not estimator_outside()
+    if (method == _XL_M_SCORE or operation == X_LINEAR_OPN_REGRESSOR_PREDICT_SCORE or not estimator_outside()
             or py_get(context, nk[].k_ndarray) is None):
         return result
     var b = native_loaded_module("builtins")
@@ -2932,8 +2928,8 @@ def _xl_public_operation(model: PythonObject, op: Int, name: PythonObject, args:
         return py_call(b.tuple, members)
     if py_type(result) is not py_item(context, nk[].k_array_class):
         return result
-    if (method == _XL_M_PREDICT and (op == X_LINEAR_OP_REGRESSOR_PREDICT or op == X_LINEAR_OP_ISOTONIC_PREDICT
-                                     or op == X_LINEAR_OP_CD_PREDICT)) or (
-            op == X_LINEAR_OP_ONE_CLASS_DECISION_FUNCTION or op == X_LINEAR_OP_ONE_CLASS_SCORE_SAMPLES):
+    if (method == _XL_M_PREDICT and (operation == X_LINEAR_OPN_REGRESSOR_PREDICT or operation == X_LINEAR_OPN_ISOTONIC_PREDICT
+                                     or operation == X_LINEAR_OPN_CD_PREDICT)) or (
+            operation == X_LINEAR_OPN_ONE_CLASS_DECISION_FUNCTION or operation == X_LINEAR_OPN_ONE_CLASS_SCORE_SAMPLES):
         return _xl_widen(result, context)
     return native_array_ndarray_view(result, context)

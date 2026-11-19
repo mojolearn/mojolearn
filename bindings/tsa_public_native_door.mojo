@@ -33,9 +33,9 @@ from providers.python.arima_lifecycle_pyapi_door import arima_initialize, arima_
 from bindings.tsa_autoarima_native_door import autoarima_fit
 from providers.python.autoarima_lifecycle_pyapi_door import autoarima_initialize, autoarima_forecast, autoarima_predict_native
 from providers.python.autoarima_search_pyapi_door import autoarima_search
-from bindings.tsa_keys_unpack import (tsa_keys, TSA_OP_ARIMA_FIT, TSA_OP_ARIMA_FORECAST, TSA_OP_ARIMA_INITIALIZE, TSA_OP_ARIMA_PARAMETER, TSA_OP_ARIMA_PREDICT, TSA_OP_ARIMA_REPR, TSA_OP_AUTOARIMA_FIT, TSA_OP_AUTOARIMA_FORECAST,
-    TSA_OP_AUTOARIMA_INITIALIZE, TSA_OP_AUTOARIMA_PREDICT, TSA_OP_AUTOARIMA_SEARCH, TSA_OP_HW_ATTRIBUTE, TSA_OP_HW_COMPONENT, TSA_OP_HW_FIT, TSA_OP_HW_FORECAST,
-    TSA_OP_HW_INITIALIZE, TSA_OP_HW_PREDICT, TSA_OP_HW_SAVE, TSA_OP_HW_SCORE, TSA_OP_KPSS_TEST, TSA_OP_SELECT_D)
+from bindings.tsa_keys_unpack import (tsa_keys, TSA_OPN_ARIMA_FIT, TSA_OPN_ARIMA_FORECAST, TSA_OPN_ARIMA_INITIALIZE, TSA_OPN_ARIMA_PARAMETER, TSA_OPN_ARIMA_PREDICT, TSA_OPN_ARIMA_REPR, TSA_OPN_AUTOARIMA_FIT, TSA_OPN_AUTOARIMA_FORECAST,
+    TSA_OPN_AUTOARIMA_INITIALIZE, TSA_OPN_AUTOARIMA_PREDICT, TSA_OPN_AUTOARIMA_SEARCH, TSA_OPN_HW_ATTRIBUTE, TSA_OPN_HW_COMPONENT, TSA_OPN_HW_FIT, TSA_OPN_HW_FORECAST,
+    TSA_OPN_HW_INITIALIZE, TSA_OPN_HW_PREDICT, TSA_OPN_HW_SAVE, TSA_OPN_HW_SCORE, TSA_OPN_KPSS_TEST, TSA_OPN_SELECT_D)
 from bindings.py_keys import py_op_code
 from bindings.py_balanced import py_item
 
@@ -155,9 +155,9 @@ def tsa_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
         var nk = tsa_keys()
         # One lookup with the caller's own str (bindings/py_keys.mojo); the
         # former chain copied the name and compared it against up to 22 names.
-        var op = py_op_code(nk[].ops, call[1])
+        var operation = py_op_code(nk[].ops, call[1])
         var context = call[3]
-        if op == TSA_OP_HW_ATTRIBUTE:
+        if operation == TSA_OPN_HW_ATTRIBUTE:
             # p3-cnn-sequence-tsa: `__getattr__` sends every missing name here
             # (hasattr / copy / pickle probes); a name that is not one of the
             # three lazy components is refused before any other work.
@@ -167,58 +167,58 @@ def tsa_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
                 if text != "level_" and text != "trend_" and text != "season_":
                     raise Error("AttributeError: ExponentialSmoothing has no such attribute")
         classical_connect_numpy(context)
-        if op == TSA_OP_KPSS_TEST:
+        if operation == TSA_OPN_KPSS_TEST:
             return tsa_kpss(call[2], context).steal_data()
-        if op == TSA_OP_SELECT_D:
+        if operation == TSA_OPN_SELECT_D:
             return tsa_select_d(call[2], context).steal_data()
         # ExponentialSmoothing (bindings/tsa_hw_native.mojo)
-        if op == TSA_OP_HW_INITIALIZE:
+        if operation == TSA_OPN_HW_INITIALIZE:
             return hw_initialize(call[0], call[2], context).steal_data()
-        if op == TSA_OP_HW_FORECAST:
+        if operation == TSA_OPN_HW_FORECAST:
             return hw_forecast(call[0], call[2], context).steal_data()
-        if op == TSA_OP_HW_ATTRIBUTE:
+        if operation == TSA_OPN_HW_ATTRIBUTE:
             return hw_component(call[0], call[2], context, True).steal_data()
-        if op == TSA_OP_HW_COMPONENT:
+        if operation == TSA_OPN_HW_COMPONENT:
             return hw_component(call[0], call[2], context).steal_data()
-        if op == TSA_OP_HW_SAVE:
+        if operation == TSA_OPN_HW_SAVE:
             return hw_save(call[0], call[2], context).steal_data()
-        if op == TSA_OP_HW_FIT:
+        if operation == TSA_OPN_HW_FIT:
             return hw_fit(call[0], context).steal_data()
-        if op == TSA_OP_HW_PREDICT:
+        if operation == TSA_OPN_HW_PREDICT:
             return hw_predict(call[0], call[2], context).steal_data()
-        if op == TSA_OP_HW_SCORE:
+        if operation == TSA_OPN_HW_SCORE:
             return hw_score(call[0], call[2], context).steal_data()
         # ARIMA (bindings/tsa_arima_native.mojo)
-        if op == TSA_OP_ARIMA_INITIALIZE:
+        if operation == TSA_OPN_ARIMA_INITIALIZE:
             return arima_initialize(call[0], call[2], context).steal_data()
-        if op == TSA_OP_ARIMA_PARAMETER:
+        if operation == TSA_OPN_ARIMA_PARAMETER:
             return arima_parameter(call[0], call[2], context).steal_data()
-        if op == TSA_OP_ARIMA_REPR:
+        if operation == TSA_OPN_ARIMA_REPR:
             return arima_repr(call[0], context).steal_data()
-        if op == TSA_OP_ARIMA_FIT:
+        if operation == TSA_OPN_ARIMA_FIT:
             var fitted = arima_fit(call[0], call[2], context)
             # fit bookkeeping of the former `_mode` fit wrapper
             py_setitem(py_fields(call[0]), nk[].k__mojolearn_fitted, PythonObject(True))
             return fitted.steal_data()
-        if op == TSA_OP_ARIMA_FORECAST:
+        if operation == TSA_OPN_ARIMA_FORECAST:
             return arima_forecast(call[0], call[2], context).steal_data()
-        if op == TSA_OP_ARIMA_PREDICT:
+        if operation == TSA_OPN_ARIMA_PREDICT:
             # NotFittedError, as the former `_mode` predict guard raised it
             classical_require_fitted(call[0], False, "predict", context)
             return arima_predict(call[0], call[2], context).steal_data()
         # AutoARIMA (bindings/tsa_autoarima_native.mojo)
-        if op == TSA_OP_AUTOARIMA_SEARCH:
+        if operation == TSA_OPN_AUTOARIMA_SEARCH:
             return autoarima_search(call[0], call[2], context).steal_data()
-        if op == TSA_OP_AUTOARIMA_INITIALIZE:
+        if operation == TSA_OPN_AUTOARIMA_INITIALIZE:
             return autoarima_initialize(call[0], call[2], context).steal_data()
-        if op == TSA_OP_AUTOARIMA_FORECAST:
+        if operation == TSA_OPN_AUTOARIMA_FORECAST:
             return autoarima_forecast(call[0], call[2], context).steal_data()
-        if op == TSA_OP_AUTOARIMA_FIT:
+        if operation == TSA_OPN_AUTOARIMA_FIT:
             var fitted = autoarima_fit(call[0], call[2], context)
             # fit bookkeeping of the former `_mode` fit wrapper
             py_setitem(py_fields(call[0]), nk[].k__mojolearn_fitted, PythonObject(True))
             return fitted.steal_data()
-        if op == TSA_OP_AUTOARIMA_PREDICT:
+        if operation == TSA_OPN_AUTOARIMA_PREDICT:
             # NotFittedError, as the former `_mode` predict guard raised it
             classical_require_fitted(call[0], False, "predict", context)
             return autoarima_predict_native(call[0], call[2], context).steal_data()

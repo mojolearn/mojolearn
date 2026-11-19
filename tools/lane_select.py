@@ -96,6 +96,7 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "tools"))
 import bincache  # noqa: E402  the build's own Mojo import resolver
+from boundary_keys_plain import plain as _keys_plain  # noqa: E402  held-key doors read in their by-name form
 from mojo_registrations import registered_functions as _registered_functions_uncached, sole_registration
 from import_metadata_effects import metadata_only_call
 PKG = os.path.join("python", "mojolearn")
@@ -509,7 +510,11 @@ def _read(path):
         if text is not None:
             return text
     with open(full, encoding="utf-8", errors="replace") as fh:
-        return fh.read()
+        # A door that reads through held name keys and integer operation
+        # codes (bindings/py_keys.mojo) is read in its by-name form, so the
+        # dispatcher branches and the entry names below see the same text
+        # as before the door was converted (tools/boundary_keys_plain.py).
+        return _keys_plain(path, fh.read())
 
 
 @_by_path
@@ -6012,8 +6017,9 @@ def _git_show(ref, path):
             # errors="replace": a binary path in the diff (a .so, a wheel, a lease file) raised
             # UnicodeDecodeError here, and identity_columns.py changed-lanes turned that into "cannot diff:
             # every lane re-recorded" (the 0.8.44 floor diff, 2026-10-13). Binary text never parses as code.
-            _GIT_SHOW[key] = subprocess.run(["git", "-C", ROOT, "show", key], capture_output=True, text=True,
-                                            encoding="utf-8", errors="replace", check=True).stdout
+            _GIT_SHOW[key] = _keys_plain(path, subprocess.run(
+                ["git", "-C", ROOT, "show", key], capture_output=True, text=True,
+                encoding="utf-8", errors="replace", check=True).stdout)
         except subprocess.CalledProcessError:
             _GIT_SHOW[key] = None
     return _GIT_SHOW[key]
@@ -6059,7 +6065,7 @@ def git_show_prefetch(ref, paths):
         body, pos = data[pos:pos + size], pos + size + 1
         if header[1] == "blob":
             text = body.decode("utf-8", errors="replace")
-            _GIT_SHOW[key] = text.replace("\r\n", "\n").replace("\r", "\n")
+            _GIT_SHOW[key] = _keys_plain(key.split(":", 1)[1], text.replace("\r\n", "\n").replace("\r", "\n"))
             filled += 1
     return filled
 
