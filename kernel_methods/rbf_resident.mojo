@@ -326,8 +326,8 @@ def rbf_sampler_fit_transform_resident(
                         ctx.enqueue_copy(dst_ptr=MutPointer[Float32, MutAnyOrigin](unsafe_from_address=b_addr), src_buf=db)
                         _ = tsub^
                 unsafe_memcpy(dest=zp + k * chunk, src=stages[k % 2].unsafe_ptr(), count=min(chunk, nz - k * chunk))
-            _stage_give[_RBF_STAGE_POOL](stages.pop())
-            _stage_give[_RBF_STAGE_POOL](stages.pop())
+            _stage_give[_RBF_STAGE_POOL](ctx, stages.pop())
+            _stage_give[_RBF_STAGE_POOL](ctx, stages.pop())
     if not piped:
         _rbf_unpiped(ctx, dx, dw, db, dz, xaddr, w_addr, b_addr, z_addr, m, d, q, nx, nz, blocks, scale)
     var best = st[].host.value().unsafe_ptr()[0]

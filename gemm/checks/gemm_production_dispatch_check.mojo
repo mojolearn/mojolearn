@@ -24,6 +24,8 @@ from gemm.checks.gemm_identical import (
     gemm_mfma16_waves,
     gemm_nv_step_kpack_rows,
     gemm_tile_min_blocks,
+    gemm_nv_block_floor,
+    GEMM_TILE_MIN_BLOCKS_DEFAULT,
     amd_short_contract_large_output,
     choose_gemm_plan,
     contract_partition,
@@ -93,6 +95,16 @@ def _check_small_bodies(m: Int, n: Int, k: Int) raises:
 
 
 def main() raises:
+    # The NVIDIA floor from the SM count (pure rule, any column): the measured
+    # part keeps its measured floor, neighbours within a third share it, and
+    # an unknown count is the column default.
+    assert_true(gemm_nv_block_floor(142) == 192)
+    assert_true(gemm_nv_block_floor(108) == 192)
+    assert_true(gemm_nv_block_floor(132) == 192)
+    assert_true(gemm_nv_block_floor(95) == 192)
+    assert_true(gemm_nv_block_floor(94) == 128)
+    assert_true(gemm_nv_block_floor(143) == 256)
+    assert_true(gemm_nv_block_floor(0) == GEMM_TILE_MIN_BLOCKS_DEFAULT)
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and TARGET_COLUMN == COLUMN_APPLE:
         # The measured board rows (d_model 768) still take the 64x64 plan.
         assert_true(choose_gemm_plan(1024, 768, 768) == PLAN_TUNED_64_4X4)

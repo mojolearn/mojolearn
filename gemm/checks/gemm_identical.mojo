@@ -131,6 +131,11 @@ from core.step_phase import (
 )
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
+# lane fx-leftovers-product (2026-11-19): the activation followers' value
+# bodies, for the store epilogue kinds GEMM_EPI_BIAS_ACT and GEMM_EPI_ACT_BWD.
+# sequence/act_values.mojo imports sequence/ops.mojo and checks/numerics.mojo
+# only (no gemm import: no cycle).
+from sequence.act_values import act_value, act_bwd_value
 from std.sys import llvm_intrinsic
 from std.sys.compile import is_defined
 # TOMBSTONE: MOJOLEARN_SCOPED_GEMM_AUDIT (never measured, deleted) deleted 2026-11-09 by 0a1dfdf971; code recoverable at
@@ -4364,7 +4369,8 @@ def gemm_split_cells_cap() -> Int:
 #: 0.24 ms a layer, o_proj 0.40 -> 0.09, the MLP 1.22 -> 0.70 at 1024;
 #: every digest and loss equal. So the AMD column's default is 1024 (the
 #: 4096^3 gemm cell, 1,024 tiles of 128 x 128, is at the boundary and
-#: keeps its tile). NVIDIA uses 192 (lane/neural-pass62, below); Apple keeps
+#: keeps its tile). NVIDIA uses 192 on the L40S (lane/neural-pass62, below),
+#: scaled by the device's SM count (`gemm_nv_block_floor`); Apple keeps
 #: 0 (off).
 comptime GEMM_TILE_MIN_BLOCKS_DEFAULT = (
     1024 if TARGET_COLUMN == COLUMN_AMD else
@@ -4488,9 +4494,58 @@ def gemm_tile_short_k() -> Int:
         return GEMM_TILE_SHORT_K_DEFAULT
 
 
+#: THE NVIDIA BLOCK FLOOR FROM THE DEVICE (fx-leftovers-product, 2026-11-19;
+#: review-generality "product unknown"). The floor trades tile width for SM
+#: fill, so the right value scales with the SM count (the grid note above
+#: `IDN_GEMM_TILE_MIN_BLOCKS`). It was the constant 192 on every NVIDIA part,
+#: measured on one, the L40S (lane/neural-pass62): 192 blocks on its 142 SMs
+#: is 192 / 142 = 1.35 blocks an SM. (A comment in gemm/neural_dispatch.mojo
+#: called that "two blocks an SM"; 2 x 142 is 284, the arithmetic was wrong.)
+#: The floor is now that measured ratio times the device's reported SM count,
+#: rounded up to a whole 64 blocks:
+#:     floor(sms) = roundup64(ceil(sms * 192 / 142))
+#: The 64-block step is chosen so the measured part keeps its measured value
+#: exactly (142 SMs -> 192) and so does every part within a third of it:
+#: 95 to 142 SMs give 192 (A100 108, RTX 4090 128, H100 132), 143 to 189
+#: give 256, 48 to 94 give 128. No route changes on the L40S or on sm_80's
+#: A100. Parts outside 95-142 SMs get a floor nobody has timed (as 192 was
+#: untimed there): re-time owed on a part of another SM count.
+#: ONE READ, HELD: the count is read once per process, inside the one-time
+#: fill of the floor's slot below (a default-device `DeviceContext` attribute
+#: read), never per call; where it cannot be read the floor stays 192. The
+#: env override and the build define still win. An execution plan only: every
+#: tuned plan computes the same leaves and folds, so no bit depends on it.
+comptime GEMM_NV_FLOOR_REF_SMS = 142
+comptime GEMM_NV_FLOOR_REF_BLOCKS = 192
+
+
+def gemm_nv_block_floor(sms: Int) -> Int:
+    """The NVIDIA column's block floor for a device of `sms` multiprocessors
+    (the rule above); the column default when the count is unknown."""
+    if sms <= 0:
+        return GEMM_TILE_MIN_BLOCKS_DEFAULT
+    var scaled = (sms * GEMM_NV_FLOOR_REF_BLOCKS + GEMM_NV_FLOOR_REF_SMS - 1) // GEMM_NV_FLOOR_REF_SMS
+    return ((scaled + 63) // 64) * 64
+
+
+def _gemm_device_sms() -> Int:
+    """The default device's reported multiprocessor count, -1 when it cannot
+    be read. Called once per process (the floor's one-time fill)."""
+    try:
+        var ctx = DeviceContext()
+        var sms = -1
+        sms = ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT)
+        _ = ctx
+        return sms
+    except:
+        return -1
+
+
 def gemm_tile_min_blocks() -> Int:
     """The tuned tiles' minimum block count: MOJOLEARN_GEMM_TILE_MIN_BLOCKS
-    when set (read once per process), else GEMM_TILE_MIN_BLOCKS_DEFAULT.
+    when set (read once per process), else the column's floor: on NVIDIA
+    `gemm_nv_block_floor` of the device's SM count (read once, in the same
+    one-time fill), elsewhere GEMM_TILE_MIN_BLOCKS_DEFAULT.
     `-D MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS` wins over both when defined."""
     comptime if IDN_GEMM_TILE_MIN_BLOCKS >= 0:
         comptime assert (
@@ -4505,6 +4560,9 @@ def gemm_tile_min_blocks() -> Int:
             var blocks = GEMM_TILE_MIN_BLOCKS_DEFAULT
             if v != "":
                 blocks = Int(v)
+            else:
+                comptime if TARGET_COLUMN == COLUMN_NVIDIA:
+                    blocks = gemm_nv_block_floor(_gemm_device_sms())
             if blocks < 0:
                 blocks = 0
             p[].blocks = blocks
@@ -8872,12 +8930,31 @@ comptime GEMM_EPI_CELL_PLUS_C = 2
 # lane/fx-gemm-worklist (2026-11-19, coordinator follow-up): kinds that read a SECOND buffer. They are served by
 # `identical_gemm_kpack_epi_ptr_kernel` only (below `_kpack_launch`), whose argument block carries the pointer
 # `epi_p` and one Int32 `epi_i`; the single-product kernel and the list kernel keep their arguments and pass the
-# body a dead `dst` / 0. `-D MOJOLEARN_GEMM_FAST_EPI=1` territory: NOT WIRED to any caller yet (no entry, no check).
+# body a dead `dst` / 0. `-D MOJOLEARN_GEMM_FAST_EPI=1` territory. Launcher: gemm/neural_dispatch.mojo
+# `identical_gemm_leaf_ptr_epi_into`; entry and rule: sequence/gemm_packed_route.mojo `seq_gemm_packed_epi_kind` /
+# `seq_gemm_packed_epi_launch`; call site: sequence/exec_device.mojo; check: autograd/checks/gemm_cases.mojo.
 #   GEMM_EPI_PLUS_BIAS    ftz(ftz(cell) + ftz(epi_p[j]))   `add_bias_kernel`
 #                         (transformer/impl/llama/modeling_llama.mojo): `ftz(ftz(y) + ftz(bias[col]))`, y the
 #                         stored product word, col = the cell's column; same operand order, same flushes.
 comptime GEMM_EPI_PTR_FIRST = 3
 comptime GEMM_EPI_PLUS_BIAS = 3
+# lane fx-leftovers-product (2026-11-19): the sequence followers of a product (sequence/mlp.mojo `gemm_epi_tail`),
+# each kind the follower's own function called on the cell (sequence/act_values.mojo), so there is ONE spelling:
+#   GEMM_EPI_BIAS_ACT     ftz(act_value(ftz(ftz(cell) + ftz(epi_p[j])), epi_i))
+#                         `op_bias` then `op_act`: `st(C, add(ld(C), ld(b[j])))` stores ftz(ftz(c) + ftz(b[j])) (the
+#                         outer `st` flush is idempotent on `add`'s result); `op_act` reloads that word (`ld` flushes
+#                         a flushed word), applies `act_value`'s branch for the activation code `epi_i` and stores it
+#                         through `st`'s flush. Same operands, same order, same flushes. An activation code with no
+#                         branch (identity, softmax) leaves the word, as `op_act` does.
+#   GEMM_EPI_ACT_BWD      ftz(act_bwd_value(ftz(cell), ftz(epi_p[i n + j]), epi_i))
+#                         `op_act_bwd`: d = ld(C[t]), z = ld(p1[t]) (the forward activation, dense, row stride n),
+#                         `act_bwd_value`'s branch, `st`. `mul` and `sub` are sequence/ops.mojo's (the follower's).
+# SAME BITS as the follower launch by the argument above `gemm_epi_cell`: the follower read the stored `ftz(root)`
+# word back and flushed it; here the same word is flushed in a register. PLUS_BIAS is `op_bias` alone as well
+# (`add(ld(C), ld(b[j]))` is `ftz(ftz(c) + ftz(b[j]))`, the expression above), so a sequence bias with no activation
+# takes kind 3.
+comptime GEMM_EPI_BIAS_ACT = 4
+comptime GEMM_EPI_ACT_BWD = 5
 
 
 @always_inline
@@ -9528,6 +9605,12 @@ def _kpack_kernel_body[
                         comptime if EPI == GEMM_EPI_PLUS_BIAS:
                             # `add_bias_kernel`'s expression on the stored word (lane/fx-gemm-worklist).
                             cell = ftz(ftz(cell) + ftz(epi_p.unsafe_load(gj)))
+                        elif EPI == GEMM_EPI_BIAS_ACT:
+                            # `op_bias` then `op_act` on the stored word (lane fx-leftovers-product).
+                            cell = ftz(act_value(ftz(ftz(cell) + ftz(epi_p.unsafe_load(gj))), Int(epi_i)))
+                        elif EPI == GEMM_EPI_ACT_BWD:
+                            # `op_act_bwd` on the stored word and the forward activation of the same cell.
+                            cell = ftz(act_bwd_value(ftz(cell), ftz(epi_p.unsafe_load(gi * n + gj)), Int(epi_i)))
                         else:
                             cell = gemm_epi_cell[EPI](cell, dst.unsafe_load(gi * n + gj))
                     dst.unsafe_store(gi * n + gj, cell)
@@ -9698,10 +9781,12 @@ def identical_gemm_kpack_epi_ptr_kernel[
     the all-leaves packed product whose store epilogue reads a SECOND
     buffer. The single-product kernel's argument block without the two group
     arguments, plus `epi_p` (the epilogue's operand: the bias row for
-    `GEMM_EPI_PLUS_BIAS`) and `epi_i` (one integer for a kind that needs it,
-    e.g. an activation code; unused by the kinds written so far). A kernel
-    of its own so that no existing launch gains an argument. Arm only
-    (`-D MOJOLEARN_GEMM_FAST_EPI=1`); nothing launches it yet."""
+    `GEMM_EPI_PLUS_BIAS` and `GEMM_EPI_BIAS_ACT`, the forward activations
+    for `GEMM_EPI_ACT_BWD`) and `epi_i` (the activation code of the two
+    activation kinds; unused by the bias alone). A kernel of its own so that
+    no existing launch gains an argument. Arm only
+    (`-D MOJOLEARN_GEMM_FAST_EPI=1`); launched by
+    `gemm/neural_dispatch.mojo` `identical_gemm_leaf_ptr_epi_into`."""
     comptime assert EPI >= GEMM_EPI_PTR_FIRST, (
         "identical_gemm_kpack_epi_ptr_kernel: for the epilogue kinds that read a second buffer"
     )

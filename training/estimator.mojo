@@ -100,7 +100,7 @@ from std.sys.defines import get_defined_int
 from checks.kernel_matrix import COLUMN_AMD, COLUMN_APPLE, COLUMN_NVIDIA, TARGET_COLUMN
 from std.time import perf_counter_ns
 
-from core.staged_download import download_f32_into
+from core.staged_download import download_f32_into, staged_copy_f32
 from core.device_pool import pool_give, pool_take
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 # lane afn-optim (2026-10-03): the Apple FAST candidates (False aliases on
@@ -480,13 +480,16 @@ def opt_download_staged() -> Bool:
 
 def _parallel_copy_out(dst: MutPointer[Float32, MutUntrackedOrigin], src: MutPointer[Float32, MutUntrackedOrigin], n: Int):
     """`memcpy(dst, src, n)`: the transport copy between a pinned stage and the
-    caller's host buffer. One copy on the calling thread: no host task pool
-    on a GPU install (cpu-gpu-cleanup n-train-mamba, 2026-10-02; the copy
-    over host tasks of lane neural-pass26 is gone). The pipelined transport
-    below overlaps this copy with the DMA of the other stage half. A
+    caller's host buffer, over contiguous spans across the host's cores
+    (core/staged_download.mojo `staged_copy_f32`). fx-leftovers-product
+    (2026-11-19): it was one copy on the calling thread since 2026-10-02
+    (cpu-gpu-cleanup n-train-mamba, for a source hook that is retired),
+    which is the per-megabyte host pass of the cross-entropy logits going
+    up and of every optimizer and MLP staging chunk. The pipelined transport
+    below still overlaps this copy with the DMA of the other stage half. A
     transport choice: no bit moves."""
-    if n > 0:
-        unsafe_memcpy(dest=dst, src=src, count=n)
+    # parallel: float32 copy over contiguous spans across the host's cores
+    staged_copy_f32(dst, src, n)
 
 
 # ===========================================================================

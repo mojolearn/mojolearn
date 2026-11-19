@@ -68,7 +68,17 @@ OP_GEMM_EPI_TAIL: `gemm_epi_tail` on the stored word, the launch pair
 `HostExec` already runs for both opcodes (sequence/exec.mojo). The follower
 reloads `ld(C) = ftz(ftz(acc)) = acc`, so its operands and operations are the
 tile's in-register epilogue's (sequence/mlp.mojo, "the tape's in-register
-epilogue"). The fused store (no second launch) is lane fx-gemm-epi's.
+epilogue").
+
+THE FUSED STORE (lane fx-leftovers-product, 2026-11-19; this arm together
+with `-D MOJOLEARN_GEMM_FAST_EPI=1`, default OFF, A/B owed). A follower that
+is a bias, a bias and an activation, or the activation derivative runs in the
+packed body's own store (`seq_gemm_packed_epi_kind`,
+`seq_gemm_packed_epi_launch`): ONE launch where the pair above is two, and
+one pass over C where the follower made a second. The kinds are the
+follower's functions called on the cell (gemm_identical.mojo, beside
+`GEMM_EPI_BIAS_ACT`): the same words. EPI_L2GRAD (two float operands) keeps
+its follower launch.
 
 NOT ROUTED (today's route kept): the accumulate form (i7 != 0: the chain's
 seed is C, the packed body's is +0.0), a C that is not dense (i8 != N), the
@@ -116,6 +126,14 @@ from gemm.neural_dispatch import (
     GEMM_LEAF_PTR_KS, GEMM_LEAF_PTR_MIN_BLOCKS,
     identical_gemm_leaf_ptr_into,
 )
+# lane fx-leftovers-product (2026-11-19): the fused store of a follower (`-D MOJOLEARN_GEMM_FAST_EPI=1` with this arm).
+from gemm.neural_dispatch import (
+    GEMM_LEAF_PTR_EPI, GEMM_EPI_PLUS_BIAS, GEMM_EPI_BIAS_ACT, GEMM_EPI_ACT_BWD,
+    identical_gemm_leaf_ptr_epi_into,
+)
+from sequence.act_values import ACT_IDENTITY
+# `op_gemm_epi`'s codes for i9 (sequence/mlp.mojo; sequence/gemm_tiled.mojo imports them the same way).
+from sequence.mlp import EPI_BIAS_ACT, EPI_ACT_BWD
 
 #: The arm. IDENTICAL on the NVIDIA and AMD columns (`GEMM_LEAF_PTR_COLUMN`);
 #: never Apple, whose sequence GEMM is not tiled (SEQ_GEMM_TILED).
@@ -191,3 +209,62 @@ def seq_gemm_packed_launch(ctx: DeviceContext, a: Args, geom: Int) raises:
         identical_gemm_leaf_ptr_into[GEMM_LEAF_PTR_RPT_WIDE, GEMM_LEAF_PTR_FS_WIDE](
             ctx, pc, pa, pb, a.i0, a.i1, a.i2, a.i2, 1, a.i3, a.i4, a.i5, a.i6
         )
+
+
+#: The fused store of a follower: this arm and the GEMM store-epilogue arm together.
+comptime SEQ_GEMM_PACKED_EPI = SEQ_GEMM_PACKED and GEMM_LEAF_PTR_EPI
+
+
+@always_inline
+def seq_gemm_packed_epi_kind(epi: Int, act: Int) -> Int:
+    """The GEMM_EPI_* kind the packed store fuses for `op_gemm_epi`'s
+    (i9, i10), 0 when the follower keeps its own launch (no follower, the
+    L2 gradient, an unknown code, or a build without the fused store).
+    A bias with activation 0 or ACT_IDENTITY is the bias alone, as
+    `gemm_epi_tail` runs no `op_act` for 0 and `op_act` leaves identity."""
+    comptime if not SEQ_GEMM_PACKED_EPI:
+        return 0
+    if epi == EPI_BIAS_ACT:
+        if act == 0 or act == ACT_IDENTITY:
+            return GEMM_EPI_PLUS_BIAS
+        return GEMM_EPI_BIAS_ACT
+    if epi == EPI_ACT_BWD:
+        return GEMM_EPI_ACT_BWD
+    return 0
+
+
+def _seq_gemm_packed_epi_go[EPI: Int](ctx: DeviceContext, a: Args, geom: Int) raises:
+    """One fused launch of kind `EPI` at geometry `geom`: the operands of
+    `seq_gemm_packed_launch`, plus p3 (the bias row or the forward
+    activations) and i10 (the activation code)."""
+    comptime if SEQ_GEMM_PACKED_EPI:
+        var pc = a.p2.unsafe_origin_cast[MutAnyOrigin]()
+        var pa = a.p0.unsafe_origin_cast[MutAnyOrigin]()
+        var pb = a.p1.unsafe_origin_cast[MutAnyOrigin]()
+        var pe = a.p3.unsafe_origin_cast[MutAnyOrigin]()
+        comptime if GEMM_LEAF_PTR_SMALL_ON:
+            if geom == SP_SMALL:
+                identical_gemm_leaf_ptr_epi_into[GEMM_LEAF_PTR_RPT_SMALL, GEMM_LEAF_PTR_FS_SMALL, EPI](
+                    ctx, pc, pa, pb, a.i0, a.i1, a.i2, a.i2, 1, a.i3, a.i4, a.i5, a.i6, pe, a.i10
+                )
+                return
+        identical_gemm_leaf_ptr_epi_into[GEMM_LEAF_PTR_RPT_WIDE, GEMM_LEAF_PTR_FS_WIDE, EPI](
+            ctx, pc, pa, pb, a.i0, a.i1, a.i2, a.i2, 1, a.i3, a.i4, a.i5, a.i6, pe, a.i10
+        )
+
+
+def seq_gemm_packed_epi_launch(ctx: DeviceContext, a: Args, geom: Int, kind: Int) raises:
+    """The product AND its follower of an epilogue launch
+    `seq_gemm_packed_on` selected, in one launch: `kind` is
+    `seq_gemm_packed_epi_kind(a.i9, a.i10)`, not 0. Asynchronous, no
+    workspace, no wait; nothing is looked up or allocated. The caller issues
+    no OP_GEMM_EPI_TAIL after it."""
+    comptime if SEQ_GEMM_PACKED_EPI:
+        if kind == GEMM_EPI_PLUS_BIAS:
+            _seq_gemm_packed_epi_go[GEMM_EPI_PLUS_BIAS](ctx, a, geom)
+        elif kind == GEMM_EPI_BIAS_ACT:
+            _seq_gemm_packed_epi_go[GEMM_EPI_BIAS_ACT](ctx, a, geom)
+        elif kind == GEMM_EPI_ACT_BWD:
+            _seq_gemm_packed_epi_go[GEMM_EPI_ACT_BWD](ctx, a, geom)
+        else:
+            raise Error("seq_gemm_packed_epi_launch: not a fused store kind")

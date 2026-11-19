@@ -103,11 +103,17 @@ def _pcs_check_finite(source: PythonObject, snapshot: ArrayMetadata,
     if data.itemsize == 2 or data.itemsize == 4 or data.itemsize == 8:
         # parallel: the remaining tail (a view in the other byte order, and a
         # float16 view on the nested-sequence policy) on the same one SIMD
-        # pass (lane fx-host-scans; it was a serial per-word decode). The
-        # decode read every word in the host's byte order whatever the view's
-        # order (`native_scalar_real(..., True)`), and refused an exponent
-        # field of all ones; `native=True` keeps exactly that reading.
-        if not host_all_finite_view(data.addr, data.s0, data.s1, data.rows, data.cols, data.itemsize, True):
+        # pass (lane fx-host-scans; it was a serial per-word decode).
+        # fx-leftovers-product (2026-11-19): the view's own byte order is
+        # passed. The old decode read every word in the host's byte order
+        # whatever the view's order, so a view in the other order was tested
+        # on unswapped bytes: an infinity (7F 80 00 00 stored big-endian reads
+        # as the finite 0x0000807F) was admitted and a finite value whose low
+        # bytes look like an all-ones exponent was refused. The scan tests the
+        # exponent field where the view stores it, i.e. the value after the
+        # byte swap the cast applies. Same cost: the mask is a constant.
+        if not host_all_finite_view(data.addr, data.s0, data.s1, data.rows, data.cols, data.itemsize,
+                                    snapshot.native_byte_order):
             raise Error(admitted_finite_wording("PolynomialCountSketch"))
         return
     # A float width with no fixed word to load (a 16-byte long double):
