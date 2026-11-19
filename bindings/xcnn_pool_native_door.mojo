@@ -769,12 +769,14 @@ def xcnn_adaptive_forward(model: PythonObject, x: PythonObject, context: PythonO
     if xt and not m:
         value = xcnn_f32(x, "x", context)
         xt = False
+        mods.released()   # the read-back released the GIL: the next admission checks the modules again
     elif xt:
         x_word = xcnn_dev_word_shape(entries, x, context, xs)
         if x_word == 0:
             return xcnn_wrap(entries, xcnn_adaptive_forward(model, xcnn_host_of(x, context), context), context)
     else:
         value = xcnn_f32(x, "x", context)
+        mods.released()   # host input admission: the next admission checks the modules again, as before
     if x_word == 0:
         xs = xcnn_shape(value)
     if len(xs) != 4:   # the class name is read only for the refusal
