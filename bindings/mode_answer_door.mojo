@@ -25,16 +25,17 @@ struct ModeAnswerWords(Defaultable, Movable):
 comptime MODE_ANSWER_WORDS = SharedSlot[ModeAnswerWords, "MojolearnModeAnswerWordsV1"]
 
 
-def connect_mode_answer_words(fast_is_identical: Bool, identical: PythonObject, every_family: Bool = False) raises:
+def connect_mode_answer_words(fast_is_identical: Bool, identical: PythonObject, trial_families: Int = -1) raises:
     """Store the selector's decision and the retained word, once, at import.
-    `every_family` is the built-install test's switch: it answers `fast` for
-    every family, so that one run lists the families that are whole."""
+    `trial_families` (0 or more) is the built-install test's switch: that
+    family mask replaces MODE_FAMILIES_ANSWERED, so one built install can
+    show which families are whole under any candidate set."""
     var held = MODE_ANSWER_WORDS.get_or_create_ptr()
     if len(held[].words) == 0:
         held[].words.append(identical)
     var families = 0
     if fast_is_identical:
-        families = MODE_FAMILIES_ALL if every_family else MODE_FAMILIES_ANSWERED
+        families = MODE_FAMILIES_ANSWERED if trial_families < 0 else (trial_families & MODE_FAMILIES_ALL)
     connect_mode_answer(families)
 
 

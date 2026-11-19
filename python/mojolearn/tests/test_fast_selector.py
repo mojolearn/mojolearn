@@ -302,11 +302,12 @@ X = (np.arange(192, dtype=np.float32).reshape(48, 4) * np.float32(0.37)) % np.fl
 y_reg = np.ascontiguousarray(X[:, 0] * np.float32(2.0) - X[:, 1], dtype=np.float32)
 y_cls = np.ascontiguousarray((X[:, 0] > X[:, 1]).astype(np.int32))
 FAMILIES = json.loads(sys.argv[1])
-if sys.argv[2] == "every":
-    # The test's switch (never used by the package): answer `fast` for every
-    # door family, so one run lists the families that are whole.
+if sys.argv[2] != "compiled":
+    # The test's switch (never used by the package): a trial mask of door
+    # families (bits of core/mode_answer.mojo) that answer `fast`, so one
+    # built install lists the families that are whole under that set.
     from mojolearn import _native_backend_public as public
-    public._NATIVE("connect_mode_answer", (True,), public._CONTEXT)
+    public._NATIVE("connect_mode_answer", (int(sys.argv[2], 0),), public._CONTEXT)
 READ = ("predict", "predict_proba", "predict_log_proba", "decision_function", "transform", "score_samples",
         "apply", "kneighbors")
 def digest(value):
@@ -428,17 +429,18 @@ class BuiltInstallFamilies(unittest.TestCase):
     word at fit, as an install with no fast set always has. A family that fits
     under `fast` and then refuses or differs in another call fails here.
 
-    `MOJOLEARN_FAST_ANSWER_EVERY_FAMILY=1` (a switch of this test, not of the
-    package) answers `fast` for every door family, so the run lists which
-    families are whole; `MOJOLEARN_FAST_LEDGER=<path>` keeps the report. A
-    family is added to MODE_FAMILIES_ANSWERED (core/mode_answer.mojo) only
-    from an `answered` row of that run."""
+    `MOJOLEARN_FAST_ANSWER_TRIAL_FAMILIES=<mask>` (a switch of this test, not
+    of the package; `0x7fffff` is every door family, bits in
+    core/mode_answer.mojo) answers `fast` for that set of families, so the run
+    lists which are whole under it; `MOJOLEARN_FAST_LEDGER=<path>` keeps the
+    report. A family is added to MODE_FAMILIES_ANSWERED only when a run with
+    exactly the candidate set shows no `mixed` row."""
 
     def test_per_estimator_fast_answers_every_operation_alike(self):
         import json
         if sys.platform == "darwin":
             self.skipTest("Apple: `fast` names the fast set (unchanged); the answer under test is off Apple")
-        every = "every" if os.environ.get("MOJOLEARN_FAST_ANSWER_EVERY_FAMILY") == "1" else "compiled"
+        every = os.environ.get("MOJOLEARN_FAST_ANSWER_TRIAL_FAMILIES", "compiled")
         done = subprocess.run([sys.executable, "-c", _FAMILY_CHILD, json.dumps(FAMILIES), every],
                               env=dict(os.environ, MOJOLEARN_NUMERIC_MODE="identical"),
                               capture_output=True, text=True, timeout=1800)
