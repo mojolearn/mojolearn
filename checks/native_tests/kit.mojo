@@ -214,6 +214,35 @@ def download_host_into[dt: DType](ctx: DeviceContext, src: DeviceBuffer[dt], mut
     ctx.synchronize()
 
 
+# --- buffer-to-buffer forms (lane fx-checks-orphans, 2026-11-18) -------------
+# The copies a check wrote with two buffers and no pointer. Each makes the
+# same `enqueue_copy(dst_buf=, src_buf=)` call the check made, then drains.
+
+
+def copy_device_into[dt: DType](ctx: DeviceContext, mut dst: DeviceBuffer[dt], src: DeviceBuffer[dt]) raises:
+    """The device buffer `src` into the device buffer `dst` (a device to
+    device copy, as `enqueue_copy(dst_buf=dst, src_buf=src)` sizes it),
+    drained before it returns: `src` may be freed or overwritten at once."""
+    ctx.enqueue_copy(dst_buf=dst, src_buf=src)
+    ctx.synchronize()
+
+
+def download_buffer_into[dt: DType](ctx: DeviceContext, src: DeviceBuffer[dt], mut host: HostBuffer[dt]) raises:
+    """The device buffer `src` into the pinned buffer `host` of the caller,
+    written as a buffer to buffer copy (`enqueue_copy(dst_buf=host,
+    src_buf=src)`), drained before it returns: `host` is readable at once."""
+    ctx.enqueue_copy(dst_buf=host, src_buf=src)
+    ctx.synchronize()
+
+
+def upload_buffer_into[dt: DType](ctx: DeviceContext, mut dst: DeviceBuffer[dt], host: HostBuffer[dt]) raises:
+    """The pinned buffer `host` of the caller into the device buffer `dst`,
+    written as a buffer to buffer copy (`enqueue_copy(dst_buf=dst,
+    src_buf=host)`), drained before it returns: `host` may be freed at once."""
+    ctx.enqueue_copy(dst_buf=dst, src_buf=host)
+    ctx.synchronize()
+
+
 # --- the queue left undrained: the caller holds what is returned ------------
 
 
