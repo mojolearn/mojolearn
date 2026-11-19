@@ -1103,6 +1103,9 @@ def _check_configuration() -> Bool:
     # TOMBSTONE: MOJOLEARN_XCNN_FAST_TYPED_DOOR (NOISE, A/B round 1 NVIDIA L40S, wheel 0c68d6cd27, job nvc-ab-20261119T125554Z-6f7afc, one run per arm, digests equal) deleted 2026-11-19 by lane/fx-verdicts3; code recoverable at f96f23b7fb.
     # Restore: git apply experiments/removed/MOJOLEARN_XCNN_FAST_TYPED_DOOR.patch; record in docs/TOMBSTONES.md.
     comptime assert not is_defined["MOJOLEARN_XCNN_FAST_TYPED_DOOR"](), "removed 2026-11-19 (lane/fx-verdicts3, A/B round 1 NVIDIA L40S, wheel 0c68d6cd27, job nvc-ab-20261119T125554Z-6f7afc, one run per arm, digests equal): the typed pool door was arm/base 0.92-1.08 over 12 pool cells, ten within 1 % (noise; no speed case for the typed boundary tables on these rows); the door is the entry; recoverable at f96f23b7fb"
+    # TOMBSTONE: MOJOLEARN_GEMM_FAST_DX_CONCAT (NOISE, A/B round 1 NVIDIA L40S, wheel 0c68d6cd27, job nvc-ab-20261119T125554Z-6f7afc, one run per arm, quality equal) deleted 2026-11-19 by lane/fx-verdicts3; code recoverable at 913fc44cfa.
+    # Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_DX_CONCAT.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_GEMM_FAST_DX_CONCAT"](), "removed 2026-11-19 (lane/fx-verdicts3, A/B round 1 NVIDIA L40S, wheel 0c68d6cd27, job nvc-ab-20261119T125554Z-6f7afc, one run per arm, quality equal): the q/k/v fan-in dX as one concatenated product was arm/base 1.00 on lm-train-step and 0.99 on samba-train-step (noise) and changed bits; three products and (q + k) + v are the route; recoverable at 913fc44cfa"
     # ---- end lane fx-verdicts3
     return True
 

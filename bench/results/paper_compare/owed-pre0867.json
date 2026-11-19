@@ -703,7 +703,8 @@
   "gemm-dx-concat": {
    "define": "MOJOLEARN_GEMM_FAST_DX_CONCAT",
    "status": "define in code (autograd/kernels/transformer.mojo BWD_GEMM_DX_CONCAT, bwd_dx_concat_pack_kernel, bwd_dx_concat3; autograd/rules_transformer.mojo _dx_fanin_cat; transformer/checks/transformer_backward_oracle.mojo BWD_HOST_DX_CONCAT; IDENTICAL, no poison build): B = the transformer backward's q/k/v fan-in dX (S29-32) as ONE product, d(norm1.out) = GEMM_contract([dQ | dK | dV], [Wq; Wk; Wv]) over K = q_width + 2 kv_width walked ascending in that order, after one pack launch that bit-copies the three gradients and the three weights into two stage scratch buffers; A = the default: three products into tmp0/tmp1/tmp2, then bwd_add3_kernel (q + k) + v. BITS CHANGE under B on every column and in the host oracle together (another rounding order of the same sum): digests of d(norm1.out) and of everything downstream of it MOVE, and must be equal between the device and the host column of the B build. Launches for the fan-in dX: pack 1 + one product (2 where it runs as groups + fold), against three products (6) + 1. gate/up (S9) is not changed",
-   "owed": "RUN"
+   "owed": "DECIDED",
+   "evidence": "A/B round 1 2026-11-19, NVIDIA L40S host bd9c355c19c0 (14-core cgroup), wheel 0c68d6cd27 and its B set, base and arm back to back in one pod job (nvc1-0006, tag nvc-ab-20261119T125554Z-6f7afc; ~/mojolearn-evidence/measure-candidate/build-0c68d6cd27/ab1/x/, tables ~/mojolearn-evidence/briefs-20261118/fx-verdicts3/tab-<arm>.txt), one scored run per arm: lm-train-step 1.00 (digest equal), samba-train-step 0.99 (digest moves as designed, loss equal to float32 rounding): NOISE; arm DELETED (lane fx-verdicts3)"
   },
   "llama-stage-keep": {
    "define": "MOJOLEARN_LLAMA_FAST_STAGE_KEEP",
