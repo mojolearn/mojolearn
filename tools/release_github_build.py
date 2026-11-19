@@ -1317,6 +1317,34 @@ def download(run_id, name, out, failed, conclusion=None):
             shutil.move(str(p), str(dest))
 
 
+#: the small artifact of a set's GHA records (timings, cache outcomes, the binding-cache uploads the Mac promotes)
+#: that the assemble job uploads beside the set's tree (lane fx-pack-offload, 2026-11-19)
+RECORDS_ARTIFACT = "release-{name}-gha"
+#: GHA/records-only.json: what a --records-only collector collected instead of the tree
+RECORDS_ONLY_SCHEMA = "mojolearn.leg-records-only.v1"
+
+
+def run_artifacts(run_id):
+    """The artifact names of RUN_ID (read-only, retried like every gh read)."""
+    out = gh_read("api", f"repos/{{owner}}/{{repo}}/actions/runs/{run_id}/artifacts", "--paginate",
+                  "--jq", ".artifacts[].name")
+    return [x.strip() for x in out.splitlines() if x.strip()]
+
+
+def records_only_ok(out, commit, defines=""):
+    """(ok, why) of a --records-only leg at OUT (tools/release.py RemoteLeg): its GHA/records-only.json names a run
+    of COMMIT with DEFINES that concluded success and whose records artifact was collected. The set's tree stays on
+    GitHub; the measurement build's pack job (.github/workflows/candidate-pack.yml) downloads and verifies it."""
+    doc = read_doc(Path(out) / "GHA" / "records-only.json")
+    if doc.get("schema") != RECORDS_ONLY_SCHEMA:
+        return False, f"no records-only receipt in {Path(out) / 'GHA'}"
+    if doc.get("source_commit") != commit or (doc.get("defines") or "") != (defines or ""):
+        return False, "the records-only receipt is of another commit or other defines"
+    if doc.get("conclusion") != "success" or not str(doc.get("run") or "").isdigit():
+        return False, f"the run {doc.get('run')} did not conclude success"
+    return True, f"run {doc['run']} succeeded; its tree stays on GitHub for the pack job"
+
+
 def run_modes(text):
     """The release modes the box builds: --modes, else MOJOLEARN_RELEASE_MODES
     (release.py sets it for every leg), else the release's default, identical."""
@@ -1419,6 +1447,9 @@ def cmd_run(a):
         raise SystemExit("--compile-groups requires one --arch and no host producer/donor")
     if a.reuse_host_groups and not a.host:
         raise SystemExit("--reuse-host-groups requires --host")
+    if a.records_only and (not a.arch or a.host or a.compile_groups):
+        raise SystemExit("--records-only is a measurement build's collector of one --arch set (no host, no "
+                         "--compile-groups)")
     if a.arch and a.arch not in ARCHS:
         raise SystemExit(f"--arch must be one of {' '.join(ARCHS)}")
     if a.host and not a.arch and not a.host_donor and not a.run_id:
@@ -1537,11 +1568,35 @@ def cmd_run(a):
         return 0 if ok else 1
     lines = [f"run {view.get('url')} {view.get('conclusion')}"]
     ok = True
-    if a.arch:
+    tree = bool(a.arch)
+    if a.arch and a.records_only and view.get("conclusion") == "success" and not failed:
+        # RECORDS ONLY (lane fx-pack-offload, 2026-11-19): a measurement build packs on GitHub
+        # (.github/workflows/candidate-pack.yml downloads, verifies and packs the trees there), so this collector
+        # takes only the set's GHA records: the binding-cache uploads it promotes below and the timings. A failed
+        # run, or a run of a workflow ref without the records artifact, downloads the whole tree as before (its
+        # build logs name the first error; the old ref has nothing smaller).
+        records = RECORDS_ARTIFACT.format(name=name)
+        if records in run_artifacts(a.run_id):
+            download(a.run_id, records, gha, failed, view.get("conclusion"))
+            (gha / "records-only.json").write_text(json.dumps(dict(
+                schema=RECORDS_ONLY_SCHEMA, run=str(a.run_id), source_commit=a.commit, defines=defines or None,
+                conclusion=view.get("conclusion"), artifact=records, tree=f"release-{name}",
+                collected_at=dt.datetime.now(dt.timezone.utc).isoformat()), indent=1) + "\n")
+            lines.append(f"TREE ON GITHUB: artifact release-{name} of run {a.run_id} (records only here; the pack "
+                         "job downloads and verifies the tree)")
+            tree = False
+        else:
+            say(f"run {a.run_id} has no {records} artifact (a workflow ref before it): downloading the whole tree")
+    if tree:
         download(a.run_id, f"release-{name}", out, failed, view.get("conclusion"))
         good, why = verify_tree(out / name / "release-build", vendor, a.arch, a.commit)
         ok &= good
         lines.append(("TREE OK: " if good else "TREE REFUSED: ") + why)
+        if a.records_only and view.get("conclusion") == "success" and not failed and good:
+            (gha / "records-only.json").write_text(json.dumps(dict(
+                schema=RECORDS_ONLY_SCHEMA, run=str(a.run_id), source_commit=a.commit, defines=defines or None,
+                conclusion=view.get("conclusion"), artifact=f"release-{name}", tree=f"release-{name}",
+                collected_at=dt.datetime.now(dt.timezone.utc).isoformat()), indent=1) + "\n")
     if a.host:
         download(a.run_id, "host-build", out / "host-build", failed, view.get("conclusion"))
         good, why = verify_host(out / "host-build", a.commit)
@@ -1555,7 +1610,7 @@ def cmd_run(a):
     if ok and creds and a.arch and not a.no_bincache:
         lines.append("binding cache: " + promote(out, creds, a.arch))
     if ok:
-        lines += next_steps(out, name, a)
+        lines += next_steps(out, name if tree or not a.arch else None, a)
         drop_r2(creds, cleanup)
     (out / "wall.txt").write_text(f"wall_seconds={wall} run={a.run_id} conclusion={view.get('conclusion')}\n")
     (gha / "summary.txt").write_text("\n".join(lines) + "\n")
@@ -1640,6 +1695,9 @@ def main(argv=None):
                    "units its base build already compiled; the assemble job takes them from the binding cache)")
     p.add_argument("--defines", default="", help="candidate build defines (NAME=V,NAME2 or '-D NAME=V -D NAME2'): "
                    "the workflow's `defines`, MOJOLEARN_BUILD_DEFINES in every compile (tools/release.py candidate)")
+    p.add_argument("--records-only", action="store_true", help="a measurement build packed on GitHub "
+                   "(.github/workflows/candidate-pack.yml): collect the set's GHA records (release-<set>-gha) and "
+                   "promote its binding-cache uploads; the tree stays on GitHub (a failed run downloads it)")
     p.add_argument("--run-id", type=int, default=0, help="attach to this run instead of dispatching")
     p.add_argument("--tooling-sha", default="", help="the tooling sha a measurement build recorded at its first "
                    "launch: a moved --ref is accepted while it holds this sha with the same route files")
