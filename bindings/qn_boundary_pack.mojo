@@ -26,17 +26,19 @@ from glm.qn_door_run import (
 from bindings.qn_boundary_unpack import (
     QnFitUnpacked,
 )
+from bindings.qn_keys_unpack import qn_keys
 
 
 def qn_fit_pack(model: PythonObject, var fit: QnFitUnpacked, result: QnDoorFitResult) raises -> PythonObject:
+    var nk = qn_keys()
     var fields = py_fields(model)
-    py_setitem(fields, "input_copied_", PythonObject(fit.copied))
-    py_setitem(fields, "_w", fit.w)
-    py_setitem(fields, "coef_", fit.coef)
-    py_setitem(fields, "intercept_", PythonObject(result.intercept))
-    py_setitem(fields, "n_iter_", fit.iterations)
-    py_setitem(fields, "objective_", PythonObject(result.objective))
-    py_setitem(fields, "retcode_", PythonObject(result.retcode))
-    py_setitem(fields, "n_features_in_", fit.run.request.features)
+    py_setitem(fields, nk[].k_input_copied_, PythonObject(fit.copied))
+    py_setitem(fields, nk[].k__w, fit.w)
+    py_setitem(fields, nk[].k_coef_, fit.coef)
+    py_setitem(fields, nk[].k_intercept_, PythonObject(result.intercept))
+    py_setitem(fields, nk[].k_n_iter_, fit.iterations)
+    py_setitem(fields, nk[].k_objective_, PythonObject(result.objective))
+    py_setitem(fields, nk[].k_retcode_, PythonObject(result.retcode))
+    py_setitem(fields, nk[].k_n_features_in_, fit.run.request.features)
     _ = fit^
     return model
