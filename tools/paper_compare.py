@@ -32,7 +32,8 @@ board. This tool:
   left     --ids FILE --board BOARD.json
         ON THE BOX: how many of the ids are not yet done in the board (the disk gate of a resumed board).
   compare  --recipes JSON --board BOARD.json... [--prior-board VERSION=BOARD.json ...] [--reference-compare JSON]
-           [--stored-baseline-board BOARD.json] [--best-ever [FILE]] [--out-md MD] [--out-json JSON] [--summary TXT]
+           [--stored-baseline-board BOARD.json] [--verdict-prior NAME] [--best-ever [FILE]] [--out-md MD]
+           [--out-json JSON] [--summary TXT]
         the new board against OUR prior wheels re-timed in the same job on the same box, per recipe: ms of each,
         ratios, quality, the flags below, and the stored columns (the paper record, a stored compare, the stored
         opponents, the best ever) as reference only. Prints a one-screen summary with both arms' host probes.
@@ -58,6 +59,11 @@ driver, kernel and date beside this job's; a different host or driver is a WARNI
 stays for the two-arm modes). BOX-STATE: a row whose in-race upload probe (the harness's separate upload,
 upload_bytes_separate / upload_ms_separate of the race, else the median of its dataset) differs from the stored run's
 by more than 15% has its REGRESSION / FASTER / SAME replaced by BOX-STATE: the ratio is shown, not counted.
+VERDICT PRIOR (lane fx-same-pod-prior; Andrew, 2026-11-19: a speed verdict compares two wheels timed on the SAME host in
+the SAME job; the stored 0.8.55 board is a screen only): --verdict-prior NAME makes the --prior-board NAME (one of OUR
+OWN EARLIER BUILT WHEELS timed beside the candidate in this job, paper_compare_job.sh PC_PRIOR_WHEELS) the baseline:
+REGRESSION / FASTER / SAME / FIXED / BROKEN come from that pair only, under the same-box refusal above, and a
+--stored-baseline-board is then a screen column (ratio shown, no flag, no BOX-STATE).
 
 FLAGS (per recipe; a recipe can carry several)
   REGRESSION     new / baseline median_ms > 1.10 (slower)     FASTER   new / baseline < 0.90
@@ -1226,7 +1232,7 @@ def probe_text(p):
 
 
 def compare(doc, boards, not_run_why=None, prior_boards=None, reference=None, reference_label=None,
-            best_ever=None, stored_baseline=None):
+            best_ever=None, stored_baseline=None, verdict_prior=None):
     """PRIOR_BOARDS: [(version, board doc)] of OUR prior wheels re-timed in the same job on the same box
     (tools/ops/paper_compare_job.sh board-prior-<version>/): the one whose version is the paper's is the baseline
     (old_ms, the REGRESSION / FASTER / FIXED / BROKEN flags), the last other one the flagged prior column
@@ -1235,7 +1241,12 @@ def compare(doc, boards, not_run_why=None, prior_boards=None, reference=None, re
     BEST_EVER: a tools/board_best_ever.py document of the compare's vendor (the best-ever column), or None.
     STORED_BASELINE: a board of the paper's version from another job (the 2026-11-17 direction: 0.8.55 is not timed
     again): it is the baseline in place of an on-box prior board; host and driver differences are WARNING lines, not
-    refusals, and each row's upload probe is checked against it (BOX-STATE)."""
+    refusals, and each row's upload probe is checked against it (BOX-STATE).
+    VERDICT_PRIOR: the name of one PRIOR_BOARDS entry that is the baseline instead of the paper's version: one of OUR
+    OWN EARLIER BUILT WHEELS timed in the same job on the same box (paper_compare_job.sh PC_PRIOR_WHEELS; lane
+    fx-same-pod-prior, Andrew 2026-11-19: a speed verdict compares two wheels timed on the same host in the same job).
+    REGRESSION / FASTER / SAME then come from that pair only, under the same same-box refusal; a STORED_BASELINE given
+    with it is a screen column (its ratio shown, never a flag, no BOX-STATE)."""
     races, gpus, versions = merge_boards(boards)
     candidate = board_candidate(boards)
     paper_gpu = doc["source"].get("gpu")
@@ -1260,9 +1271,22 @@ def compare(doc, boards, not_run_why=None, prior_boards=None, reference=None, re
                 h, why = None, sw
         priors.append({"version": version, "races": pb.get("races") or {}, "host_id": h, "why_not": why,
                        "probe": board_probe(pb), "versions": merge_boards([pb])[2]})
-    base = next((p for p in priors if p["version"] == doc["paper_version"]), None)
+    if verdict_prior is not None:
+        base = next((p for p in priors if p["version"] == verdict_prior and not p.get("stored")), None)
+        if base is None:
+            raise SystemExit("paper_compare: --verdict-prior %s names no --prior-board (%s)"
+                             % (verdict_prior, ", ".join(v for v, _ in prior_boards or []) or "none given"))
+        for p in priors:
+            if p.get("stored"):
+                # the stored board is a screen beside the on-box pair: shown, never verified, never a flag
+                p["host_id"], p["why_not"] = None, "stored board of another job: a screen column, never a flag"
+        stored_basis, stored_warn = None, []
+    else:
+        base = next((p for p in priors if p["version"] == doc["paper_version"]), None)
+    stored_is_base = base is not None and bool(base.get("stored"))
     others = [p for p in priors if p is not base]
-    flagged = others[-1] if others else None
+    live = [p for p in others if not p.get("stored")]
+    flagged = live[-1] if live else (others[-1] if others and not verdict_prior else None)
     verified = lambda p: p is not None and p["host_id"] is not None  # noqa: E731
     stored_host = doc["source"].get("host")
     same_host_opps = bool(host and stored_host and stored_host == host)
@@ -1283,7 +1307,7 @@ def compare(doc, boards, not_run_why=None, prior_boards=None, reference=None, re
     internal = [attach_extra_priors(extra_row(rec), base, others, flagged, verified)
                 for k, rec in sorted(all_recs.items()) if RF.lane_class(rec.get("lane")) and k not in recipe_keys]
     box_state = None
-    if stored_baseline is not None:
+    if stored_is_base:
         sds, nds = dataset_probes(base["races"]), dataset_probes(races)
         box_state = lambda r: attach_box_state(r, races, base["races"], nds, sds)  # noqa: E731
         rows = [box_state(r) for r in rows]
@@ -1327,6 +1351,10 @@ def compare(doc, boards, not_run_why=None, prior_boards=None, reference=None, re
             counts[f] = counts.get(f, 0) + 1
     if stored_basis:
         basis = stored_basis
+    elif verified(base) and verdict_prior is not None:
+        basis = "same box %s: our wheel %s timed in this job beside the candidate%s" % (
+            host, base["version"], "; the stored %s board is a screen only" % doc["paper_version"]
+            if stored_baseline is not None else "")
     elif verified(base):
         basis = "same box %s: %s re-timed in this job" % (host, base["version"])
     elif base is not None:
@@ -1337,13 +1365,16 @@ def compare(doc, boards, not_run_why=None, prior_boards=None, reference=None, re
             "new_versions": versions, "new_label": new_label(candidate, versions), "candidate": candidate,
             "host_id": host, "host_probe": next((board_probe(b) for b in boards if board_probe(b)), None),
             "host_missing": why_no_host, "verdict_basis": basis,
-            "baseline_stored": stored_baseline is not None, "baseline_warnings": stored_warn,
-            "box_state_tolerance": BOX_STATE_TOLERANCE if stored_baseline is not None else None,
+            "baseline_stored": stored_is_base, "baseline_warnings": stored_warn,
+            "box_state_tolerance": BOX_STATE_TOLERANCE if stored_is_base else None,
+            "baseline_version": base["version"] if base else None, "verdict_prior": verdict_prior,
+            "screen_stored": stored_baseline is not None and not stored_is_base,
             "baseline_label": ("%s (%s)" % (base["version"], "stored" if base.get("stored") else "this box"))
                               if base else None,
             "prior_label": flagged["version"] if flagged else None,
             "prior_columns": [{"version": p["version"], "host_id": p["host_id"], "probe": p["probe"],
-                               "why_not": p["why_not"], "board_versions": p["versions"]} for p in priors],
+                               "why_not": p["why_not"], "board_versions": p["versions"],
+                               "stored": bool(p.get("stored"))} for p in priors],
             "reference_label": reference_label if reference is not None else None,
             "stored_host": stored_host,
             "paper_gpu": paper_gpu, "new_gpus": gpus, "hw_diff": hw_diff,
@@ -1480,8 +1511,9 @@ def render_md(res):
     v, new = res["vendor"], res.get("new_label") or ", ".join(res["new_versions"]) or "?"
     pv = other_prior_versions(res)
     base = res.get("baseline_label") or "%s (no on-box board)" % res["paper_version"]
-    lines = ["# Paper measurements: %s%s against %s on %s" % (base, "".join(", %s (this box)" % x for x in pv), new, v),
-             ""]
+    stored = {p["version"] for p in res.get("prior_columns") or [] if p.get("stored")}
+    lines = ["# Paper measurements: %s%s against %s on %s" % (
+        base, "".join(", %s (%s)" % (x, "stored, screen" if x in stored else "this box") for x in pv), new, v), ""]
     if res.get("baseline_stored"):
         # the FIRST line says the baseline is stored, with both sides' host, GPU, driver, kernel and date
         lines = ["**%s**" % res.get("verdict_basis"), ""] + ["**%s**" % w for w in res.get("baseline_warnings") or []] \
@@ -1790,7 +1822,7 @@ def cmd_compare(args):
     stored = None
     if args.stored_baseline_board:
         stored = load_json(args.stored_baseline_board)     # unreadable: the compare fails (no silent NOT-RUN column)
-    res = compare(doc, boards, why, priors, ref, rlabel, best, stored)
+    res = compare(doc, boards, why, priors, ref, rlabel, best, stored, args.verdict_prior)
     v = doc["vendor"]
     md = args.out_md or os.path.join(OUT_DIR, "COMPARE-%s.md" % v)
     js = args.out_json or os.path.join(os.path.dirname(os.path.abspath(md)), "compare-%s.json" % v)
@@ -1848,6 +1880,11 @@ def build_parser():
                         "not timed again): the baseline in place of an on-box --prior-board; host and driver "
                         "differences are WARNING lines, and a row whose in-race upload probe moved more than 15%% "
                         "from the stored run's is BOX-STATE")
+    c.add_argument("--verdict-prior", default=None, metavar="NAME",
+                   help="the --prior-board NAME that is the verdict baseline in place of the paper's version: one of "
+                        "our own earlier built wheels timed in this job on this box (paper_compare_job.sh "
+                        "PC_PRIOR_WHEELS); REGRESSION / FASTER / SAME come from that pair only, and a "
+                        "--stored-baseline-board is then a screen column (shown, never a flag)")
     c.add_argument("--out-md", default=None)
     c.add_argument("--out-json", default=None)
     c.add_argument("--summary", default=None)
