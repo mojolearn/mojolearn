@@ -53,9 +53,16 @@ from bindings.linalg_decomp_native_unpack import (
     _rhs,
     _singular_warning,
 )
+from bindings.linalg_keys_unpack import (
+    linalg_keys, LINALG_OPN_RANDOMIZED_SVD, LINALG_OPN_SOLVE, LINALG_OPN_LSTSQ, LINALG_OPN_LU_FACTOR,
+    LINALG_OPN_LU_SOLVE,
+)
+from bindings.py_keys import py_op_code
+from bindings.py_balanced import py_item
 
 
 def randomized_svd_call(args: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = linalg_keys()
     # args: (M, n_components, n_oversamples, n_iter, power_iteration_normalizer,
     # transpose, flip_sign, random_state, numeric_mode)
     # ONE compiled call (x_decomp/randomized_svd_owner.mojo): the sketch, the
@@ -95,7 +102,7 @@ def randomized_svd_call(args: PythonObject, context: PythonObject) raises -> Pyt
     if not (1 <= kc and kc <= min(rows, cols)):
         raise Error("n_components must be in [1, min(n_samples, n_features)]")
     var seed = decomp_seed_word(decomp_seed(args[7]))
-    var output = context["output_context"]
+    var output = py_item(context, nk[].k_output_context)
     var u = classical_typed(Python.tuple(rows, kc), "<f4", output)
     var s = classical_typed(Python.tuple(kc), "<f4", output)
     var vt = classical_typed(Python.tuple(kc, cols), "<f4", output)
@@ -115,6 +122,7 @@ def randomized_svd_call(args: PythonObject, context: PythonObject) raises -> Pyt
 
 
 def _typed(shape: PythonObject, typestr: String, code: String, item: Int, context: PythonObject) raises -> PythonObject:
+    var nk = linalg_keys()
     # Every caller hands this Array to one native writer that writes every
     # item before anything reads it (the device LU's factor, pivot and info
     # downloads, the resident solve's X download, the pivot memcpy), or
@@ -126,7 +134,7 @@ def _typed(shape: PythonObject, typestr: String, code: String, item: Int, contex
     # `_empty` cost neither; lu_factor on an 8192 x 8192 system (268 MB of
     # factor) went 381 -> 465 ms on the L40S full board. The cost is per
     # output byte, so it holds at every n (4096 and 16384 the same way).
-    var output = context["output_context"]
+    var output = py_item(context, nk[].k_output_context)
     var count = 1
     for k in range(len(shape)):  # driver-loop: over array rank metadata
         count *= Int(py=shape[k])
@@ -179,9 +187,10 @@ def _resident_solve(mut kit: DKit, da: Int, dlu: Int, dp: Int, n: Int, b: Python
 
 
 def solve_call(args: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = linalg_keys()
     # args: (a, b, numeric_mode)
     var entries = decomp_entries(args[2], context)
-    var door = DecompDoor(entries, context["output_context"])
+    var door = DecompDoor(entries, py_item(context, nk[].k_output_context))
     var kit = decomp_kit_unpack(entries)
     try:
         var a_source = args[0]
@@ -298,9 +307,10 @@ comptime LINALG_F32_EPS = 1.1920928955078125e-07
 
 
 def lstsq_call(args: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = linalg_keys()
     # args: (a, b, rcond, numeric_mode): one UNPACK, one RUN, one PACK.
     var entries = decomp_entries(args[3], context)
-    var door = DecompDoor(entries, context["output_context"])
+    var door = DecompDoor(entries, py_item(context, nk[].k_output_context))
     var kit = decomp_kit_unpack(entries)
     try:
         var b = args[1]
@@ -341,12 +351,13 @@ def lstsq_call(args: PythonObject, context: PythonObject) raises -> PythonObject
 
 
 def _device_buffer(kit: DKit, module: PythonObject, count: Int, context: PythonObject) raises -> PythonObject:
+    var nk = linalg_keys()
     # `_DevBuf(raw, count)`: a pooled device buffer id, returned to the pool
     # when the holder dies; the holder is assembled from its slots. The id
     # comes from the image's table (XD_DEV_ALLOC; was a Python call of the
     # module's x_decomp_dev_alloc): the same pool the holder frees into.
     var bi = native_loaded_module("builtins")
-    var holder = py_call(bi.object.__new__, context["lu_device_buffer"])
+    var holder = py_call(bi.object.__new__, py_item(context, nk[].k_lu_device_buffer))
     py_setattr(holder, "b", module)
     py_setattr(holder, "n", PythonObject(count))
     py_setattr(holder, "id", PythonObject(kit.dev_alloc(max(count, 1))))
@@ -355,18 +366,20 @@ def _device_buffer(kit: DKit, module: PythonObject, count: Int, context: PythonO
 
 def _lu_pair(lu: PythonObject, piv: PythonObject, qfix_a: PythonObject, dev: PythonObject,
              context: PythonObject) raises -> PythonObject:
+    var nk = linalg_keys()
     # `_LUPair((lu, piv), qfix_a, dev=dev)`, assembled from its slots.
     var bi = native_loaded_module("builtins")
-    var pair = py_call(bi.tuple.__new__, context["lu_pair_class"], Python.tuple(lu, piv))
+    var pair = py_call(bi.tuple.__new__, py_item(context, nk[].k_lu_pair_class), Python.tuple(lu, piv))
     py_setattr(pair, "_qfix_a", qfix_a)
     py_setattr(pair, "_dev", dev)
     return pair
 
 
 def lu_factor_call(args: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = linalg_keys()
     # args: (a, numeric_mode)
     var entries = decomp_entries(args[1], context)
-    var door = DecompDoor(entries, context["output_context"])
+    var door = DecompDoor(entries, py_item(context, nk[].k_output_context))
     var kit = decomp_kit_unpack(entries)
     try:
         var a_source = args[0]
@@ -446,6 +459,7 @@ def lu_factor_call(args: PythonObject, context: PythonObject) raises -> PythonOb
 
 
 def lu_solve_call(args: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = linalg_keys()
     # args: (lu_and_piv, b, trans, numeric_mode)
     var bi = native_loaded_module("builtins")
     var trans = args[2]
@@ -465,7 +479,7 @@ def lu_solve_call(args: PythonObject, context: PythonObject) raises -> PythonObj
     var lu = items[0]
     var piv = items[1]
     var entries = decomp_entries(args[3], context)
-    var door = DecompDoor(entries, context["output_context"])
+    var door = DecompDoor(entries, py_item(context, nk[].k_output_context))
     var kit = decomp_kit_unpack(entries)
     try:
         var transposed = Bool(py=py_call(bi.bool, trans))
@@ -522,17 +536,18 @@ def linalg_decomp_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyO
             raise Error("TypeError: native linear algebra requires an operation, an argument tuple and its context")
         var context = call[3]
         classical_connect_numpy(context)
-        var operation = String(py=call[1])
+        var nk = linalg_keys()
+        var operation = py_op_code(nk[].ops, call[1])
         var result = PythonObject(None)
-        if operation == "randomized_svd":
+        if operation == LINALG_OPN_RANDOMIZED_SVD:
             result = randomized_svd_call(call[2], context)
-        elif operation == "solve":
+        elif operation == LINALG_OPN_SOLVE:
             result = solve_call(call[2], context)
-        elif operation == "lstsq":
+        elif operation == LINALG_OPN_LSTSQ:
             result = lstsq_call(call[2], context)
-        elif operation == "lu_factor":
+        elif operation == LINALG_OPN_LU_FACTOR:
             result = lu_factor_call(call[2], context)
-        elif operation == "lu_solve":
+        elif operation == LINALG_OPN_LU_SOLVE:
             result = lu_solve_call(call[2], context)
         else:
             raise Error("unknown native linear algebra operation")

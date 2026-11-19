@@ -33,6 +33,8 @@ from bindings.linalg_decomp_run import (
     ld_lu_solve_run, ld_lstsq_run,
 )
 from std.python._cpython import GILReleased
+from bindings.linalg_keys_unpack import linalg_keys
+from bindings.py_balanced import py_item
 
 
 # TOMBSTONE: randomized_svd's per-step DecompKit sequence (`_rsvd_direct_input`, `_rsvd_core`, `_flip_u` in the process-default kit; about 40 py_calls into x_decomp per call) and `_same_mode` deleted 2026-11-08 by lane a3-admit-decomp-prep-metrics; code recoverable at f7d10d2b09.
@@ -110,10 +112,11 @@ def _f32_input(source: PythonObject, name: String, ndim: Int, context: PythonObj
 
 
 def _decomp_module(mode_value: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = linalg_keys()
     # `_Kit._raw()`: the x_decomp binding module of the mode decomp_entries admitted.
     var mode = decomp_mode(mode_value, context)
     var name = String(py=py_call(py_call(mode.strip).lower))
-    return context["decomp_modules"][name]
+    return py_item(context, nk[].k_decomp_modules)[name]
 
 
 def _pivots_i32(source: PythonObject, context: PythonObject) raises -> PythonObject:
