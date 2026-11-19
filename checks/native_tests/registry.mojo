@@ -107,6 +107,7 @@ from checks.native_tests.linalg_numerical import register as register_linalg_num
 from checks.native_tests.linear_owner import register as register_linear_owner
 from checks.native_tests.linear_svc_native import register as register_linear_svc_native
 from checks.native_tests.linear_svr_native import register as register_linear_svr_native
+from checks.native_tests.llama_refuse_row_scan import register as register_llama_refuse_row_scan
 from checks.native_tests.lof_native import register as register_lof_native
 from checks.native_tests.logistic_label_weights import register as register_logistic_label_weights
 from checks.native_tests.logistic_numeric import register as register_logistic_numeric
@@ -543,6 +544,7 @@ def all_checks() -> List[Check]:
     checks.append(register_linear_owner())
     checks.append(register_linear_svc_native())
     checks.append(register_linear_svr_native())
+    checks.append(register_llama_refuse_row_scan())
     checks.append(register_lof_native())
     checks.append(register_logistic_label_weights())
     checks.append(register_logistic_numeric())
