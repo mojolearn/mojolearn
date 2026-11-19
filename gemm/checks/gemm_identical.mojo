@@ -8869,6 +8869,15 @@ comptime GEMM_KPACK_LOADAHEAD = (
 comptime GEMM_EPI_NONE = 0
 comptime GEMM_EPI_C_PLUS_CELL = 1
 comptime GEMM_EPI_CELL_PLUS_C = 2
+# lane/fx-gemm-worklist (2026-11-19, coordinator follow-up): kinds that read a SECOND buffer. They are served by
+# `identical_gemm_kpack_epi_ptr_kernel` only (below `_kpack_launch`), whose argument block carries the pointer
+# `epi_p` and one Int32 `epi_i`; the single-product kernel and the list kernel keep their arguments and pass the
+# body a dead `dst` / 0. `-D MOJOLEARN_GEMM_FAST_EPI=1` territory: NOT WIRED to any caller yet (no entry, no check).
+#   GEMM_EPI_PLUS_BIAS    ftz(ftz(cell) + ftz(epi_p[j]))   `add_bias_kernel`
+#                         (transformer/impl/llama/modeling_llama.mojo): `ftz(ftz(y) + ftz(bias[col]))`, y the
+#                         stored product word, col = the cell's column; same operand order, same flushes.
+comptime GEMM_EPI_PTR_FIRST = 3
+comptime GEMM_EPI_PLUS_BIAS = 3
 
 
 @always_inline
@@ -8929,6 +8938,8 @@ def _kpack_kernel_body[
     groups_in: Int32,
     raw_in: Int32,
     q_in: Int32,
+    epi_p: MutPointer[Float32, MutAnyOrigin],
+    epi_i: Int32,
 ):
     """DEVIATION 2599: the shipped per-window body over a PACKED page.
 
@@ -9514,7 +9525,11 @@ def _kpack_kernel_body[
                         comptime if FASTK:
                             if _detect_recompute(sub_seen):
                                 cell = _rtf_cell(a, b, gi, gj, p_count, leaf, k, a_si, a_sp, b_sp, b_sj)
-                        cell = gemm_epi_cell[EPI](cell, dst.unsafe_load(gi * n + gj))
+                        comptime if EPI == GEMM_EPI_PLUS_BIAS:
+                            # `add_bias_kernel`'s expression on the stored word (lane/fx-gemm-worklist).
+                            cell = ftz(ftz(cell) + ftz(epi_p.unsafe_load(gj)))
+                        else:
+                            cell = gemm_epi_cell[EPI](cell, dst.unsafe_load(gi * n + gj))
                     dst.unsafe_store(gi * n + gj, cell)
     comptime if FASTK and EPI == GEMM_EPI_NONE:
         # lane/amd-step-time: a step result of my cells was subnormal; every
@@ -9614,6 +9629,7 @@ def identical_gemm_kpack_kernel[
     DIAG: Int = 0,
     HWFOLD: Bool = False,
     GATHER: Bool = False,
+    EPI: Int = 0,
 ](
     dst: MutPointer[Float32, MutAnyOrigin],
     a: MutPointer[Float32, MutAnyOrigin],
@@ -9633,13 +9649,65 @@ def identical_gemm_kpack_kernel[
     """DEVIATION 2599: one product on the packed body (`_kpack_kernel_body`,
     whose docstring is the kernel's). Block `block_idx.x` owns a tile; in
     group mode `block_idx.y` is the leaf group. Same name, same arguments
-    and same launches as before the body moved into the helper."""
+    and same launches as before the body moved into the helper.
+
+    The comptime list is the body's, in the body's order, `EPI` (lane
+    fx-gemm-epi, the store epilogue) last and passed through: every
+    positional instantiation written against the kernel before the split
+    (13 parameters, or 14 with `EPI`) names the same kernel, and with `EPI`
+    0 this is the kernel as it was. Kinds that read a second buffer
+    (`GEMM_EPI_PTR_FIRST` and above) need `identical_gemm_kpack_epi_ptr_kernel`."""
+    comptime assert EPI < GEMM_EPI_PTR_FIRST, (
+        "identical_gemm_kpack_kernel: this epilogue kind reads a second buffer;"
+        " launch identical_gemm_kpack_epi_ptr_kernel"
+    )
     var q_in = Int32(0)
     comptime if GROUP:
         q_in = Int32(Int(block_idx.y))
-    _kpack_kernel_body[RPT, CPT, TC, KS, FS, PAGES, GROUP, SAB, PAD, ALIGN, DIAG, HWFOLD, GATHER](
+    _kpack_kernel_body[RPT, CPT, TC, KS, FS, PAGES, GROUP, SAB, PAD, ALIGN, DIAG, HWFOLD, GATHER, EPI](
         dst, a, b, m_in, n_in, k_in, leaf_in, p_in, a_si_in, a_sp_in, b_sp_in, b_sj_in,
-        gleaves_in, groups_in, Int32(Int(block_idx.x)), q_in,
+        gleaves_in, groups_in, Int32(Int(block_idx.x)), q_in, dst, Int32(0),
+    )
+
+
+@__llvm_metadata(MAX_THREADS_PER_BLOCK_METADATA=StaticTuple[Int32, 1](Int32(GEMM_KPACK_LAUNCH_BOUND)))
+def identical_gemm_kpack_epi_ptr_kernel[
+    RPT: Int, CPT: Int, TC: Int, KS: Int, FS: Int, PAGES: Int,
+    PAD: Int = 0,
+    ALIGN: Int = 4,
+    HWFOLD: Bool = False,
+    GATHER: Bool = False,
+    EPI: Int = 0,
+](
+    dst: MutPointer[Float32, MutAnyOrigin],
+    a: MutPointer[Float32, MutAnyOrigin],
+    b: MutPointer[Float32, MutAnyOrigin],
+    m_in: Int32,
+    n_in: Int32,
+    k_in: Int32,
+    leaf_in: Int32,
+    p_in: Int32,
+    a_si_in: Int32,
+    a_sp_in: Int32,
+    b_sp_in: Int32,
+    b_sj_in: Int32,
+    epi_p: MutPointer[Float32, MutAnyOrigin],
+    epi_i: Int32,
+):
+    """lane/fx-gemm-worklist (coordinator follow-up for lane fx-gemm-epi):
+    the all-leaves packed product whose store epilogue reads a SECOND
+    buffer. The single-product kernel's argument block without the two group
+    arguments, plus `epi_p` (the epilogue's operand: the bias row for
+    `GEMM_EPI_PLUS_BIAS`) and `epi_i` (one integer for a kind that needs it,
+    e.g. an activation code; unused by the kinds written so far). A kernel
+    of its own so that no existing launch gains an argument. Arm only
+    (`-D MOJOLEARN_GEMM_FAST_EPI=1`); nothing launches it yet."""
+    comptime assert EPI >= GEMM_EPI_PTR_FIRST, (
+        "identical_gemm_kpack_epi_ptr_kernel: for the epilogue kinds that read a second buffer"
+    )
+    _kpack_kernel_body[RPT, CPT, TC, KS, FS, PAGES, False, False, PAD, ALIGN, 0, HWFOLD, GATHER, EPI](
+        dst, a, b, m_in, n_in, k_in, leaf_in, p_in, a_si_in, a_sp_in, b_sp_in, b_sj_in,
+        Int32(0), Int32(0), Int32(Int(block_idx.x)), Int32(0), epi_p, epi_i,
     )
 
 
@@ -9841,13 +9909,14 @@ def identical_gemm_kpack_list_kernel[
         var tiles = Int(tab.unsafe_load(row + GEMM_WORKLIST_COL_TILES))
         group = Int(UInt(local) // UInt(tiles))
         tile = local - group * tiles
-    _kpack_kernel_body[RPT, CPT, TC, KS, FS, PAGES, GROUP, False, PAD, ALIGN, 0, HWFOLD, GATHER](
+    # EPI 0: a product that needs a store epilogue is never listed (it takes its own launch).
+    _kpack_kernel_body[RPT, CPT, TC, KS, FS, PAGES, GROUP, False, PAD, ALIGN, 0, HWFOLD, GATHER, 0](
         dst, a, b,
         tab.unsafe_load(row + 0), tab.unsafe_load(row + 1), tab.unsafe_load(row + 2),
         tab.unsafe_load(row + 3), tab.unsafe_load(row + 4),
         tab.unsafe_load(row + 5), tab.unsafe_load(row + 6), tab.unsafe_load(row + 7), tab.unsafe_load(row + 8),
         tab.unsafe_load(row + 9), tab.unsafe_load(row + 10),
-        Int32(tile), Int32(group),
+        Int32(tile), Int32(group), dst, Int32(0),
     )
 
 
