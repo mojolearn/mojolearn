@@ -617,6 +617,17 @@ them for you.
   the supported `upcast_from=Optional(pointer)` constructor and retains the
   borrowed Python reference. Keep the original owner pinned through inspection.
 
+- One buffer, or two views of one buffer, is never passed twice as a mutable argument to one launch (2026-11-19). The
+  build fails with "aliasing values passed mutably to 'args' argument ... in 'enqueue_function' call". Pass the buffer
+  once and have the kernel read and write through that one pointer, or give the second role its own view built the way
+  the neighbouring launch builds one.
+- A struct field never holds a pointer with AnyOrigin (`List[Pointer[T, MutAnyOrigin]]`, a `MutPointer` field)
+  (2026-11-19). The build fails with "struct fields cannot expose AnyOrigin in their type". Hold the owning buffer or
+  view, or the address as an `Int`, and build the pointer in a local `var` at the launch site.
+- Code behind an opt-in define is still parsed and type-checked in the default build. An arm's compile error breaks
+  every build, so an arm is written to the same standard as default code and merged only with its lane's reading of
+  every launch it adds (2026-11-19: five errors in three compile rounds, all in default-off arms).
+
 ## 7. Public docs and docstrings (Andrew, 2026-10-12, additions 2026-10-13)
 
 - Docstrings of public names are user documentation (docs.mojolearn.org): what it does, parameters, returns, a
