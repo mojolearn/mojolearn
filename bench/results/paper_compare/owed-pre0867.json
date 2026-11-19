@@ -700,7 +700,7 @@
   },
   "rnn-step-gemm": {
    "define": "MOJOLEARN_SEQ_FAST_RNN_STEP_GEMM",
-   "status": "define in code (autograd/rules_recurrent.mojo RNN_STEP_GEMM, rule rnn_step_gemm; IDENTICAL, every column, the host column runs the same launches): B = on the per-step chain (cells of more gates than the scan takes: GRU, LSTM) a time step's hidden projection is its own GEMM launch on the sequence tile (forward OP_GEMM_EPI with the b_hh epilogue, backward OP_GEMM accumulate onto dh) followed by the elementwise cell (OP_CELL_FWD / OP_CELL_BWD), where the launch rule keeps the one chain (not a split-K shape, not the cooperative shape) and the product holds at least 2^20 multiply-adds; A = one fused launch a step, one thread per (row, unit) folding its own gate dots (OP_CELL_FWD_H / OP_CELL_BWD_H). Same chain per cell (k ascending), same bias add, same cell body: digests must not move. Build every binding that imports autograd/rules_recurrent.mojo (the sequence device and host bindings).",
+   "status": "define in code (autograd/rules_recurrent.mojo RNN_STEP_GEMM, rule rnn_step_gemm, _wgrad; oracle sequence/checks/oracle.mojo _o_bptt_block; IDENTICAL, every column, the host column runs the same launches): B = every recurrent product is one launch of the lane's own GEMM on the launch rule's route and fold: on the per-step chain (GRU, LSTM) the forward's hidden projection (OP_GEMM_EPI, b_hh epilogue) and the backward's dh += dGH W_hh (OP_GEMM accumulate), each followed by the elementwise cell (OP_CELL_FWD / OP_CELL_BWD), where the product holds at least 2^20 multiply-adds, split-K shapes included; and for every cell (rnn too) dW_hh and dW_ih as ONE OP_GEMM over the T B stacked rows instead of the two-launch blocked order. A = one fused one-thread launch a step and wgrad_blocked. BIT VERSION under the define: bits change at split-K shapes of the per-step products (the board's backward, K = G H = 256) and for the weight gradients when T B > 512; same bits elsewhere; the formula is beside the define. Device and host agree under the arm (the seams check's 5504_bptt_step_gemm cases). A and B digests therefore DIFFER on these lanes: compare quality, not digests. Build every binding that imports autograd/rules_recurrent.mojo (the sequence device and host bindings) and the seams check.",
    "owed": "RUN"
   },
   "cnn-op-nowait": {
@@ -4197,8 +4197,11 @@
     "lstm-reg",
     "gru-clf",
     "gru-reg",
+    "rnn-clf",
+    "rnn-reg",
     "lstm-fit",
-    "gru-fit"
+    "gru-fit",
+    "rnn-fit"
    ],
    "dataset": "*",
    "rows": "full",
@@ -4206,19 +4209,12 @@
    "b_arms": [
     "rnn-step-gemm"
    ],
-   "decides": "promote B only if the lstm and gru fits (algos synthetic and taxi-hourly, neural lstm-fit and gru-fit) are faster on the NVIDIA L40S (same box, same job) with quality equal and every digest equal (the arm changes no arithmetic: a moved digest is a bug in the arm), and the predict rows are not slower. At the board's shape (H 64) only the forward steps change (the backward's K = G H is a split-K shape and keeps the fused launch). Estimate 0.80-1.00x from the board rows' own arithmetic (one more gate = 3.5 us a cell launch, so the one-thread fold runs near 0.6 TFLOP/s against the tile's 3.6-4.0); the launch floor on the L40S is unmeasured, so a result inside the noise floor is a loser and the arm is deleted with the four tombstone parts. rnn rows take the scan and are unaffected (control)"
+   "decides": "promote B only if the lstm and gru fits (algos synthetic and taxi-hourly, neural lstm-fit and gru-fit) are faster on the NVIDIA L40S (same box, same job) with quality equal (accuracy / logloss / r2 beside every time: the arm is a bit version on these rows, so digests differ between A and B and are not the test; device against host under the arm is the seams check's), and the predict rows are not slower. rnn rows take the scan and change only in their two weight gradients (one launch each instead of two): they must not be slower. Launches a step: lstm / gru 68 -> 113, rnn 22 -> 20; the bet is arithmetic rate (the fused one-thread folds and the blocked dW_hh hold about 300 M multiply-adds a step at about 0.9 TFLOP/s; the lane's GEMM tile runs 3.6-4.0), not launch count. Estimate 0.75-1.05x; the L40S launch floor is unmeasured, so a result inside the noise floor is a loser and the arm is deleted with the four tombstone parts"
   },
   {
    "id": "rnn-step-gemm-shapes",
-   "source": "lane fx-rnn-cnn-fit (2026-11-19; report ~/mojolearn-evidence/briefs-20261118/fx-rnn-cnn-fit-RESULT.md): default-off arm, never timed; the neighbouring shapes and the non-board model of the arm (no dimension targeting)",
-   "kind": "ab",
-   "lane": [
-    "lstm-reg",
-    "gru-reg"
-   ],
-   "dataset": "*",
-   "rows": "full",
-   "vendor": "nvidia",
+   "source": "lane fx-rnn-cnn-fit (2026-11-19; report ~/mojolearn-evidence/briefs-20261118/fx-rnn-cnn-fit-RESULT.md); the neighbouring shapes, the non-board model and two controls of the arm (no dimension targeting); driver rnn_shapes in tools/measure_owed_driver.py",
+   "kind": "driver",
    "b_arms": [
     "rnn-step-gemm"
    ],
@@ -4226,37 +4222,78 @@
     "cases": [
      {
       "note": "neighbouring shape: longer sequence",
+      "cell": "lstm",
+      "rows": 60000,
       "window": 48,
+      "features": 1,
       "hidden_size": 64,
       "num_layers": 1,
-      "batch_size": 256
+      "batch_size": 256,
+      "max_epochs": 2
      },
      {
-      "note": "neighbouring shape: wider hidden size (forward and backward both leave the split-K shape)",
+      "note": "neighbouring shape: wider hidden size",
+      "cell": "lstm",
+      "rows": 60000,
       "window": 24,
+      "features": 1,
       "hidden_size": 128,
       "num_layers": 1,
-      "batch_size": 256
+      "batch_size": 256,
+      "max_epochs": 2
+     },
+     {
+      "note": "neighbouring shape: wider hidden size, gru",
+      "cell": "gru",
+      "rows": 60000,
+      "window": 24,
+      "features": 1,
+      "hidden_size": 128,
+      "num_layers": 1,
+      "batch_size": 256,
+      "max_epochs": 2
      },
      {
       "note": "non-board model: 2-layer GRU regressor on a 12-feature series",
       "cell": "gru",
-      "features": 12,
+      "rows": 40000,
       "window": 32,
+      "features": 12,
       "hidden_size": 96,
       "num_layers": 2,
-      "batch_size": 128
+      "batch_size": 128,
+      "max_epochs": 2
      },
      {
-      "note": "control under the rule's floor (fewer than 2^20 multiply-adds a step: B must equal A)",
+      "note": "scan route (one-gate cell): only the weight gradients change",
+      "cell": "rnn",
+      "rows": 60000,
       "window": 24,
+      "features": 1,
+      "hidden_size": 64,
+      "num_layers": 1,
+      "batch_size": 256,
+      "max_epochs": 2
+     },
+     {
+      "note": "control under the per-step floor (fewer than 2^20 multiply-adds a step): only the weight gradients change",
+      "cell": "lstm",
+      "rows": 20000,
+      "window": 24,
+      "features": 1,
       "hidden_size": 16,
       "num_layers": 1,
-      "batch_size": 64
+      "batch_size": 64,
+      "max_epochs": 2
      }
     ]
    },
-   "decides": "B at least as fast as the candidate at the three cases above the floor and equal at the control, quality and digests equal; a slower case blocks the promotion decided on rnn-step-gemm-rows or moves RNN_STEP_GEMM_MIN_FMA with the reason beside it. OWED TOOLING: tools/measure_owed_driver.py has no recurrent driver (window, hidden size, layers, features at a caller-given value); until one exists these cases are timed with the seqmodel recipe at the stated settings"
+   "decides": "B at least as fast as the candidate at the four cases above the floor and not slower at the two controls, with the last loss_curve_ value beside each time equal to the candidate's within training noise (the arm is a bit version: the words differ); a slower case blocks the promotion decided on rnn-step-gemm-rows or moves RNN_STEP_GEMM_MIN_FMA with the reason beside it",
+   "driver": "rnn_shapes",
+   "arms": [
+    "candidate",
+    "rnn-step-gemm"
+   ]
   },
   {
    "id": "cnn-op-nowait-rows",
