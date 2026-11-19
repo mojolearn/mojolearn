@@ -414,10 +414,14 @@ def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
             if snapshot.kind != 0:
                 py_setitem(state, "beta1_power", Float64(snapshot.beta1_power))
                 py_setitem(state, "beta2_power", Float64(snapshot.beta2_power))
+                if snapshot.kind == 9:
+                    # NAdam (sequence/ops.mojo OPT_NADAM): the running mu product
+                    py_setitem(state, "mu_product", Float64(snapshot.mu_product))
                 if snapshot.first != 0:
                     py_setitem(state, "exp_avg", snapshot.first)
                 if snapshot.second != 0:
-                    py_setitem(state, "exp_avg_sq", snapshot.second)
+                    # Adamax (OPT_ADAMAX 8) keeps the infinity norm there
+                    py_setitem(state, "exp_inf" if snapshot.kind == 8 else "exp_avg_sq", snapshot.second)
             elif snapshot.first != 0:
                 py_setitem(state, "momentum_buffer", snapshot.first)
             return state
@@ -428,17 +432,25 @@ def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
         var second = 0
         var beta1 = Float32(1)
         var beta2 = Float32(1)
-        if s[].opts[oi].cfg.kind == 0:
+        var mu = Float32(1)
+        var opt_kind = s[].opts[oi].cfg.kind
+        if opt_kind == 0:
             if py_contains(state, "momentum_buffer"):
                 first = _int(state["momentum_buffer"], "momentum_buffer", 1)
         else:
             if py_contains(state, "exp_avg"):
                 first = _int(state["exp_avg"], "exp_avg", 1)
-            if py_contains(state, "exp_avg_sq"):
+            if opt_kind == 8:
+                # Adamax: the keys `optimizer_state` returns for it
+                if py_contains(state, "exp_inf"):
+                    second = _int(state["exp_inf"], "exp_inf", 1)
+            elif py_contains(state, "exp_avg_sq"):
                 second = _int(state["exp_avg_sq"], "exp_avg_sq", 1)
             beta1 = Float32(py=state["beta1_power"])
             beta2 = Float32(py=state["beta2_power"])
-        var request = OpsOptimizerRestoreRequest(step, first, second, 0, beta1, beta2, Float32(1))
+            if opt_kind == 9:
+                mu = Float32(py=state["mu_product"])
+        var request = OpsOptimizerRestoreRequest(step, first, second, 0, beta1, beta2, mu)
         s[].load_optimizer_state(opt, _int(args[1], "param", 1), request)
         return PythonObject(None)
     var code = 0
