@@ -303,10 +303,13 @@ def run_checks() raises:
         var s_h = zeros(bn)
         var v_h = zeros(bn * bn)
         HostExec.svd(ptr(bh), bm, bn, ptr(s_h), ptr(v_h))
+        # the input list's last named use was the pointer above: held to here
+        _ = bh^
         var bd = ba.copy()
         var s_d = zeros(bn)
         var v_d = zeros(bn * bn)
         DevExec.svd(ptr(bd), bm, bn, ptr(s_d), ptr(v_d))
+        _ = bd^
         var tag = String(bm) + " x " + String(bn)
         same("bounded device svd values " + tag, count_diff_f32(s_d, s_h))
         same("bounded device svd vectors " + tag, count_diff_f32(v_d, v_h))
@@ -314,6 +317,7 @@ def run_checks() raises:
         var s_c = zeros(bn)
         var v_c = zeros(bn * bn)
         DevExec.svd_cells(ptr(bc), bm, bn, ptr(s_c), ptr(v_c), 4096)
+        _ = bc^
         same("bounded device svd values cut small " + tag, count_diff_f32(s_c, s_h))
         same("bounded device svd vectors cut small " + tag, count_diff_f32(v_c, v_h))
         tr.record_list_f32("x_decomp.svd_bounded", v_d)
