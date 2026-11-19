@@ -199,7 +199,7 @@ def check_structure(
     return cells
 
 
-def main() raises:
+def run_checks() raises:
     var cells = 0
 
     # --- max_nodes, both sides of their depth-13 cliff --------------------

@@ -1183,7 +1183,7 @@ def check_rbc_knn_radius_is_read() raises:
         hr.unsafe_ptr().unsafe_store(
             l, hr.unsafe_ptr().unsafe_load(l) * Float32(0.3)
         )
-    ctx.enqueue_copy(dst_buf=idx.r_radius, src_ptr=hr.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, idx.r_radius, hr)
     ctx.synchronize()
 
     var bad = _knn_compare(

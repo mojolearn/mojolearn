@@ -36,7 +36,6 @@ Exit 1 on any failure.
 """
 from std.math import exp
 from std.memory import bitcast
-from std.sys import exit
 
 from gemm.host.gemm_oracle import fold_balanced_tree
 from mamba.checks.mamba3_fixture import M3_D_STATE, M3_HEADDIM
@@ -83,7 +82,7 @@ def _fnv(buf: DeviceBuffer[DType.float32], count: Int) -> UInt64:
     return hash
 
 
-def main() raises:
+def run_checks() raises:
     var b = CHK_B
     var nh = CHK_NH
     var qs = CHK_QS
@@ -216,5 +215,5 @@ def main() raises:
     _ = len(q) + len(k) + len(v) + len(dacs) + len(states) + len(d_states)
     if bad != 0:
         print("mamba3 S17 tail check: FAIL", bad)
-        exit(1)
+        raise Error("mamba3 S17 tail check: FAIL")
     print("mamba3 S17 tail check: PASS")

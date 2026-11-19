@@ -47,7 +47,18 @@ check-device-zero = "mojo run -I . core/device_zero_check.mojo"
 # check; pass names to run some (`pixi run check-native-cpu spectral_prediction gbdt_public_fits`),
 # `--list` for the names. The CI builds each main once and runs one check per process.
 check-native-cpu = "python3 tools/generated_sources.py prepare --repo . && mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -I . checks/native_tests/run_cpu.mojo"
-check-native-gpu = "python3 tools/generated_sources.py prepare --repo . && mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/run_gpu.mojo"
+check-native-gpu = "python3 tools/generated_sources.py prepare --repo . && mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_RESIDENT_UPLOAD_COUNT=1 -I . checks/native_tests/run_gpu.mojo"
+# The registered checks that decide an opt-in arm, built with the arm's define (lane fx-missing-checks,
+# 2026-11-19). Each is the default build's check by name: the host words, the oracle and the device follow the define.
+check-ops-lm-head-v2-gemm-panel = "python3 tools/generated_sources.py prepare --repo . && mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_LMHEAD_FAST_GEMM_PANEL=1 -I . checks/native_tests/run_gpu.mojo ops_lm_head_v2"
+check-ops-lm-head-v2-gemm-panel-cpu = "python3 tools/generated_sources.py prepare --repo . && mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -D MOJOLEARN_LMHEAD_FAST_GEMM_PANEL=1 -I . checks/native_tests/run_cpu.mojo ops_lm_head_v2"
+check-transformer-backward-packed-worklist-epi = "python3 tools/generated_sources.py prepare --repo . && mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_GEMM_FAST_WORKLIST=1 -D MOJOLEARN_GEMM_FAST_EPI=1 -I . checks/native_tests/run_gpu.mojo transformer_backward_packed"
+check-transformer-backward-packed-dx-concat-worklist = "python3 tools/generated_sources.py prepare --repo . && mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_GEMM_FAST_DX_CONCAT=1 -D MOJOLEARN_GEMM_FAST_WORKLIST=1 -I . checks/native_tests/run_gpu.mojo transformer_backward_packed"
+check-transformer-backward-packed-dx-concat-worklist-epi = "python3 tools/generated_sources.py prepare --repo . && mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_GEMM_FAST_DX_CONCAT=1 -D MOJOLEARN_GEMM_FAST_WORKLIST=1 -D MOJOLEARN_GEMM_FAST_EPI=1 -I . checks/native_tests/run_gpu.mojo transformer_backward_packed"
+check-llama-refuse-row-scan-watermark = "python3 tools/generated_sources.py prepare --repo . && mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK=1 -I . checks/native_tests/run_gpu.mojo llama_refuse_row_scan"
+check-llama-refuse-row-scan-stride-cap = "python3 tools/generated_sources.py prepare --repo . && mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_LLAMA_FAST_KV_STRIDE_CAP=1 -I . checks/native_tests/run_gpu.mojo llama_refuse_row_scan"
+check-llama-refuse-row-scan-watermark-stride-cap = "python3 tools/generated_sources.py prepare --repo . && mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK=1 -D MOJOLEARN_LLAMA_FAST_KV_STRIDE_CAP=1 -I . checks/native_tests/run_gpu.mojo llama_refuse_row_scan"
+check-resident-second-call-xlinear-wb = "python3 tools/generated_sources.py prepare --repo . && mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_RESIDENT_UPLOAD_COUNT=1 -D MOJOLEARN_XLINEAR_FAST_WB_RESIDENT=1 -I . checks/native_tests/run_gpu.mojo resident_second_call"
 check-native-optimizer-state-input = "mojo run -I . training/checks/optimizer_state_input_check.mojo"
 check-native-optimizer-state-plan = "mojo run -I . training/checks/optimizer_state_plan_check.mojo"
 check-native-optimizer-input-copy = "mojo run -I . training/checks/optimizer_input_copy_check.mojo"

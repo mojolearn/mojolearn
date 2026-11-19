@@ -118,7 +118,7 @@ def _read_u32(
     count: Int,
 ) raises -> List[UInt32]:
     var h = ctx.enqueue_create_host_buffer[DType.uint32](count)
-    ctx.enqueue_copy(dst_buf=h, src_buf=buf)
+    download_buffer_into[DType.uint32](ctx, buf, h)
     ctx.synchronize()
     var out = List[UInt32]()
     for i in range(count):
@@ -132,7 +132,7 @@ def _read_f32(
     count: Int,
 ) raises -> List[Float32]:
     var h = ctx.enqueue_create_host_buffer[DType.float32](count)
-    ctx.enqueue_copy(dst_buf=h, src_buf=buf)
+    download_buffer_into[DType.float32](ctx, buf, h)
     ctx.synchronize()
     var out = List[Float32]()
     for i in range(count):
@@ -377,7 +377,7 @@ def run_checks() raises:
 # checks/ that no CI job ran. One process per check name in CI keeps any
 # fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
 from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
-from checks.native_tests.kit import upload_host_into
+from checks.native_tests.kit import download_buffer_into, upload_host_into
 
 
 def run_cases(column: Column, mut report: Report):

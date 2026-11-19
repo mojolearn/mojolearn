@@ -3,6 +3,6 @@ from sequence.exec import HostExec
 from autograd.checks.view_cases import run_view_checks
 
 
-def main() raises:
+def run_checks() raises:
     var ex = HostExec()
     run_view_checks(ex)

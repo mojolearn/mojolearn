@@ -26,7 +26,7 @@ def compare_kernel(results: MutPointer[Float32, MutAnyOrigin], words: MutPointer
     results.unsafe_store(3 * i + 2, ftz(identical_mul_add(ftz(a), ftz(b), acc)))
 
 
-def main() raises:
+def run_checks() raises:
     comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     comptime if not FUSED_HW_FTZ_FMA:
         print("SKIP: NVIDIA-only FMA boundary gate; other-column audit remains open")

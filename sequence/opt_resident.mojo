@@ -35,6 +35,7 @@ from sequence.ops import FP, OP_OPT, OPT_NADAM, OPT_SGD, OPT_SK_ADAM, OPT_SK_SGD
 from sequence.recurrent import OptConfig, OptState, opt_scalars, opt_step
 from sequence.ops_impl import adafactor_core, lamb_bias, lamb_core, lamb_table, opt_slots
 from sequence.seq_tensor import seq_tensor_ptr, seq_tensor_view
+from core.resident_upload_count import RUC_OPTIMIZER_STATE, resident_upload_note
 from core.shared_slot import SharedSlot
 
 #: Apple FAST transport switches of the resident step (lane
@@ -233,6 +234,7 @@ def _open_sized(kind: Int, n: Int, n0: Int, n1: Int, n2: Int, used: Int, nt: Int
     var tb = ctx.enqueue_create_buffer[DType.float32](max(len(tab), 1))
     if len(tab) > 0:
         ctx.enqueue_copy(dst_buf=tb, src_ptr=tab.unsafe_ptr())
+        resident_upload_note(RUC_OPTIMIZER_STATE, len(tab))  # check-only count (compiles to nothing by default)
     var nb = 0
     if len(tab) > 0:
         nb = Int(bitcast[DType.int32](tab[len(tab) - 1]))
@@ -398,6 +400,8 @@ def opt_resident_move(handle: Int, slot: Int, addr: Int, up: Bool) raises -> Int
     var hp = _host_fp(addr, "state")
     var ctx = sequence_ctx()
     var to_dev = up
+    if to_dev:
+        resident_upload_note(RUC_OPTIMIZER_STATE, pool[].n[h])  # check-only count (compiles to nothing by default)
     if s == 0:
         if to_dev:
             ctx.enqueue_copy(dst_buf=pool[].s0[h], src_ptr=hp)

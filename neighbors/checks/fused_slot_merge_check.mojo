@@ -21,12 +21,12 @@ Run: `mojo run -I . neighbors/checks/fused_slot_merge_check.mojo`.
 """
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from neighbors.checks.knn_check import check_fused_griddimx_merge
-from neighbors.checks.knn_identity_check import (
+from neighbors.checks.knn_identity_check_suite import (
     check_knn_fused_tie_set_is_geometry_invariant,
 )
 
 
-def main() raises:
+def run_checks() raises:
     comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
         raise Error("the slot-merge seam check requires IDENTICAL")
     check_fused_griddimx_merge()

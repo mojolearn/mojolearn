@@ -169,7 +169,7 @@ from solver.impl.cd import (
     cd_predict,
 )
 from solver.impl.solvers.params import LOSS_HINGE, LOSS_SQRD_LOSS
-from checks.native_tests.kit import download_host_into
+from checks.native_tests.kit import download_host_into, upload_whole_into
 
 from checks.mode_policy import KERNEL_FORM_IDENTICAL as IDENTICAL
 #: Where the device and oracle cards of `check_cd_device_equals_oracle` and
@@ -328,8 +328,8 @@ def _device_fit(
     var yv = y.create_sub_buffer[DType.float32](0, n)
     var cv = coef.create_sub_buffer[DType.float32](0, d)
     var rv = resid.create_sub_buffer[DType.float32](0, n)
-    ctx.enqueue_copy(dst_buf=xv, src_ptr=hx.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=yv, src_ptr=hy.unsafe_ptr())
+    upload_whole_into[DType.float32](ctx, xv, hx)
+    upload_whole_into[DType.float32](ctx, yv, hy)
     ctx.enqueue_memset(cv, Float32(0.0))
     ctx.synchronize()
     var trace: IdentityTrace

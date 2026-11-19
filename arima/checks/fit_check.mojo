@@ -1314,7 +1314,7 @@ def check_fit_refuses_by_name(ctx: DeviceContext) raises:
     _assert(refusals == 4, "fewer than four doors refused")
 
 
-def main() raises:
+def run_checks() raises:
     print("== arima/checks/fit_check.mojo [" + _mode_name() + "] FIT_N_OBS="
           + String(FIT_N_OBS) + " SALT=" + String(SALT) + " ==")
     var ctx = DeviceContext()

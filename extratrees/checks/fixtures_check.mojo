@@ -632,7 +632,7 @@ def check_all_constant(mut t: Tally) raises:
     print("   columns:", f.data.n_cols, " all constant, node impure with", mixed, "differing labels")
 
 
-def main() raises:
+def run_checks() raises:
     print("fixtures_check -- verifying the ExtraTrees fixture generators")
     print("seed:", SEED, " reference: sklearn 1.9.0 (77def0e)")
     print()

@@ -94,7 +94,7 @@ def _check_small_bodies(m: Int, n: Int, k: Int) raises:
         assert_true(((m + rows - 1) // rows) * ((n + 63) // 64) >= gemm_tile_min_blocks())
 
 
-def main() raises:
+def run_checks() raises:
     # The NVIDIA floor from the SM count (pure rule, any column): the measured
     # part keeps its measured floor, neighbours within a third share it, and
     # an unknown count is the column default.

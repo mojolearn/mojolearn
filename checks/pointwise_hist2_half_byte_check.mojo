@@ -219,7 +219,7 @@ def run_checks() raises:
                 d_out.unsafe_ptr(),
                 grid_dim=(1, 1, 1), block_dim=(PW_HB_BLOCK, 1, 1),
             )
-        ctx.enqueue_copy(dst_buf=h_out, src_buf=d_out)
+        download_buffer_into[DType.float32](ctx, d_out, h_out)
         ctx.synchronize()
 
         var bad = 0
@@ -297,7 +297,7 @@ def run_checks() raises:
         d_out.unsafe_ptr(),
         grid_dim=(1, 1, 1), block_dim=(PW_HB_BLOCK, 1, 1),
     )
-    ctx.enqueue_copy(dst_buf=h_out, src_buf=d_out)
+    download_buffer_into[DType.float32](ctx, d_out, h_out)
     ctx.synchronize()
 
     var bad_b = 0
@@ -355,7 +355,7 @@ def run_checks() raises:
 # checks/ that no CI job ran. One process per check name in CI keeps any
 # fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
 from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
-from checks.native_tests.kit import upload_whole_into
+from checks.native_tests.kit import download_buffer_into, upload_whole_into
 
 
 def run_cases(column: Column, mut report: Report):

@@ -97,7 +97,3 @@ def run_checks() raises:
     if not refused:raise Error("closed KDE pool reuse admitted")
     print("I20_POOL_LIFECYCLE_PASS")
     check_resident()
-
-
-def main() raises:
-    run_checks()

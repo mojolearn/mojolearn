@@ -572,7 +572,7 @@ def arm_e_determinism(ctx: DeviceContext) raises -> Int:
     return fails
 
 
-def main() raises:
+def run_checks() raises:
     print("train_check: ensemble/decisiontree/batched_levelalgo/builder.mojo")
     print("  end to end on device -- quantiles, sampling, histogram, cdf,")
     print("  gain, split reduction, partition, leaf")

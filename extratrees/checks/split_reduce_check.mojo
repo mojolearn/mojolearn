@@ -795,7 +795,7 @@ def flatten(
     return out^
 
 
-def main() raises:
+def run_checks() raises:
     comptime assert has_accelerator(), "this check must run on a GPU"
     var failures = 0
 

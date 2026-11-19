@@ -173,7 +173,7 @@ def check_prepared_peer() raises:
     _ = curve^
 
 
-def main() raises:
+def run_checks() raises:
     var cases = 0
     for at in range(1, 6):
         check_replica(1, at)

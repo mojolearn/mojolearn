@@ -98,10 +98,10 @@ say "building run_gpu ($n checks planned)"
 bsampler=$(busy_sampler "$RES/busy_cores_build.txt")
 bstart=$(date +%s)
 if [ -x /usr/bin/time ]; then
-    /usr/bin/time -v -o "$RES/time/build-gpu.txt" pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . \
+    /usr/bin/time -v -o "$RES/time/build-gpu.txt" pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_RESIDENT_UPLOAD_COUNT=1 -I . \
         -o "$RES/bin/run_gpu" checks/native_tests/run_gpu.mojo > "$RES/logs/build-gpu.log" 2>&1
 else
-    pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . -o "$RES/bin/run_gpu" checks/native_tests/run_gpu.mojo \
+    pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_RESIDENT_UPLOAD_COUNT=1 -I . -o "$RES/bin/run_gpu" checks/native_tests/run_gpu.mojo \
         > "$RES/logs/build-gpu.log" 2>&1
 fi
 brc=$?

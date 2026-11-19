@@ -334,7 +334,7 @@ def run_case(ctx: DeviceContext, n_rows: Int) raises -> Int:
     # word is the leaf id. Recompute it from `host_bins` and the split list
     # and compare all 4,000, not their histogram.
     var h_doc_bins = ctx.enqueue_create_host_buffer[DType.uint32](N_ROWS)
-    ctx.enqueue_copy(dst_buf=h_doc_bins, src_buf=fp_doc_bins)
+    download_buffer_into[DType.uint32](ctx, fp_doc_bins, h_doc_bins)
     ctx.synchronize()
 
     var wrong = 0
@@ -518,7 +518,7 @@ def run_case(ctx: DeviceContext, n_rows: Int) raises -> Int:
 # checks/ that no CI job ran. One process per check name in CI keeps any
 # fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
 from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
-from checks.native_tests.kit import download_host_into, upload_host_into
+from checks.native_tests.kit import download_buffer_into, download_host_into, upload_host_into
 
 
 def run_cases(column: Column, mut report: Report):

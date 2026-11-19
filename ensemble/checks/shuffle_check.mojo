@@ -103,7 +103,7 @@ def _u64(s: String) raises -> UInt64:
     return v
 
 
-def main() raises:
+def run_checks() raises:
     print("shuffle_check: ensemble/checks/shuffle_iterator.mojo")
     print("  against", ORACLE, "-- CCCL 3.4.3 (9d65c77f), compiled and run")
 

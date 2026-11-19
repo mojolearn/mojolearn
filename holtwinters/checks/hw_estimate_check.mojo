@@ -131,7 +131,7 @@ def check_heuristic_default_unchanged(ctx: DeviceContext) raises -> Int:
     return bad
 
 
-def main() raises:
+def run_checks() raises:
     print("== holtwinters/checks/hw_estimate_check.mojo [" + numeric_mode_name() + "] ==")
     var ctx = DeviceContext()
     var bad = check_device_equals_oracle(ctx)

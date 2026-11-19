@@ -148,7 +148,7 @@ def check_softmax() raises:
     _ = z^  # the raw pointers above borrow z's storage: keep it alive past them
 
 
-def main() raises:
+def run_checks() raises:
     check_sigmoid()
     check_softmax()
     print("link_seams_check: PASS")

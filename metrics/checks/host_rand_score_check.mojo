@@ -29,7 +29,7 @@ def _check(first: List[Int32], second: List[Int32]) raises:
         raise Error("host rand_score bucket numerator differs from pair walk")
 
 
-def main() raises:
+def run_checks() raises:
     _check(List[Int32](), List[Int32]())
     var one: List[Int32] = [Int32(7)]
     var one_other: List[Int32] = [Int32(-9)]

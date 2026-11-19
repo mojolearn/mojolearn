@@ -52,7 +52,7 @@ def mix64(x: UInt64) -> UInt64:
     return h
 
 
-def main() raises:
+def run_checks() raises:
     var cells = 0
 
     # --- ceil_log2, exactly, at and around every power of two --------------

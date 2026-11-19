@@ -360,7 +360,7 @@ struct PartitionRun(Copyable, Movable):
     var n_swaps: List[Int32]
 
 
-def main() raises:
+def run_checks() raises:
     comptime assert has_accelerator(), "this check must run on a GPU"
 
     var failures = 0

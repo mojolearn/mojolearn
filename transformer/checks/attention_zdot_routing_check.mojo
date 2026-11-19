@@ -10,7 +10,7 @@ def require(got: Int, want: Int, label: String) raises:
         raise Error(label + ": got " + String(got) + ", want " + String(want))
 
 
-def main() raises:
+def run_checks() raises:
     # TOMBSTONE: MOJOLEARN_ATTN_ES_TQ16, MOJOLEARN_ATTN_ES_TQ8 (opt-in forced tile arms, no A/B recorded; the measured routing stays) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 284d3f2314.
     # Restore: git apply experiments/removed/MOJOLEARN_ATTN_ES_TQ16.patch
     comptime if TARGET_COLUMN == COLUMN_NVIDIA:

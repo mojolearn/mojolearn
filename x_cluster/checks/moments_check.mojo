@@ -63,7 +63,7 @@ def _case(n: Int, d: Int, kc: Int, seed: UInt64, tag: String) raises:
     tr.record_list_f32("x_cluster.moments." + tag, got)
 
 
-def main() raises:
+def run_checks() raises:
     _case(200, 3, 4, 15, "5110")
     # 5121: the device's tiled kernel over several row tiles (T = 256 rows
     # at d = 5), more covariance chains than the block has threads (d = 17:

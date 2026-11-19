@@ -23,7 +23,7 @@ from x_neighbors.host_ops import (
 )
 
 
-def main() raises:
+def run_checks() raises:
     var tr = IdentityTrace()
     # ---- 5200: the SMO on an rbf kernel matrix whose rows 1 and 2 are equal (tied gradients)
     var n = 30

@@ -81,7 +81,7 @@ def _shipped_svd(a: List[FF], k: Int, mut u: List[FF], mut sv: List[FF], mut v: 
         sv.append(FF(svh[j], svl[j]))
 
 
-def main() raises:
+def run_checks() raises:
     var n = 96
     var tr = IdentityTrace()
     var fixtures = List[List[FF]]()
