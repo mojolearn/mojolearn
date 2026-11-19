@@ -57,7 +57,8 @@ Who reads the rows
     FLUSH_OFF       checks/numerics.mojo: ftz, ftz_simd
     VENDOR_MATH     checks/numerics.mojo: identical_exp ... identical_clamp
     TILE_FREE       checks/kernel_matrix.mojo: lib_block_size_for
-    MATRIX_UNITS    no seam yet (GEMM dispatch, a later stage)
+    MATRIX_UNITS    gemm/fast_matrix_units.mojo: GEMM_FAST_MATRIX_UNITS (the NVIDIA TF32 arm,
+                    `-D MOJOLEARN_GEMM_FAST_MATRIX_UNITS=<kind>`, a term of the row)
     WAITS_ELIDED    no seam yet (only waits that can move a bit)
 
 `MODE_POLICY_MASK` has bit i set when row i is relaxed. Bindings export it so
@@ -65,6 +66,7 @@ verification and the compiled-kernel audits read the rows from the binary.
 """
 
 from std.sys.compile import is_defined
+from std.sys.defines import get_defined_int
 from core.package_profile import identical_mode_enabled
 from core.accelerator_target import (
     TARGET_HAS_AMD_GPU,
@@ -160,23 +162,33 @@ comptime POLICY_COLUMN = _policy_column()
 # The contract: does this build promise the same bits on every vendor?
 comptime CONTRACT_IDENTICAL = POLICY_BUILD == POLICY_BUILD_IDENTICAL
 
+# The family arms that are a term of a row. A leaf cannot import the family,
+# so the row reads the family's define here and the family reads the row
+# back (never the define alone): the table stays the single source.
+#   MOJOLEARN_GEMM_FAST_MATRIX_UNITS=<kind> (gemm/fast_matrix_units.mojo, the
+#   NVIDIA tensor-core products): any non-zero kind relaxes MATRIX_UNITS.
+comptime _GEMM_MATRIX_UNITS_REQUESTED = get_defined_int["MOJOLEARN_GEMM_FAST_MATRIX_UNITS", 0]() != 0
+
 # Any row define at all. Read by the compile error below, which must not
 # depend on the resolved rows.
 comptime _ANY_ROW_DEFINE = (
-    is_defined["MOJOLEARN_MODE_FAST_FOLD_FREE"]()
-    or is_defined["MOJOLEARN_MODE_FAST_CONTRACT_FREE"]()
-    or is_defined["MOJOLEARN_MODE_FAST_FLUSH_OFF"]()
-    or is_defined["MOJOLEARN_MODE_FAST_VENDOR_MATH"]()
-    or is_defined["MOJOLEARN_MODE_FAST_MATRIX_UNITS"]()
-    or is_defined["MOJOLEARN_MODE_FAST_WAITS_ELIDED"]()
-    or is_defined["MOJOLEARN_MODE_FAST_TILE_FREE"]()
+    _GEMM_MATRIX_UNITS_REQUESTED
+    or (
+        is_defined["MOJOLEARN_MODE_FAST_FOLD_FREE"]()
+        or is_defined["MOJOLEARN_MODE_FAST_CONTRACT_FREE"]()
+        or is_defined["MOJOLEARN_MODE_FAST_FLUSH_OFF"]()
+        or is_defined["MOJOLEARN_MODE_FAST_VENDOR_MATH"]()
+        or is_defined["MOJOLEARN_MODE_FAST_MATRIX_UNITS"]()
+        or is_defined["MOJOLEARN_MODE_FAST_WAITS_ELIDED"]()
+        or is_defined["MOJOLEARN_MODE_FAST_TILE_FREE"]()
+    )
 )
 
 
 def _row(row: Int, requested: Bool) -> Bool:
     """Resolve one row for this build. Every row passes through here, so any
     module that reads a row also compiles the refusal."""
-    comptime assert not (CONTRACT_IDENTICAL and _ANY_ROW_DEFINE), "a MOJOLEARN_MODE_FAST_* relaxation was requested in a build that promises identical bits; relaxations are effective only in a fast build (-D MOJOLEARN_MODE_FAST_ROWS)"
+    comptime assert not (CONTRACT_IDENTICAL and _ANY_ROW_DEFINE), "a MOJOLEARN_MODE_FAST_* relaxation (or a family arm of one, MOJOLEARN_GEMM_FAST_MATRIX_UNITS) was requested in a build that promises identical bits; relaxations are effective only in a fast build (-D MOJOLEARN_MODE_FAST_ROWS)"
     return policy_row_default(row, POLICY_BUILD, POLICY_COLUMN) or requested
 
 
@@ -189,7 +201,10 @@ comptime ROW_FLUSH_OFF = _row(POLICY_ROW_FLUSH_OFF, is_defined["MOJOLEARN_MODE_F
 # Math library: exp, log, sqrt, division and the rest use the vendor's forms.
 comptime ROW_VENDOR_MATH = _row(POLICY_ROW_VENDOR_MATH, is_defined["MOJOLEARN_MODE_FAST_VENDOR_MATH"]())
 # Matrix units: reduced-precision products (TF32, BF16, MFMA forms).
-comptime ROW_MATRIX_UNITS = _row(POLICY_ROW_MATRIX_UNITS, is_defined["MOJOLEARN_MODE_FAST_MATRIX_UNITS"]())
+comptime ROW_MATRIX_UNITS = _row(
+    POLICY_ROW_MATRIX_UNITS,
+    is_defined["MOJOLEARN_MODE_FAST_MATRIX_UNITS"]() or _GEMM_MATRIX_UNITS_REQUESTED,
+)
 # Waits: only the waits whose removal can move a bit.
 comptime ROW_WAITS_ELIDED = _row(POLICY_ROW_WAITS_ELIDED, is_defined["MOJOLEARN_MODE_FAST_WAITS_ELIDED"]())
 # Tile and block shape: only the tiles that bound a float fold.

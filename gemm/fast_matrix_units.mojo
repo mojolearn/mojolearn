@@ -84,6 +84,7 @@ from linalg.matmul import matmul
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_NVIDIA
+from checks.mode_policy import CONTRACT_IDENTICAL, POLICY_BUILD, POLICY_BUILD_FAST_ROWS, ROW_MATRIX_UNITS
 from core.column_stats import CUDA_MAX_GRID_YZ, TRANSPOSE_TILE, transpose_kernel
 from gemm.contract import OP_NN, OP_NT, OP_TN
 
@@ -107,9 +108,12 @@ def _matrix_units_checked() -> Bool:
         "MOJOLEARN_GEMM_FAST_MATRIX_UNITS=2 (bf16): no BF16 tensor-core kernel exists in this tree; the only"
         " floating matrix-unit product is linalg.matmul's TF32 (value 1)"
     )
-    # When checks/mode_policy.mojo (lane fx-mode-policy-core) is merged, this test is `not CONTRACT_IDENTICAL`
-    # and the arm is one term of ROW_MATRIX_UNITS; the define it reads is the same.
-    comptime assert MATRIX_UNITS_KIND == MATRIX_UNITS_KIND_OFF or is_defined["MOJOLEARN_MODE_FAST_ROWS"](), (
+    # The mode policy table is the single source (checks/mode_policy.mojo): the arm is a term of its
+    # matrix-units row, which that module resolves from this same define and refuses in an identical build. The
+    # arm compiles only in the fast-rows build kind with the row on, so MODE_POLICY_MASK carries the row's bit.
+    comptime assert MATRIX_UNITS_KIND == MATRIX_UNITS_KIND_OFF or (
+        POLICY_BUILD == POLICY_BUILD_FAST_ROWS and not CONTRACT_IDENTICAL and ROW_MATRIX_UNITS
+    ), (
         "MOJOLEARN_GEMM_FAST_MATRIX_UNITS is a relaxation of `fast`: it needs -D MOJOLEARN_MODE_FAST_ROWS and is"
         " refused in a build that promises identical bits"
     )
