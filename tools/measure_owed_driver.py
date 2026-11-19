@@ -32,6 +32,10 @@ next case runs. Drivers (the row's "driver" field):
                 arm may be a B wheel set the row names
   gemm_shapes   linalg.matmul(a, b) (fp32, A [m, k] @ B [k, n], seeded standard normal) at each (m, n, k) case the
                 row names: the neighbouring and non-board shapes of a GEMM kernel arm; an arm may be a B wheel set
+  rnn_shapes    LSTMRegressor / GRURegressor / RNNRegressor .fit on a seeded synthetic series, X (rows, window,
+                features), at each case the row names (cell, rows, window, features, hidden_size, num_layers,
+                batch_size, max_epochs): the neighbouring shapes and the non-board model of a recurrent trainer
+                arm; each line carries the fit's last loss_curve_ value beside its time; an arm may be a B wheel set
 
 Runs nothing at import; standard library + numpy + pandas + mojolearn in the arm's venv only (it never imports the
 repo's tools). Serial by nature: the cases are timed calls on one GPU and must not share it.
@@ -327,7 +331,50 @@ def case_gemm_shapes(row, arm_cases):
     return out
 
 
-DRIVERS = {"gemm_shapes": case_gemm_shapes, "f16_widen": case_f16_widen, "while_loop": case_while_loop, "pandas_input": case_pandas_input, "mlp_fit": case_mlp_fit,
+def case_rnn_shapes(row, arm_cases):
+    """A recurrent regressor's fit at each case of the row's shape.cases: {"cell" ("lstm", "gru" or "rnn"; default
+    "lstm"), "rows", "window", "features", "hidden_size", "num_layers", "batch_size", "max_epochs"} and an optional
+    "note". The series is seeded (default_rng(0)): X standard normal (rows, window, features), y the mean of each
+    window's last step plus a little noise, so the loss is a real regression loss. Adam at the board lanes' explicit
+    settings (lr 1e-3, betas (0.9, 0.999), eps 1e-8, no weight decay), shuffle on, random_state 7. The label
+    carries the last loss_curve_ value of the timed fit (loss_curve_), so two arms' rows show their quality side by side."""
+    import numpy as np
+    ml = _ml()
+    out = []
+    for c in row["shape"]["cases"]:  # serial by nature: timed calls on one GPU
+        cell = str(c.get("cell", "lstm")).lower()
+        n, t, d = int(c["rows"]), int(c["window"]), int(c["features"])
+        hidden, layers = int(c["hidden_size"]), int(c["num_layers"])
+        batch, epochs = int(c["batch_size"]), int(c["max_epochs"])
+        label = "%s.fit rows=%d window=%d features=%d hidden=%d layers=%d batch=%d epochs=%d" % (
+            cell, n, t, d, hidden, layers, batch, epochs)
+        names = {"lstm": "LSTMRegressor", "gru": "GRURegressor", "rnn": "RNNRegressor"}
+        if cell not in names:
+            out.append((label, None, "REFUSED: ValueError: cell must be lstm, gru or rnn"))
+            continue
+        rng = np.random.default_rng(0)
+        X = rng.standard_normal((n, t, d)).astype(np.float32)
+        y = (X[:, -1, :].mean(axis=1) + 0.1 * rng.standard_normal(n)).astype(np.float32)
+        kept = {}
+
+        def fit():
+            kept["est"] = getattr(ml, names[cell])(
+                hidden_size=hidden, num_layers=layers, optimizer="adam", learning_rate=1e-3,
+                optimizer_options=dict(betas=(0.9, 0.999), eps=1e-8, weight_decay=0.0),
+                batch_size=batch, max_epochs=epochs, shuffle=True, random_state=7).fit(X, y)
+
+        ms, why = timed(fit)
+        if why is None:
+            try:
+                losses = np.asarray(getattr(kept["est"], "loss_curve_"), dtype=np.float64).ravel()
+                label += " last_loss=%.6g" % float(losses[-1])
+            except Exception as exc:  # noqa: BLE001 -- the time stands; the loss is reported as unread
+                label += " last_loss=unread(%s)" % type(exc).__name__
+        out.append((label, ms, why))
+    return out
+
+
+DRIVERS = {"rnn_shapes": case_rnn_shapes, "gemm_shapes": case_gemm_shapes, "f16_widen": case_f16_widen, "while_loop": case_while_loop, "pandas_input": case_pandas_input, "mlp_fit": case_mlp_fit,
            "kde_widths": case_kde_widths, "mamba_backward": case_mamba_backward, "cnn_widths": case_cnn_widths,
            "samba_train_step": case_samba_train_step,
            "samba_step": case_samba_step}
