@@ -621,7 +621,11 @@ loader.exec_module(m)
 f = getattr(m, fn, None)
 if name == '_mojolearn_byte_lm':
     assert m.byte_lm_numeric_mode() == 1, 'Byte LM must be IDENTICAL'
-    assert m.byte_lm_profile() == 'mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1', 'Wrong byte LM profile'
+    # Base profile plus this binary's arithmetic tags (an arm define such as MOJOLEARN_GEMM_FAST_LEAF512 adds
+    # `-gemm-leaf512`); the runtime admits exactly that (packaging/byte_lm_profile.py).
+    _ps = importlib.util.spec_from_file_location("_byte_lm_profile", os.path.join(sys.argv[3], "packaging", "byte_lm_profile.py"))
+    _pm = importlib.util.module_from_spec(_ps); _ps.loader.exec_module(_pm)
+    _pm.check(m.byte_lm_profile())
 print("NO-READBACK" if f is None else str(f()))
 PY
 )
