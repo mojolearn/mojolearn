@@ -158,6 +158,7 @@ from checks.native_tests.rankn_math import register as register_rankn_math
 from checks.native_tests.rankn_views import register as register_rankn_views
 from checks.native_tests.resample_cross_vendor_fold import register as register_resample_cross_vendor_fold
 from checks.native_tests.resample_cv_row_order import register as register_resample_cv_row_order
+from checks.native_tests.resident_second_call import register as register_resident_second_call
 from checks.native_tests.runner import Check
 from checks.native_tests.sequence_croston import register as register_sequence_croston
 from checks.native_tests.sequence_garch import register as register_sequence_garch
@@ -595,6 +596,7 @@ def all_checks() -> List[Check]:
     checks.append(register_rankn_views())
     checks.append(register_resample_cross_vendor_fold())
     checks.append(register_resample_cv_row_order())
+    checks.append(register_resident_second_call())
     checks.append(register_sequence_croston())
     checks.append(register_sequence_garch())
     checks.append(register_sequence_moe())

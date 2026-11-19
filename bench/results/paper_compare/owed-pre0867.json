@@ -697,6 +697,11 @@
    "define": "MOJOLEARN_GEMM_FAST_DX_CONCAT",
    "status": "define in code (autograd/kernels/transformer.mojo BWD_GEMM_DX_CONCAT, bwd_dx_concat_pack_kernel, bwd_dx_concat3; autograd/rules_transformer.mojo _dx_fanin_cat; transformer/checks/transformer_backward_oracle.mojo BWD_HOST_DX_CONCAT; IDENTICAL, no poison build): B = the transformer backward's q/k/v fan-in dX (S29-32) as ONE product, d(norm1.out) = GEMM_contract([dQ | dK | dV], [Wq; Wk; Wv]) over K = q_width + 2 kv_width walked ascending in that order, after one pack launch that bit-copies the three gradients and the three weights into two stage scratch buffers; A = the default: three products into tmp0/tmp1/tmp2, then bwd_add3_kernel (q + k) + v. BITS CHANGE under B on every column and in the host oracle together (another rounding order of the same sum): digests of d(norm1.out) and of everything downstream of it MOVE, and must be equal between the device and the host column of the B build. Launches for the fan-in dX: pack 1 + one product (2 where it runs as groups + fold), against three products (6) + 1. gate/up (S9) is not changed",
    "owed": "RUN"
+  },
+  "xlinear-wb-resident": {
+   "define": "MOJOLEARN_XLINEAR_FAST_WB_RESIDENT",
+   "status": "define in code (x_linear/device.mojo XL_FAST_WB_RESIDENT, _decision_wb; the four decision entries decision_device, decision_codes_device, decision_rows_device, decision_huber_out_device call it): B = the fitted weight block [coef | intercept] of the last decision call stays on the device with a host copy of its words; a call whose block has the same length and bits takes the resident buffer (one compare, no upload, no allocation), any other block uploads once (drained) and replaces it; A = the default, the block uploaded beside the queries on every predict / decision_function / predict_proba. Same words to decision_kernel: no bit moves. Default off; lane fx-missing-checks (2026-11-19)",
+   "owed": "RUN"
   }
  },
  "rows": [
@@ -4177,6 +4182,27 @@
     ]
    },
    "decides": "B at least as fast as the candidate at both cases, quality equal; a slower case blocks the promotion decided on fx-gemm-dx-concat-rows. OWED TOOLING (shared with fx-gemm-epi-sizes): the board harness has no driver for a transformer train step at a caller-given d_model; until one exists these two cases are timed with the lm-train-step recipe at the stated widths"
+  },
+  {
+   "id": "xlinear-wb-resident",
+   "source": "lane fx-missing-checks (2026-11-19), item 4 (a second identical call uploads nothing): checks/native_tests/resident_second_call.mojo case 5 counts one fitted host-to-device copy per decision call in the default build; result file ~/mojolearn-evidence/briefs-20261118/fx-missing-checks-RESULT.md",
+   "kind": "ab",
+   "lane": [
+    "sgd-clf",
+    "sgd-reg",
+    "huber",
+    "bayesian-ridge",
+    "poisson",
+    "lars",
+    "lasso-lars"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "xlinear-wb-resident"
+   ],
+   "decides": "infer (predict) cells only. Keep A (the default, the weight block uploaded per call) unless B is faster at equal quality on the NVIDIA L40S, base and arm back to back in one job; then B becomes the default with a _OFF define and the per-call upload is the owed deletion. Digests must not move on any cell (the same words reach the kernel). Expected: one host-to-device copy fewer per predict (the box's per-upload cost, 0.01 to 0.3 ms) against a lock and a compare of k (d + 1) words. Before a flip run pixi check-resident-second-call-xlinear-wb (the second identical call uploads nothing; another block is not served the old words), and time a neighbouring shape (a 2,000-feature model, a 50-class SGDClassifier) and a non-board dataset (no dimension targeting). Lanes named from the x_linear family's estimators; a lane whose predict does not reach x_linear's decision entries shows no change and is dropped from the row"
   }
  ]
 }

@@ -101,7 +101,9 @@ from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from checks.kernel_matrix import TARGET_COLUMN, lib_smem_page_fits_for
-from core.shared_slot import SharedSlot
+from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
+from core.host_bytes_equal import host_bytes_equal
+from core.resident_upload_count import RUC_ISOTONIC, RUC_X_LINEAR, resident_upload_note
 
 
 struct _LinearContext(Defaultable, Movable):
@@ -5442,6 +5444,9 @@ def _iso_predict_grid(x: FP, n_x: Int, thr: FP, n_thr: Int, n: Int, ip: List[Int
     var dout = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
     ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
     ctx.enqueue_copy(dst_buf=dk, src_ptr=hk.unsafe_ptr())
+    # check-only count (compiles to nothing by default): the knots ride the one upload that carries the
+    # zero status words of this call, so there is no separate fitted copy to keep resident
+    resident_upload_note(RUC_ISOTONIC, n_thr)
     # thresholds, bounds and status ride ONE upload; the kernel takes them as three views of it
     # (three pointers computed from one are refused as mutable aliases of each other)
     var dstat = dk.create_sub_buffer[DType.float32](status_at, 2)
@@ -6153,6 +6158,72 @@ def decision_codes_kernel(s: FP, n: Int32, k: Int32, strict: Int32, below: Int32
         codes.unsafe_store(i, decision_code_row(s, i, Int(k), Int(strict), Int(below), Int(above)))
 
 
+#: lane fx-missing-checks (2026-11-19), EXPERIMENT ARM, default OFF, A/B owed
+#: (docs/apple-fast/EXPERIMENTS.md; owed row xlinear-wb-resident):
+#: `-D MOJOLEARN_XLINEAR_FAST_WB_RESIDENT`. Every decision entry (predict,
+#: decision_function, predict_proba of the linear models) uploads the fitted
+#: weight block [coef | intercept] on every call, beside the queries: a second
+#: host-to-device copy per predict whose words did not change since the last
+#: call. Under the arm the last block stays on the device with a host copy of
+#: its words; a call whose block has the same length and the same bits takes
+#: the resident buffer (one compare of k (d + 1) words, no upload, no
+#: allocation). Any other block uploads once and replaces it. The same words
+#: reach `decision_kernel`: no bit moves. Decided by timing because the hit
+#: costs a lock and a compare per call where the default pays the copy.
+comptime XL_FAST_WB_RESIDENT = is_defined["MOJOLEARN_XLINEAR_FAST_WB_RESIDENT"]()
+
+
+struct _WbResident(Defaultable, Movable):
+    """The arm's one resident weight block: the device buffer, the words it
+    holds (for the hit test) and the slot's lock word."""
+    var words: List[Float32]
+    var buf: Optional[DeviceBuffer[DType.float32]]
+    var lock: List[Int64]
+
+    def __init__(out self):
+        self.words = List[Float32]()
+        self.buf = Optional[DeviceBuffer[DType.float32]]()
+        self.lock = List[Int64](length=1, fill=0)
+
+
+comptime _WB_NAME = "MojolearnXLinearWbResidentIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXLinearWbResidentFastV1"
+# Referenced only under the arm's comptime branch: a default build never creates the slot.
+comptime X_LINEAR_WB_RESIDENT = SharedSlot[_WbResident, _WB_NAME]
+
+
+def _decision_wb(ctx: DeviceContext, wb: FP, count: Int) raises -> DeviceBuffer[DType.float32]:
+    """The weight block `wb[0:count]` on the device for one decision entry.
+    Default: a new buffer and one queued copy that reads `wb` until the
+    entry's wait, as each entry did inline. Under XL_FAST_WB_RESIDENT: the
+    resident buffer when it holds these bits; else one upload, drained here
+    (the kept buffer must hold the words before `wb` can be freed by a
+    caller whose entry raises before its wait), which replaces it. Call
+    site: once per decision entry, no loop reaches it."""
+    comptime if XL_FAST_WB_RESIDENT:
+        var slot = X_LINEAR_WB_RESIDENT.get_or_create_ptr()
+        var lock = slot[].lock.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
+        shared_slot_lock(lock)
+        try:
+            if (slot[].buf and len(slot[].words) == count
+                    and host_bytes_equal(Int(slot[].words.unsafe_ptr()), Int(wb), 4 * count)):
+                return slot[].buf.value().copy()
+            var fresh = ctx.enqueue_create_buffer[DType.float32](count)
+            ctx.enqueue_copy(dst_buf=fresh, src_ptr=wb)
+            ctx.synchronize()
+            resident_upload_note(RUC_X_LINEAR, count)  # check-only count (compiles to nothing by default)
+            var words = List[Float32](length=count, fill=Float32(0))
+            copy_f32(wb, words.unsafe_ptr(), count)
+            slot[].words = words^
+            slot[].buf = fresh.copy()
+            return fresh^
+        finally:
+            shared_slot_unlock(lock)
+    var dwb = ctx.enqueue_create_buffer[DType.float32](count)
+    ctx.enqueue_copy(dst_buf=dwb, src_ptr=wb)
+    resident_upload_note(RUC_X_LINEAR, count)  # check-only count (compiles to nothing by default)
+    return dwb^
+
+
 def _decision_status(ctx: DeviceContext, dx: DeviceBuffer[DType.float32], count: Int, status: Int) raises -> DeviceBuffer[DType.int32]:
     """The deferred finite test of a decision entry's X (lane
     a1b-doors-opt-in-trees-linear; core/admitted_finite_status.mojo): over
@@ -6191,12 +6262,11 @@ def decision_codes_device(
     (`decision_code_row`); only the n int32 codes come down."""
     var ctx = linear_ctx()
     var dx = ctx.enqueue_create_buffer[DType.float32](max(n * d, 1))
-    var dwb = ctx.enqueue_create_buffer[DType.float32](k * (d + 1))
     var dout = ctx.enqueue_create_buffer[DType.float32](max(n * k, 1))
     var dc = ctx.enqueue_create_buffer[DType.int32](max(n, 1))
     if n * d > 0:
         ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
-    ctx.enqueue_copy(dst_buf=dwb, src_ptr=wb)
+    var dwb = _decision_wb(ctx, wb, k * (d + 1))
     var dstat = _decision_status(ctx, dx, n * d, status)
     if n > 0:
         ctx.enqueue_function[decision_kernel](
@@ -6232,7 +6302,6 @@ def decision_rows_device(x: FP, wb: FP, n: Int, d: Int, k: Int, link: Int, rows_
     var ctx = linear_ctx()
     var n_res = n * (2 if k == 1 else k)
     var dx = ctx.enqueue_create_buffer[DType.float32](max(n * d, 1))
-    var dwb = ctx.enqueue_create_buffer[DType.float32](k * (d + 1))
     var dout = ctx.enqueue_create_buffer[DType.float32](max(n * k, 1))
     var dres = ctx.enqueue_create_buffer[DType.float32](max(n_res, 1))
     var d_s64 = ctx.enqueue_create_buffer[DType.uint64](1)
@@ -6241,7 +6310,7 @@ def decision_rows_device(x: FP, wb: FP, n: Int, d: Int, k: Int, link: Int, rows_
     var d_d8 = ctx.enqueue_create_buffer[DType.uint8](1)
     if n * d > 0:
         ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
-    ctx.enqueue_copy(dst_buf=dwb, src_ptr=wb)
+    var dwb = _decision_wb(ctx, wb, k * (d + 1))
     var dstat = _decision_status(ctx, dx, n * d, status)
     if n > 0:
         ctx.enqueue_function[decision_kernel](
@@ -6280,7 +6349,6 @@ def decision_huber_out_device(
     # py2mojo_rows (y and pred uploaded again); the same two kernels' words.
     var ctx = linear_ctx()
     var dx = ctx.enqueue_create_buffer[DType.float32](max(n * d, 1))
-    var dwb = ctx.enqueue_create_buffer[DType.float32](d + 1)
     var dpred = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
     var dy = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
     var dflags = ctx.enqueue_create_buffer[DType.uint8](max(n, 1))
@@ -6289,7 +6357,7 @@ def decision_huber_out_device(
     var d_d64 = ctx.enqueue_create_buffer[DType.uint64](1)
     if n * d > 0:
         ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
-    ctx.enqueue_copy(dst_buf=dwb, src_ptr=wb)
+    var dwb = _decision_wb(ctx, wb, d + 1)
     if n > 0:
         ctx.enqueue_copy(dst_buf=dy, src_ptr=y)
         ctx.enqueue_function[decision_kernel](
@@ -6318,11 +6386,10 @@ def decision_huber_out_device(
 def decision_device(x: FP, wb: FP, n: Int, d: Int, k: Int, link: Int, res: FP, status: Int = 0) raises:
     var ctx = linear_ctx()
     var dx = ctx.enqueue_create_buffer[DType.float32](max(n * d, 1))
-    var dwb = ctx.enqueue_create_buffer[DType.float32](k * (d + 1))
     var dout = ctx.enqueue_create_buffer[DType.float32](max(n * k, 1))
     if n * d > 0:
         ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
-    ctx.enqueue_copy(dst_buf=dwb, src_ptr=wb)
+    var dwb = _decision_wb(ctx, wb, k * (d + 1))
     var dstat = _decision_status(ctx, dx, n * d, status)
     var total = n * k
     if total > 0:
