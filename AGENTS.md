@@ -690,20 +690,27 @@ Ends when Andrew says. It is not the product direction: AMD and Apple remain in 
   is a regression), no rule may key on a benchmark shape or dataset ("No dimension targeting"), and no row is
   "fixed" by measuring it on a smaller case. Not piecemeal: one wave fixes everything the last measurement showed.
 
-### TEMPORARY: time our latest against the stored 0.8.55 board, approximately; fix wide gaps; no haste (Andrew, 2026-11-18)
+### TEMPORARY: we time ourselves against ourselves, on the same pod; 0.8.55 is retired as a yardstick (Andrew, 2026-11-19)
 
-Ends when Andrew says. It narrows the NVIDIA-only direction above while it runs.
+Ends when Andrew says. It narrows the NVIDIA-only direction above while it runs and replaces the 2026-11-18 direction
+"time our latest against the stored 0.8.55 board" (verbatim in `docs/rules/RULES_HISTORY.md`).
 
-- Our latest build is TIMED, all of it: every round ends with our own arm timed on the L40S, the whole board, not only
-  the rows a fix changed. A round with rows not timed on the latest build is not finished.
-- The yardstick is the STORED 0.8.55 board (the 2026-11-17 L40S full board). 0.8.55 is never installed, timed or
-  profiled again. The comparison is approximate on purpose: a different host or a 15 percent box difference does not
-  exclude a row from the comparison or from the counts; it is a note on the cell. Every timed row gets a ratio and is
-  counted.
-- Work is opened for WIDE gaps only: rows well beyond host noise (about 1.5x and over, or many milliseconds on a large
-  input), worst first. No lane, profile or rerun is opened to explain a gap of 10 to 30 percent between two hosts.
+- A speed verdict (REGRESSION, FASTER, an A/B win or loss) comes ONLY from two of our own wheels timed on the SAME pod
+  in the SAME job, with every worker bound to the GPU's NUMA node: the candidate beside the last green build
+  (`tools/ops/measure_candidate.py stage ... --prior-wheel NAME=DIR@SHA`), or an arm beside its base. A pair whose two
+  cells ran on different nodes or hosts is not a verdict.
+- The reference is rolling: each green measurement build is timed against the previous green build that was timed.
+  Nothing has to be at least as fast as 0.8.55; what must not happen is our latest being slower than our previous
+  build, at equal quality, beyond the pair's noise.
+- 0.8.55 is never installed, timed, profiled or compared again. Its stored board (the 2026-11-17 L40S full board) stays
+  in the evidence as history; it makes no flag, opens no lane and ranks no work. Reason (2026-11-19): against it, the
+  2026-11-19 full board showed 178 entries at 1.2x or slower; the same-pod pair job showed all but one of the rows
+  examined were the host or the unbound workers, and the one "regression" (cagra taxi) was NUMA placement.
+- Our latest build is still TIMED in full: every round ends with the whole board timed on the L40S for the candidate
+  and its prior, not only the rows a fix changed.
+- Work is opened for a same-pod gap beyond the pair's noise, worst absolute time first.
 - Opponents are set aside for now: no opponent job, no opponent re-score, and no work is opened, held or ranked because
-  of an opponent cell.
-- Order, without haste: this round is finished and timed in full; wide gaps fixed and timed again; then the boundary
-  cleanup (typed tables, decided by its pilot A/B); then the shared test kit and the rule for new checks; then the
-  other owed cleanups; and only then the release, when Andrew says. Nothing is skipped or shortened to reach it sooner.
+  of an opponent cell. (The paper's 0.8.55 comparison and the opponent boards are a release-time question for Andrew.)
+- Order, without haste: fixes and A/B verdicts timed same-pod; the boundary cleanup by waves (no speed case: compile
+  and native checks only, no measurement of its own); `fast` routes and per-estimator `fast`; the other owed cleanups;
+  and only then the release, when Andrew says. Nothing is skipped or shortened to reach it sooner.
