@@ -694,6 +694,12 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
 
     def upload_block(mut self, code: Int, ints: List[Int], part: Int, srcs: List[CastIn],
                      words: List[Int]) raises -> Int:
+        """`upload_block_grad` without a gradient: what every model program
+        packs its blocks with."""
+        return self.upload_block_grad(code, ints, part, srcs, words, False)
+
+    def upload_block_grad(mut self, code: Int, ints: List[Int], part: Int, srcs: List[CastIn],
+                          words: List[Int], requires_grad: Bool) raises -> Int:
         """One session tensor holding `part` of a block for step op `code`
         (autograd/block_step_ops.mojo): BLOCK_PART_WEIGHTS packs the
         weights `srcs` (one array per piece, `block_weight_sizes` order, an
@@ -701,7 +707,18 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         (1, n) upload; BLOCK_PART_STATE packs the float state pieces the
         same way and declares the tensor state; BLOCK_PART_WORDS makes the
         (1, k) int32-word state from `words`. Each piece is cast into its
-        slot on the executor (upload_cast); the gaps between slots are zero."""
+        slot on the executor (upload_cast); the gaps between slots are zero.
+        `requires_grad` (lane fx-ops-session-blocks, 2026-11-18: weights
+        only, a recording session only) makes the packed weights a trainable
+        leaf: a recorded step op (`_block_step`) is a custom node over
+        [x, weights], so `backward` leaves the block's weight gradients in
+        this tensor's gradient at the same `block_offsets` slots (the gaps
+        zero) and `step` updates the packed weights in place."""
+        if requires_grad:
+            if part != BLOCK_PART_WEIGHTS:
+                raise Error("ValueError: ops: upload_block: only a block's weights take a gradient")
+            if not self.tape.is_recording():
+                raise Error("ops: requires_grad needs a recording session (Session(record=True))")
         if part == BLOCK_PART_WORDS:
             var k = block_int_words(code)
             if k < 1 or len(words) != k:
@@ -745,8 +762,8 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         except err:
             self.ex.free(buf)
             raise err
-        var t = self.tape.variable(self.ex, buf, 1, total, False)
-        var h = self._add(t, Int(buf), False, 0)
+        var t = self.tape.variable(self.ex, buf, 1, total, requires_grad)
+        var h = self._add(t, Int(buf), requires_grad, 0)
         if part == BLOCK_PART_STATE:
             self.buffer_kind[Int(buf)] = OPS_BUFFER_STATE
         return h
