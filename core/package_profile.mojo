@@ -33,6 +33,7 @@ def identical_mode_enabled() -> Bool:
             is_defined["MOJOLEARN_NUMERIC_FAST"]()
             and is_defined["MOJOLEARN_NUMERIC_IDENTICAL"]()
         ), "select only one numeric mode"
+        comptime assert not MODE_FAST_ROWS or is_defined["MOJOLEARN_NUMERIC_FAST"](), "MOJOLEARN_MODE_FAST_ROWS builds a fast set; select the fast numeric mode"
         comptime if is_defined["MOJOLEARN_NUMERIC_FAST"]():
             comptime assert TARGET_HAS_APPLE_GPU, "fast mode requires an Apple GPU target"
             return False
