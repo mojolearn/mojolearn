@@ -10,6 +10,7 @@ from bindings.native_torch_admission_door import native_torch_exact, native_torc
 from bindings.array_native_door import _as_c, _values, _row, _ints, _tuple
 from bindings.array_native_run import _prod, _both_orders
 from bindings.py_cpython_table import cpython_table
+from bindings.small_mlp_keys_unpack import small_mlp_keys
 
 comptime SMALL_MLP_ITEMS_PENDING = "small-mlp-items: native iterator exception pending"
 
@@ -37,6 +38,7 @@ def _string_dict(value: PythonObject, bi: PythonObject) raises:
 
 def _array_items(value: PythonObject, limit: Int, refusal: String,
                  array_cls: PythonObject, array_type: PythonObject, bi: PythonObject) raises -> List[PythonObject]:
+    var nk = small_mlp_keys()
     var context = Python.dict(array_class=array_cls)
     var captured = PythonObject(None)
     var shape = PythonObject(None)
@@ -56,29 +58,29 @@ def _array_items(value: PythonObject, limit: Int, refusal: String,
                 var unpack = native_loaded_module("_struct").unpack
                 if py_type(unpack) is not py_type(bi.len):
                     raise Error("TypeError: SmallMLP half values require native struct unpack")
-                py_setitem(context, "struct_unpack", unpack)
+                py_setitem(context, nk[].k_struct_unpack, unpack)
             var values = _values(captured._mv, dtype, context)
             return _plain_items(values, limit, False)
         var codes = Python.dict()
         var sizes = Python.dict()
         py_setitem(codes, dtype, captured._mv.format)
         py_setitem(sizes, dtype, captured.itemsize)
-        py_setitem(context, "codes", codes)
-        py_setitem(context, "itemsizes", sizes)
-        py_setitem(context, "array_type", array_type)
+        py_setitem(context, nk[].k_codes, codes)
+        py_setitem(context, nk[].k_itemsizes, sizes)
+        py_setitem(context, nk[].k_array_type, array_type)
         var dims = _ints(captured.shape)
         if String(captured.order) != "C" and not _both_orders(dims) and Int(py=captured.size) != 0:
             var fields = py_fields(native_loaded_module("mojolearn._array"))
-            var connected = py_get(fields, "_ARRAY_CONTEXT")
+            var connected = py_get(fields, nk[].k__ARRAY_CONTEXT)
             _string_dict(connected, bi)
-            var helpers = py_get(connected, "helpers")
+            var helpers = py_get(connected, nk[].k_helpers)
             _string_dict(helpers, bi)
-            var copy = py_get(helpers, "strided_copy_bytes")
+            var copy = py_get(helpers, nk[].k_strided_copy_bytes)
             if copy is not None and py_type(copy) is not py_type(bi.len):
                 raise Error("TypeError: SmallMLP Array reorder requires its native helper")
-            py_setitem(context, "helpers", Python.dict(strided_copy_bytes=copy))
+            py_setitem(context, nk[].k_helpers, Python.dict(strided_copy_bytes=copy))
         else:
-            py_setitem(context, "helpers", Python.dict())
+            py_setitem(context, nk[].k_helpers, Python.dict())
         captured = _as_c(captured, context)
         # The reorder helper may release the GIL. Re-admit class slots before
         # constructing rows; values and output memory remain owned by captured.
@@ -110,6 +112,7 @@ def _array_items(value: PythonObject, limit: Int, refusal: String,
 
 def small_mlp_items(value: PythonObject, limit: Int, refusal: String,
                     array_cls: PythonObject, array_type: PythonObject, bi: PythonObject) raises -> List[PythonObject]:
+    var nk = small_mlp_keys()
     var cls = py_type(value)
     if cls is bi.list or cls is bi.tuple:
         return _plain_items(value, limit, cls is bi.tuple)
@@ -120,7 +123,7 @@ def small_mlp_items(value: PythonObject, limit: Int, refusal: String,
         # an already admitted tensor operation as a non-iterable input.
         native_torch_admit(value)
         var base_fields = _torch_type_fields(NATIVE_TORCH.get_or_create_ptr()[].base)
-        var unbind = py_get(base_fields, "unbind")
+        var unbind = py_get(base_fields, nk[].k_unbind)
         if unbind is None or py_type(unbind) is not py_type(bi.list.append):
             raise Error("TypeError: SmallMLP Tensor iteration requires native unbind")
         # Tensor.__iter__ returns iter(self.unbind(0)). Keep eager unbind before

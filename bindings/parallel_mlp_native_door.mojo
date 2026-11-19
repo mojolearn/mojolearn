@@ -22,6 +22,7 @@ from bindings.native_json_door import native_json_parse
 from bindings.small_mlp_native_door import (
     small_mlp_call, small_mlp_from_state, small_mlp_grads_open, small_mlp_grads_close, small_mlp_grads_rows,
 )
+from bindings.small_mlp_keys_unpack import SMALL_MLP_OPN_LOAD_STATE_DICT, SMALL_MLP_OPN_STATE_DICT
 from core.shared_slot import SharedSlot
 from std.python._cpython import GILReleased
 from core.entry_table import EntryRef, entry_ref_call, entry_ref_unresolved
@@ -181,14 +182,14 @@ def mlp_snapshot(model: PythonObject) raises -> PythonObject:
     """The model's complete state, read from its native state handle (the
     public `state_dict` call, under the model's lock), admitted as identical."""
     _mlp_mode()
-    return mlp_validate_state(small_mlp_call("state_dict", Python.tuple(py_get(model.__dict__, "_handle"))))
+    return mlp_validate_state(small_mlp_call(SMALL_MLP_OPN_STATE_DICT, PythonObject(None), Python.tuple(py_get(model.__dict__, "_handle"))))
 
 
 def mlp_publish(model: PythonObject, state: PythonObject) raises:
     """Replace the model's native state with a validated copy of `state`."""
     _mlp_mode()
     var checked = mlp_validate_state(state)
-    _ = small_mlp_call("load_state_dict", Python.tuple(py_get(model.__dict__, "_handle"), checked))
+    _ = small_mlp_call(SMALL_MLP_OPN_LOAD_STATE_DICT, PythonObject(None), Python.tuple(py_get(model.__dict__, "_handle"), checked))
 
 
 def mlp_from_state(state: PythonObject) raises -> PythonObject:
