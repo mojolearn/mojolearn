@@ -472,7 +472,7 @@ class BuiltInstallFamilies(unittest.TestCase):
     under `fast` and then refuses or differs in another call fails here.
 
     `MOJOLEARN_FAST_ANSWER_TRIAL_FAMILIES=<mask>` (a switch of this test, not
-    of the package; `0x7fffff` is every door family, bits in
+    of the package; `0x7ffffff` is every door family, bits in
     core/mode_answer.mojo) answers `fast` for that set of families, so the run
     lists which are whole under it; `MOJOLEARN_FAST_LEDGER=<path>` keeps the
     report. A family is added to MODE_FAMILIES_ANSWERED only when a run with

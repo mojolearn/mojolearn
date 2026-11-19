@@ -14,7 +14,7 @@
 # tools/ops/verify_smoke_dispatch.py, fetched by tools/ops/fetch_built_wheel.sh, installed by
 # tools/ops/wheel_verify_smoke.sh's `install` step). Dispatch (the workflow file must exist on --ref):
 #   python3 tools/ops/verify_smoke_dispatch.py --workflow fast-trial --wheel-dir <.../linux/final> --ref <branch> \
-#       [--families 0x7fffff] [--exact-families 0x88] [--shards 1]
+#       [--families 0x7ffffff] [--exact-families 0x88] [--shards 1]
 #
 # PARALLEL PLAN: one (trial, estimator) per process across every core of each runner (tools/ops/fast_trial.py,
 # worker count from the allocation, lowered only by MemAvailable), and across `shards` matrix runners (unit k on
@@ -39,9 +39,9 @@ on:
         description: "the wheel's sha256"
         required: true
       families:
-        description: "trial mask of door families (core/mode_answer.mojo bits); 0x7fffff is every family"
+        description: "trial mask of door families (core/mode_answer.mojo bits); 0x7ffffff is every family"
         required: false
-        default: "0x7fffff"
+        default: "0x7ffffff"
       exact_families:
         description: "empty, or a candidate set: a second trial with exactly these bits"
         required: false
