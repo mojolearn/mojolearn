@@ -127,7 +127,8 @@ def _pool_words(fields: PythonObject, shape: List[Int], context: PythonObject) r
 
 def xcnn_maxpool_forward(model: PythonObject, x: PythonObject, context: PythonObject) raises -> PythonObject:
     """`MaxPool2d.forward(x)`."""
-    var fields = _fields(model)
+    var mods = NativeModules()
+    var fields = _fields(mods, model)
     if xcnn_is_t(x, context):
         # x, the output and the winners resident
         var entries = xcnn_entries(fields, context)
@@ -136,7 +137,7 @@ def xcnn_maxpool_forward(model: PythonObject, x: PythonObject, context: PythonOb
         var x_word = xcnn_dev_word(entries, x, context)
         if x_word == 0:
             return xcnn_wrap(entries, xcnn_maxpool_forward(model, xcnn_host_of(x, context), context), context)
-        return _max_forward_res(fields, entries, x_word, xs, _pool_words(fields, xs, context), xcnn_tuple(xs), False, context)
+        return _max_forward_res(mods, fields, entries, x_word, xs, _pool_words(fields, xs, context), xcnn_tuple(xs), False, context)
     var a = xcnn_f32(x, "x", context)
     var xs = xcnn_shape(a)
     pool_run_check_nchw(xs, "MaxPool2d")
@@ -182,7 +183,7 @@ def _out_dims(shape: List[Int], one_d: Bool) -> List[Int]:
     return shape.copy()
 
 
-def _max_forward_res(fields: PythonObject, entries: PythonObject, x_word: Int, xs: List[Int],
+def _max_forward_res(mut mods: NativeModules, fields: PythonObject, entries: PythonObject, x_word: Int, xs: List[Int],
                      prm: List[Int], xshape: PythonObject, one_d: Bool, context: PythonObject) raises -> PythonObject:
     """MaxPool2d's resident forward of a tensor admitted on this binding:
     x, the output and the winners resident. The caller admitted `x`
@@ -199,7 +200,13 @@ def _max_forward_res(fields: PythonObject, entries: PythonObject, x_word: Int, x
     # filled (the tensor's finalizer freed it before).
     var shape = pool_run_out_words(prm, xs)
     var dims = _out_dims(shape, one_d)
-    var h = xcnn_dev_get_f(fields, entries, "idx", xcnn_size(shape), context)
+    # fx-maxpool (2026-11-19): `mods` is the module connection through which
+    # the caller admitted `fields` (no GIL release window since): the
+    # winners' owner is admitted on it. Each of the two or three instance
+    # dictionaries a max pool forward admits (the adaptive layer's, the
+    # pool's, the winners' owner's) built its own connection table and ran
+    # the module stamp again.
+    var h = xcnn_dev_get_f(mods, fields, entries, "idx", xcnn_size(shape), context)
     var h_word = xcnn_word(h)
     var key = xcnn_ref(entries)
     var alloc_op = xcnn_alloc_op(entries, context)
@@ -287,7 +294,8 @@ def xcnn_pool_forward(model: PythonObject, x: PythonObject, context: PythonObjec
         if len(s) != 3:   # the class name is read only for the refusal
             pool_run_check_ncl(s, _class_name(model))
         var x4: List[Int] = [s[0], s[1], 1, s[2]]
-        var fields = _fields(model)
+        var mods = NativeModules()
+        var fields = _fields(mods, model)
         var entries = xcnn_entries(fields, context)
         var x_word = xcnn_dev_word(entries, x, context)
         if x_word != 0:
@@ -299,7 +307,7 @@ def xcnn_pool_forward(model: PythonObject, x: PythonObject, context: PythonObjec
             # gone; the same entry, words and handles.
             var prm = _pool_words(fields, x4, context)
             if _is(model, "xcnn_maxpool_class", context):
-                return _max_forward_res(fields, entries, x_word, x4, prm, xcnn_tuple(x4), True, context)
+                return _max_forward_res(mods, fields, entries, x_word, x4, prm, xcnn_tuple(x4), True, context)
             return _avg_forward_res(fields, entries, x_word, x4, prm, xcnn_tuple(x4), True, context)
         var out = _pool2d_forward(model, xcnn_reshape_t(x, x4, context), context)
         var o = xcnn_shape(out)
@@ -438,7 +446,11 @@ def _pool_backward2d(model: PythonObject, source: PythonObject, context: PythonO
     # admitted by `xcnn_on_dev` and its handle read again by name), and the
     # resident output is allocated in the GIL window of the entry that fills
     # it. Same checks in the same order, same entries, words and bits.
-    var fields = _fields(model)
+    # fx-maxpool (2026-11-19): the layer's fields and (max) the winners'
+    # owner's are admitted on one module connection; no GIL release window
+    # lies between them.
+    var mods = NativeModules()
+    var fields = _fields(mods, model)
     var saved = xcnn_get(fields, XK_XSHAPE)
     if saved is None:
         raise Error("RuntimeError: pool backward requires forward first")
@@ -454,7 +466,7 @@ def _pool_backward2d(model: PythonObject, source: PythonObject, context: PythonO
     if resident_idx:
         pool_run_check_shape(_pool_shape_words(xcnn_item(fields, XK_IDX_SHAPE), "_idx_shape", context), expected)
         h = PythonObject(_pool_int(h, context))
-        resident_idx = xcnn_item(_fields(dev), XK_B) is xcnn_item(entries, XK_MODULE)
+        resident_idx = xcnn_item(_fields(mods, dev), XK_B) is xcnn_item(entries, XK_MODULE)
     if xcnn_is_t(source, context):
         pool_run_check_shape(xcnn_shape(source), expected)
         var g_word = xcnn_dev_word(entries, source, context)
@@ -736,7 +748,12 @@ def xcnn_adaptive_forward(model: PythonObject, x: PythonObject, context: PythonO
     # handle); the adaptive layer's fields are passed to `_pool_layer`, and
     # the inner pool's fields are admitted once (they were admitted in
     # `_pool_layer` and again here). Same checks in the same order.
-    var fields = _fields(model)
+    # fx-maxpool (2026-11-19): the adaptive layer's fields, the inner pool's
+    # and (max) the winners' owner's are admitted on one module connection
+    # (`mods`); the direct resident branch below has no GIL release window
+    # before its launch, and every other branch admits as before.
+    var mods = NativeModules()
+    var fields = _fields(mods, model)
     var entries = xcnn_entries(fields, context)
     var m = xcnn_idn(entries, XCNN_F_ADAPT)
     var maxed = _adaptive_max(model, context)
@@ -772,7 +789,7 @@ def xcnn_adaptive_forward(model: PythonObject, x: PythonObject, context: PythonO
         var layer = _pool_layer(fields, entries, k, maxed, context)
         # The inner pool takes the adaptive layer's current mode (a cache hit
         # may hold an older one; a fresh pool already has it).
-        var lf = _fields(layer)
+        var lf = _fields(mods, layer)
         xcnn_put(lf, XK_NUMERIC_MODE, xcnn_get(fields, XK_NUMERIC_MODE))
         xcnn_put(fields, XK_LAYER, layer)
         if xt:
@@ -785,7 +802,7 @@ def xcnn_adaptive_forward(model: PythonObject, x: PythonObject, context: PythonO
             # settings parse (the same answers, per call) are gone.
             var prm = pool_run_words(PoolSettings(k[0], k[1], k[0], k[1], 0, 0, 1, 1, True, False, 0), xs)
             if maxed:
-                return _max_forward_res(lf, entries, x_word, xs, prm, xshape, False, context)
+                return _max_forward_res(mods, lf, entries, x_word, xs, prm, xshape, False, context)
             return _avg_forward_res(lf, entries, x_word, xs, prm, xshape, False, context)
         var out = _pool2d_forward(layer, value, context)
         if maxed and not m:

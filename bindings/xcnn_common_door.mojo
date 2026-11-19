@@ -1083,9 +1083,21 @@ def xcnn_addr(value: PythonObject) raises -> PythonObject:
 # ---------------------------------------------------------------- the layer's resident arrays
 
 def xcnn_dev_fields(dev: PythonObject, context: PythonObject) raises -> PythonObject:
+    var mods = NativeModules()
+    return xcnn_dev_fields(mods, dev, context)
+
+
+def xcnn_dev_fields(mut mods: NativeModules, dev: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`xcnn_dev_fields` on the operation's admitted module connections
+    `mods` (bindings/native_loaded_module_door.mojo `NativeModules`): for a
+    caller that admitted the layer's own instance dictionary through `mods`
+    in this operation with no GIL release window since (fx-maxpool,
+    2026-11-19). The owner's instance dictionary then takes the module
+    connection the layer's admission checked; it built a second connection
+    table and ran the module stamp a second time per resident-array read."""
     if py_type(dev) is not xcnn_item(context, XK_DEV_CLASS):
         raise Error("TypeError: CNN resident state requires its connected native owner")
-    var fields = _fields(dev)
+    var fields = _fields(mods, dev)
     _ = xcnn_module_entries(xcnn_item(fields, XK_B), context)
     var table = xcnn_item(fields, XK_H)
     if not xcnn_exact(table, XT_DICT):
@@ -1146,14 +1158,15 @@ def _xcnn_settle_old_dev(fields: PythonObject, dev: PythonObject, context: Pytho
             py_setitem(fields, PythonObject(name), PythonObject(None))
 
 
-def _xcnn_dev_admitted(fields: PythonObject, entries: PythonObject, context: PythonObject,
+def _xcnn_dev_admitted(mut mods: NativeModules, fields: PythonObject, entries: PythonObject, context: PythonObject,
                        mut table: PythonObject) raises -> PythonObject:
     """`xcnn_dev` on the layer's instance fields (`_fields(layer)`, read by
     the caller); `table` receives the owner's handle table, admitted here
-    (an existing owner's by `xcnn_dev_fields`, a fresh owner's empty one)."""
+    (an existing owner's by `xcnn_dev_fields`, a fresh owner's empty one).
+    `mods`: the caller's module connections (see `xcnn_dev_fields`)."""
     var dev = xcnn_get(fields, XK_DEV)
     if dev is not None:
-        var state = xcnn_dev_fields(dev, context)
+        var state = xcnn_dev_fields(mods, dev, context)
         if xcnn_item(state, XK_B) is xcnn_item(entries, XK_MODULE):
             table = xcnn_item(state, XK_H)
             return dev
@@ -1187,7 +1200,8 @@ def xcnn_dev(layer: PythonObject, entries: PythonObject, context: PythonObject) 
     """`_dev_of(layer, b)`: the layer's `_Dev` on this binding, a new one
     (the old one's arrays freed) when the binding changed."""
     var table = PythonObject(None)
-    return _xcnn_dev_admitted(_fields(layer), entries, context, table)
+    var mods = NativeModules()
+    return _xcnn_dev_admitted(mods, _fields(mods, layer), entries, context, table)
 
 
 def xcnn_dev_get_f(fields: PythonObject, entries: PythonObject, name: String, count: Int,
@@ -1202,9 +1216,18 @@ def xcnn_dev_get_f(fields: PythonObject, entries: PythonObject, name: String, co
     # a class record, a key scan and a module stamp) for one handle. Max
     # pools, dropout, batch norm and the graph layers call this one to eight
     # times per forward.
+    var mods = NativeModules()
+    return xcnn_dev_get_f(mods, fields, entries, name, count, context)
+
+
+def xcnn_dev_get_f(mut mods: NativeModules, fields: PythonObject, entries: PythonObject, name: String, count: Int,
+                   context: PythonObject) raises -> PythonObject:
+    """`xcnn_dev_get_f` on the module connections `mods` through which the
+    caller admitted `fields` in this operation, with no GIL release window
+    since (see `xcnn_dev_fields`; fx-maxpool, 2026-11-19)."""
     var n = max(count, 1)
     var table = PythonObject(None)
-    _ = _xcnn_dev_admitted(fields, entries, context, table)
+    _ = _xcnn_dev_admitted(mods, fields, entries, context, table)
     var key = PythonObject(name)
     var cur = py_get(table, key)
     if cur is not None and Int(py=xcnn_at(cur, 1)) == n:
