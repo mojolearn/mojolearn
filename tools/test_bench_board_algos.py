@@ -824,3 +824,53 @@ def test_host_fields_in_the_cell():
     f = bb.host_fields(info, use, "fit")
     assert f["worker_numa"]["node_now"] == 0 and f["harness_clock"] == A.HARNESS_CLOCK and f["host_stall"] is True
     assert bb.host_fields({}, None, "fit") == {}
+
+
+def test_held_keeps_host_results_and_refuses_lazy_ones():
+    """lane fx-harness-honest (2026-11-18 audit H3): `_held` keeps host results as they are (no copy) and refuses a
+    lazy one (a device tensor or a generator), whose work would finish after the clock."""
+    a = np.arange(4, dtype=np.float32)
+    assert A._held(a) is a
+
+    class HostArray:                              # mojolearn.Array's shape: host memory behind __array_interface__
+        def __init__(self, base): self.base = base; self.__array_interface__ = base.__array_interface__
+    v = A._held(HostArray(a))
+    assert isinstance(v, np.ndarray) and np.shares_memory(v, a)
+    assert A._held((a, a)) == (a, a) and A._held(1.5) == 1.5
+
+    class DeviceTensor:
+        _device_tensor = True
+    with pytest.raises(RuntimeError, match="lazy"):
+        A._held(DeviceTensor())
+    with pytest.raises(RuntimeError, match="lazy"):
+        A._held(x for x in range(3))
+
+
+def test_optimizer_parameter_copy_is_made_before_the_clock(monkeypatch):
+    """lane fx-harness-honest (2026-11-18): our optimizer arm's fresh copy of p0 is the harness's, made by
+    Runner.prepare() before the clock; fit() steps that array; without prepare() (reference runs) fit still copies."""
+    lane = next(l for l in A.LANE_ORDER if A.LANES[l]["kind"] == "optim")
+    monkeypatch.setattr(A, "_optim_size", lambda D: (8, 2))
+    seen = []
+
+    class Opt:
+        def __init__(self, params, **kw):
+            self.p = params[0]
+            seen.append(self.p)
+        def step(self, grads):
+            self.p -= grads[0]
+    monkeypatch.setattr(A, "_ours_class", lambda lane: ("Opt", Opt))
+    monkeypatch.setattr(A, "_ours_info", lambda lane: {})
+    r = A._build_optim(lane, "ours", {})
+    assert r.info["harness_clock"] == A.HARNESS_CLOCK_INPUTS_OURS
+    p0, _g, _ = A._optim_inputs(8, 2)
+    seen.clear()
+    r.prepare()
+    r.fit()
+    first = r.outputs()["param"].copy()
+    r.prepare()
+    r.fit()
+    assert np.array_equal(r.outputs()["param"], first)          # every call starts from the same p0
+    r.fit()                                                       # no prepare: the fallback copy
+    assert np.array_equal(r.outputs()["param"], first)
+    assert len({id(p) for p in seen}) == len(seen) and not any(p is p0 for p in seen)

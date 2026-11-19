@@ -92,6 +92,7 @@ import shlex
 import statistics
 import sys
 import time
+import types
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
@@ -3109,8 +3110,12 @@ class Skipped(Exception):
 
 class Runner:
     def __init__(self, info, fit, outputs, infer=None, sync=None, record=None, model_for_hash=None,
-                 upload_inputs=None):
+                 upload_inputs=None, prepare=None):
         self.model_for_hash = model_for_hash
+        #: untimed, before every timed fit (lane fx-harness-honest, 2026-11-18): the harness's own per-call setup
+        #: that is not the product's work (a fresh copy of the caller's input the call then mutates); None = none.
+        #: A fit() called without it (reference runs) still works: the builder falls back to doing it itself.
+        self._prepare = prepare
         #: OUR arm only: the host arrays the timed call is handed, [(name, array)], for the
         #: separate upload probe (`_ours_upload_probe`). None = the builder declared none.
         self.upload_inputs = upload_inputs
@@ -3128,6 +3133,10 @@ class Runner:
     def sync_for_receipt(self):
         if self._sync:
             self._sync()
+
+    def prepare(self):
+        if self._prepare:
+            self._prepare()
 
     def fit(self):
         self._fit()
@@ -4647,6 +4656,11 @@ def _build_ts(lane, arm, D):
         # autoarima: the search's maxiter, the lane's pinned maxiter; the env switch of the
         # 2026-10-04 quality A/B (below) restores 20 and the params record says so
         _sm = 20 if os.environ.get("MOJOLEARN_AUTOARIMA_SEARCH_QOLD") == "1" else int(p.get("maxiter", 1000))
+        # FAIRNESS FIX (2026-11-18 audit, lane fx-harness-honest): var's (n_obs, K) block was made contiguous INSIDE
+        # our clock on every call (a harness transpose copy; statsmodels' arm takes the view), and every forecast was
+        # cast to float64 inside it. The block is made once here, before the clock (a user holds data in the shape
+        # the call takes), and the forecast is held as returned and cast in outputs(). Cell: HARNESS_CLOCK_OURS.
+        Yvar = np.ascontiguousarray(Y32[:16].T) if lane == "var" else None
 
         def fit():
             if lane == "autoarima":           # the cuML shape: construct on the batch, search, fit
@@ -4674,7 +4688,7 @@ def _build_ts(lane, arm, D):
             elif lane == "stl":               # statsmodels' shape: STL(endog, period).fit() -> result
                 S["est"] = cls(Y32, **_STL_KW(p)).fit()
             elif lane == "var":               # statsmodels' shape: VAR(endog (n_obs, K)).fit(maxlags)
-                S["est"] = cls(np.ascontiguousarray(Y32[:16].T)).fit(
+                S["est"] = cls(Yvar).fit(
                     maxlags=p["maxlags"], method=p["method"], ic=p["ic"], trend=p["trend"])
             elif t == "garch":                # arch's shape; the variance forecast horizon is fixed at fit
                 S["est"] = cls(**p).fit(Y32, horizon=h)
@@ -4697,7 +4711,8 @@ def _build_ts(lane, arm, D):
                 S["fc_parts"] = (_held(tr), _held(se))
                 S.pop("fc", None)
             elif lane == "var":
-                S["fc"] = _arr(e.forecast(np.ascontiguousarray(Y32[:16].T[-e.k_ar:]), h), np.float64).T
+                S["fc_raw"] = _held(e.forecast(Yvar[-e.k_ar:], h))     # rows of a C block: no copy
+                S.pop("fc", None)
             else:
                 if lane == "autoarima" or t == "garch":
                     fc = e.forecast(h)
@@ -4707,12 +4722,17 @@ def _build_ts(lane, arm, D):
                     fc = e.predict(h)
                     if isinstance(fc, dict):
                         fc = fc["mean"]
-                fc = _arr(fc, np.float64)
-                if fc.ndim == 2 and fc.shape[0] == h and fc.shape[1] == Y32.shape[0] != h:
-                    fc = fc.T                  # (h, batch), cuML's layout
-                S["fc"] = fc
+                S["fc_raw"] = _held(fc)        # cast after the clock (outputs)
+                S.pop("fc", None)
 
         def outputs():
+            if "fc_raw" in S:               # the forecast's float64 cast and layout, after the clock (2026-11-18)
+                fc = _arr(S.pop("fc_raw"), np.float64)
+                if lane == "var":
+                    fc = fc.T
+                elif fc.ndim == 2 and fc.shape[0] == h and fc.shape[1] == Y32.shape[0] != h:
+                    fc = fc.T                  # (h, batch), cuML's layout
+                S["fc"] = fc
             if "fc_parts" in S:             # decompose: trend + seasonal, after the clock (FAIRNESS FIX 2026-11-18)
                 tr, se = S.pop("fc_parts")
                 S["fc"] = _arr(tr, np.float64) + _arr(se, np.float64)
@@ -4742,8 +4762,7 @@ def _build_ts(lane, arm, D):
         def fit():                        # the forecast is inside the clock, as for every arm
             fit0()
             infer()
-        if t == "decompose":
-            info["harness_clock"] = HARNESS_CLOCK_OURS
+        info["harness_clock"] = HARNESS_CLOCK_OURS     # decompose and the forecasts (lane fx-harness-honest)
         return Runner(info, fit, outputs, None, record=rec)
     lib = s["other"][arm]
     if lib == "statsforecast":
@@ -6250,8 +6269,18 @@ def _build_optim(lane, arm, D):
             else:
                 info["resident_path"] = "unavailable on this build: host arrays every step"
 
+        # FAIRNESS FIX (2026-11-18 audit, lane fx-harness-honest; found by lane fx-rnn-cnn-fit): the fresh host copy
+        # of p0 (64 MB, the harness's, so that every call starts from the same parameter; the step mutates it in
+        # place) was made INSIDE our clock; torch's arm has no host copy (p0.to(dev) is its take of the caller's
+        # parameter, as ours' params_to_device / the host step is). The copy is now made before the clock
+        # (Runner.prepare); what the product does with the caller's array stays inside. The device-I/O optimizers
+        # (to_dev: the upload is the product's take) are unchanged. The cell carries HARNESS_CLOCK_INPUTS_OURS.
+        def prepare():
+            if not to_dev:
+                S["p_next"] = p0.copy()
+
         def fit():
-            p = to_dev(p0) if to_dev else p0.copy()
+            p = to_dev(p0) if to_dev else (S.pop("p_next", None) if S.get("p_next") is not None else p0.copy())
             opt = cls([p], **hyper)
             if resident:
                 opt.params_to_device()
@@ -6281,7 +6310,9 @@ def _build_optim(lane, arm, D):
         rec = dict(hyper, __library__="mojolearn", __implementation__=cls, input_arrays=input_arrays)
         for flag, value in semantics.items():
             rec.setdefault(flag, value)
-        return _with_upload(Runner(info, fit, outputs, record=rec),
+        if not to_dev:
+            info["harness_clock"] = HARNESS_CLOCK_INPUTS_OURS
+        return _with_upload(Runner(info, fit, outputs, record=rec, prepare=prepare),
                             [("p0", p0)] + [("grad%d" % i, gr) for i, gr in enumerate(grads)])
     import torch
     dev = _torch_device(torch)
@@ -6767,6 +6798,9 @@ HARNESS_CLOCK = "2026-11-18 outputs reduced after the clock (all arms)"
 #: the same for a lane where only OUR arm's clock held the harness work (the opponents' clocks are unchanged), so
 #: tools/race_fairness.py does not call a stored opponent cell of that lane unfair
 HARNESS_CLOCK_OURS = "2026-11-18 outputs reduced after the clock (our arm)"
+#: lane fx-harness-honest (2026-11-18): our arm's harness copies of its INPUTS (a fresh parameter copy, a transposed
+#: block) moved before the clock; the opponents' clocks never held them
+HARNESS_CLOCK_INPUTS_OURS = "2026-11-18 harness input copies made before the clock (our arm)"
 
 
 def _held(a):
@@ -6779,7 +6813,20 @@ def _held(a):
         return a
     if hasattr(a, "__array_interface__"):
         return np.asarray(a)
+    # lane fx-harness-honest (2026-11-18 audit H3): every lane that holds results here hands our arm host arrays,
+    # and each such call returns host memory its native call has already waited for (mojolearn.Array / NumPy; the
+    # lane-by-lane table is in ~/mojolearn-evidence/briefs-20261118/fx-harness-honest-RESULT.md). The only lazy
+    # objects mojolearn returns are its device tensors (`_device_tensor`: x_cnn DeviceTensor, sequence
+    # SequenceDeviceTensor) and none of these lanes is given one; a generator would run its work on iteration.
+    # Either would finish after the clock, so it refuses by name here rather than time a part of the work.
+    if getattr(a, "_device_tensor", False) or isinstance(a, _GENERATOR_TYPES):
+        raise RuntimeError("HARNESS: a held result is lazy (%s): its work would finish after the clock; the lane "
+                           "must time the call that makes it real" % type(a).__name__)
     return a
+
+
+#: the lazy result kinds `_held` refuses (lane fx-harness-honest, H3)
+_GENERATOR_TYPES = (types.GeneratorType, types.AsyncGeneratorType)
 
 
 def _reduced_after(S, reduce):
@@ -7780,6 +7827,7 @@ def worker(args):
                 # HOST USAGE (lane fx-harness, 2026-11-18): getrusage just outside each scored call's clock (system
                 # time, user time, minor and major faults); a call whose system time is above half its wall is a
                 # host stall (tools/numa_place.py summarize; tools/paper_compare.py HOST-STALL)
+                runner.prepare()                    # untimed harness setup (Runner.prepare)
                 u0 = numa.usage()
                 t0 = time.perf_counter()
                 runner.fit()
@@ -7801,7 +7849,8 @@ def worker(args):
                         # the warm-up repeats the exact timed call (every algos call resets its
                         # optimizer, reloads its weights or reruns a stateless layer, so a repeat
                         # is the same work from the same state) until one call compiles nothing
-                        compile_rec["warmup_settle"] = COMPILE.settle(lambda: (runner.fit(), runner.infer()))
+                        compile_rec["warmup_settle"] = COMPILE.settle(lambda: (runner.prepare(), runner.fit(),
+                                                                               runner.infer()))
                 last = runner.outputs()
                 runner.sync_for_receipt()
                 operation_ms = (time.perf_counter() - whole_start) * 1000.0
@@ -7827,6 +7876,7 @@ def worker(args):
                 try:
                     for i in range(1, max(n_fit, n_inf)):
                         if i < n_fit:
+                            runner.prepare()
                             u0 = numa.usage()
                             t0 = time.perf_counter()
                             runner.fit()
