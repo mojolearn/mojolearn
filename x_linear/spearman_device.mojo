@@ -194,7 +194,7 @@ def spearman_sign_device(var ctx: DeviceContext, x: FP, y: FP, n: Int) raises ->
         tries += 1
         if tries >= WITNESS_TRIES:
             wit.fail()
-    var h = List[Int32](length=1, fill=Int32(0))
+    var h = List[Int32](unsafe_uninit_length=1)
     ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=dout)
     ctx.synchronize()
     var sign = Int(h[0])

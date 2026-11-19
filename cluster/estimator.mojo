@@ -262,7 +262,7 @@ def plan_sum_scale(
         grid_dim=(n_features, 1, 1),
         block_dim=(SUM_SCALE_TPB, 1, 1),
     )
-    var cols = List[Float32](length=n_features, fill=Float32(0.0))
+    var cols = List[Float32](unsafe_uninit_length=n_features)
     ctx.enqueue_copy(dst_ptr=cols.unsafe_ptr(), src_buf=col)
     ctx.synchronize()
     _ = chunk_sums^

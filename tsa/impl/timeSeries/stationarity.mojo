@@ -98,6 +98,8 @@ from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 from core.column_stats import STATS_TPB
 from core.device_scan import device_first_nonfinite
+from core.host_parallel import host_parallelize
+from core.host_predict_threads import HOST_MIN_TASK_WORK, host_predict_task_count_work, host_predict_chunk
 from core.pinned_reduce import pinned_block_sum
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_mul_add
 from tsa.impl.timeSeries.arima_helpers import prepare_data
@@ -615,20 +617,58 @@ def _refuse_non_finite(
         )
 
 
+def _kpss_flags_span(src: Int, dst: Int, n: Int):
+    """`dst[i] = src[i] != 0` for `n` bytes at host addresses `src` and
+    `dst`. A Bool is one byte holding 0 or 1, so the result is written as
+    that byte."""
+    var s = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=src)
+    var d = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=dst)
+    for i in range(n):
+        d.unsafe_store(i, UInt8(1) if s.unsafe_load(i) != UInt8(0) else UInt8(0))
+
+
+def _kpss_flags_from_bytes(src: Int, dst: Int, n: Int):
+    """The stationary flags' bytes as Bools, one pass: contiguous spans
+    across the host's cores above the grain floor, the calling thread below
+    it (no worker count is read then)."""
+    if n < 2 * HOST_MIN_TASK_WORK:
+        _kpss_flags_span(src, dst, n)
+        return
+    # parallel: the flag conversion over spans across host cores
+    var tasks = host_predict_task_count_work(n, n)
+    if tasks <= 1:
+        _kpss_flags_span(src, dst, n)
+        return
+    var chunk = host_predict_chunk(n, tasks)
+
+    def _span(t: Int) {imm src, imm dst, imm n, imm chunk}:
+        var lo = t * chunk
+        if lo >= n:
+            return
+        var hi = min(lo + chunk, n)
+        _kpss_flags_span(src + lo, dst + lo, hi - lo)
+
+    host_parallelize(_span, tasks)
+
+
 def download_results(
     ctx: DeviceContext, res: KpssResult, batch_size: Int
 ) raises -> Tuple[List[Bool], List[Float32]]:
     """Read `(stationary flags, statistics)` back to the host."""
-    var hr = ctx.enqueue_create_host_buffer[DType.uint8](batch_size)
-    var hs = ctx.enqueue_create_host_buffer[DType.float32](batch_size)
-    ctx.enqueue_copy(dst_ptr=hr.unsafe_ptr(), src_buf=res.scratch.results)
-    ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=res.scratch.stat)
+    if batch_size <= 0:
+        return (List[Bool](), List[Float32]())
+    # lane fx-dup-next (2026-11-19): both results go down into lists of their
+    # final length (the statistics straight into the returned list), one wait
+    # as before, and the flag bytes become Bools in one pass split over the
+    # host's cores above the grain floor. Gone: two pinned host buffers per
+    # call and one append per series into two growing lists on one thread.
+    var raw = List[UInt8](unsafe_uninit_length=batch_size)
+    var stats = List[Float32](unsafe_uninit_length=batch_size)
+    ctx.enqueue_copy(dst_ptr=raw.unsafe_ptr(), src_buf=res.scratch.results)
+    ctx.enqueue_copy(dst_ptr=stats.unsafe_ptr(), src_buf=res.scratch.stat)
     ctx.synchronize()
-    var flags = List[Bool]()
-    var stats = List[Float32]()
-    for i in range(batch_size):
-        flags.append(hr.unsafe_ptr().unsafe_load(i) != 0)
-        stats.append(hs.unsafe_ptr().unsafe_load(i))
-    _ = hr^
-    _ = hs^
+    var flags = List[Bool](unsafe_uninit_length=batch_size)
+    _kpss_flags_from_bytes(Int(raw.unsafe_ptr()), Int(flags.unsafe_ptr()), batch_size)
+    # `raw` is named here, after the drain and the pass that reads it.
+    _ = raw^
     return (flags^, stats^)

@@ -231,7 +231,7 @@ def ivf_device_extend_run(
     var out = ivf_flat_extend_host(ctx, index, new_x, n_new)
     ctx.synchronize()
     # the new rows' labels: one memcpy of the tail (no per-row host loop)
-    var new_labels = List[UInt32](length=max(n_new, 0), fill=UInt32(0))
+    var new_labels = List[UInt32](unsafe_uninit_length=max(n_new, 0))
     var first_new = len(out.labels) - n_new
     if n_new > 0:
         unsafe_memcpy(dest=new_labels.unsafe_ptr(), src=out.labels.unsafe_ptr() + first_new, count=n_new)

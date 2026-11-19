@@ -599,7 +599,7 @@ def device_distance_weights(
         Int32(n_queries), Int32(k),
         grid_dim=(n_queries + KNN_TPB_X - 1) // KNN_TPB_X, block_dim=KNN_TPB_X,
     )
-    var h_flag = List[Int32](length=1, fill=Int32(0))
+    var h_flag = List[Int32](unsafe_uninit_length=1)
     ctx.enqueue_copy(dst_ptr=h_flag.unsafe_ptr(), src_buf=d_flag)
     ctx.synchronize()
     var got = Int(h_flag[0])
@@ -654,7 +654,7 @@ def device_check_index_range(
         d_idx.unsafe_ptr(), d_flag.unsafe_ptr(), Int64(count), Int64(n_index),
         grid_dim=(count + KNN_TPB_X - 1) // KNN_TPB_X, block_dim=KNN_TPB_X,
     )
-    var h_flag = List[Int32](length=1, fill=Int32(0))
+    var h_flag = List[Int32](unsafe_uninit_length=1)
     ctx.enqueue_copy(dst_ptr=h_flag.unsafe_ptr(), src_buf=d_flag)
     ctx.synchronize()
     var got = Int(h_flag[0])

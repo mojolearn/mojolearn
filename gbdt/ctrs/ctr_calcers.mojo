@@ -42,6 +42,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from std.memory import bitcast, unsafe_memcpy
 
 from core.device_zero import enqueue_fill
+from core.transfer import transfer_upload_list
 
 from gbdt.ctrs.ctr import (
     CTR_BORDERS,
@@ -1217,15 +1218,11 @@ def _upload_codes(
 ) raises -> DeviceBuffer[DType.uint32]:
     """A host code list on the device, one bulk copy (the list entries'
     adapter; `train` passes resident codes instead)."""
+    # core/transfer.mojo (lane fx-dup-next, 2026-11-19): copied in place from
+    # the caller's list, one wait. Gone: a pinned host buffer of the column
+    # per call, a memcpy into it and a wait before it.
     var n = len(cat_codes)
-    var h = ctx.enqueue_create_host_buffer[DType.uint32](max(n, 1))
-    ctx.synchronize()
-    unsafe_memcpy(dest=h.unsafe_ptr(), src=cat_codes.unsafe_ptr(), count=n)
-    var d = ctx.enqueue_create_buffer[DType.uint32](max(n, 1))
-    ctx.enqueue_copy(dst_buf=d, src_ptr=h.unsafe_ptr())
-    ctx.synchronize()
-    _ = h^  # past the drain (step-33 race class)
-    return d^
+    return transfer_upload_list[DType.uint32](ctx, cat_codes, n, max(n, 1))
 
 
 def compute_simple_ctrs_device(

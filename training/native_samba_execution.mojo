@@ -300,7 +300,7 @@ struct NativeSambaModel(Movable):
             _ = dh^  # named after the call that writes or reads it through its address (Mojo frees a List at its last named use)
             if tied:
                 var n = self.vocab * self.width
-                var pair = List[Float32](length=2 * n, fill=0)
+                var pair = List[Float32](unsafe_uninit_length=2 * n)
                 unsafe_memcpy(dest=pair.unsafe_ptr(), src=self.embedding_gradient.unsafe_ptr(), count=n)
                 unsafe_memcpy(dest=pair.unsafe_ptr() + n, src=self.head_gradient.unsafe_ptr(), count=n)
                 _ = self.primitive.call(9, [Int(self.embedding_gradient.unsafe_ptr()), Int(pair.unsafe_ptr())], [n, 2, -1], [])
@@ -331,8 +331,8 @@ struct NativeSambaModel(Movable):
         for k in range(accumulation):  # driver-loop: whole native microbatch/tape/gradient traversal
             if self.dropout:
                 self.dropout_words[1] = base_offset + k * self.rows * self.width
-            var xpart = List[Int32](length=self.rows, fill=0)
-            var ypart = List[Int32](length=self.rows, fill=0)
+            var xpart = List[Int32](unsafe_uninit_length=self.rows)
+            var ypart = List[Int32](unsafe_uninit_length=self.rows)
             unsafe_memcpy(dest=xpart.unsafe_ptr(), src=i32_ptr(ids) + k * self.rows, count=self.rows)
             unsafe_memcpy(dest=ypart.unsafe_ptr(), src=i32_ptr(targets) + k * self.rows, count=self.rows)
             losses[k] = Float32(self.gradients(Int(xpart.unsafe_ptr()), Int(ypart.unsafe_ptr()),

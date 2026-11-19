@@ -85,7 +85,7 @@ is the one-shot form, which is what the gates and the card use.
 # DEVIATION 2486: bulk host staging; stream/lifetime boundaries unchanged.
 from std.sys.compile import is_defined
 from core.hostptr import copy_f32
-from core.transfer import transfer_download_list, transfer_upload_list
+from core.transfer import transfer_download_f32_list, transfer_download_list, transfer_upload_list
 from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from checks.numerics import GLOBAL_NUMERIC_MODE as _CTX_MODE, NUMERIC_IDENTICAL as _CTX_IDENTICAL
@@ -529,6 +529,8 @@ def _upload(
 # TOMBSTONE: MOJOLEARN_IDN_GP_BULK_DOWNLOAD_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at 2fd4a6c6c1.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_GP_BULK_DOWNLOAD_OFF.patch; record in docs/TOMBSTONES.md.
 comptime GP_IDN_BULK_DOWNLOAD = _CTX_MODE == _CTX_IDENTICAL
+#: The pinned download stages of this module and tier (core/transfer.mojo).
+comptime _GP_XFER_POOL = "MojolearnGPTransferStagesIdenticalV1" if _CTX_MODE == _CTX_IDENTICAL else "MojolearnGPTransferStagesOtherV1"
 
 #: fam-kernel-gp (2026-10-04), IDENTICAL, ON by default:
 #: `gpr_predict_host` uploads the n_train x n_train factor only when
@@ -542,26 +544,17 @@ comptime GP_IDN_PREDICT_LAZY_L = _CTX_MODE == _CTX_IDENTICAL
 def _download(
     ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], n: Int
 ) raises -> List[Float32]:
+    comptime if GP_IDN_BULK_DOWNLOAD:
+        # core/transfer.mojo (lane fx-dup-next, 2026-11-19): the copy engine
+        # writes the list's own words; from DOWNLOAD_STAGE_MIN floats (the
+        # fit's n x n factor from n = 1024) through the two pooled pinned
+        # stages. Gone: a pinned host buffer of the whole result per call and
+        # a second pass over it on one host thread. The same words in the
+        # same cells.
+        return transfer_download_f32_list[_GP_XFER_POOL](ctx, buf, n)
     var h = ctx.enqueue_create_host_buffer[DType.float32](n)
     ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=buf)
     ctx.synchronize()
-    comptime if GP_IDN_BULK_DOWNLOAD:
-        # fam-kernel-gp: 8 floats a step into a list of the final length
-        # (`copy_f32`'s own loop), not n appends into a growing one. A copy:
-        # the same words in the same cells.
-        var packed = List[Float32](unsafe_uninit_length=n)
-        var pdst = packed.unsafe_ptr()
-        var psrc = h.unsafe_ptr()
-        var pi = 0
-        var pbody = n - n % 8
-        while pi < pbody:
-            pdst.unsafe_store[width=8](pi, psrc.unsafe_load[width=8](pi))
-            pi += 8
-        while pi < n:
-            pdst.unsafe_store(pi, psrc.unsafe_load(pi))
-            pi += 1
-        _ = h^
-        return packed^
     comptime if is_defined["MOJOLEARN_GP_BULK_DOWNLOAD"]():
         # lane neighbors-apple3, OPT-IN: one vector copy into a list of the
         # final length, not n appends into a growing one. A copy.

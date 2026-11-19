@@ -59,7 +59,7 @@ struct MselHostStore(Defaultable, Movable):
     def put(mut self, src_addr: Int, n: Int) raises -> Int:
         if n < 1 or src_addr == 0:
             raise Error("msel store: put needs at least one byte at a non-null address")
-        var buf = List[UInt8](length=n, fill=0)
+        var buf = List[UInt8](unsafe_uninit_length=n)
         unsafe_memcpy(dest=buf.unsafe_ptr(), src=_U8(unsafe_from_address=src_addr), count=n)
         return self._insert(buf^, n)
 

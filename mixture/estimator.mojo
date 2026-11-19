@@ -580,7 +580,7 @@ def gmm_validate_data_device(
     ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=d_bad)
     ctx.synchronize()
     var col = Int(h[1])
-    var hv = List[Float32](length=1, fill=Float32(0))
+    var hv = List[Float32](unsafe_uninit_length=1)
     var cell = dx.create_sub_buffer[DType.float32](row * n_features + col, 1)
     ctx.enqueue_copy(dst_ptr=hv.unsafe_ptr(), src_buf=cell)
     ctx.synchronize()
@@ -2024,7 +2024,7 @@ def gaussian_mixture_predict(
     gmm_predict_labels(
         ctx, wlp, labels, n_samples, ncomp, trace, card_prefix, row_tpb
     )
-    var out = List[Int32](length=n_samples, fill=Int32(0))
+    var out = List[Int32](unsafe_uninit_length=n_samples)
     ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=labels)
     ctx.synchronize()
     _ = dx^

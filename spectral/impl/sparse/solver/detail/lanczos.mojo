@@ -168,6 +168,7 @@ from max.gpu.sync import barrier
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
+from core.device_zero import enqueue_fill_n
 from core.identity_trace import IdentityTrace
 from gemm.checks.gemm_identical import (
     identical_gemm,
@@ -494,13 +495,6 @@ def copy_kernel(
     if i >= Int(n_in):
         return
     dst.unsafe_store(i, src.unsafe_load(i))
-
-
-def fill_zero_kernel(dst: MutPointer[Float32, MutAnyOrigin], n_in: Int32):
-    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if i >= Int(n_in):
-        return
-    dst.unsafe_store(i, Float32(0.0))
 
 
 # ---------------------------------------------------------------------------
@@ -1444,10 +1438,7 @@ def lanczos_aux(
         # alpha_i = dot(v, u)  (:315-317)
         var alpha_i = _dot(ctx, v, u, n)
         # fill(vv, 0)  (:319)
-        ctx.enqueue_function[fill_zero_kernel](
-            vv.unsafe_ptr(), Int32(n),
-            grid_dim=(_grid(n, tpb), 1, 1), block_dim=(tpb, 1, 1),
-        )
+        enqueue_fill_n(ctx, vv, n, Float32(0.0))
         # b = beta[(i - 1 + ncv) % ncv]; alpha_i_host = alpha_i  (:327-330)
         var prev = (i - 1 + ncv) % ncv
         var b = beta[prev]

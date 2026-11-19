@@ -1084,7 +1084,7 @@ def forest_predict_gpu[RF_INPUT: Bool, GROVE: Bool](
     )
     var out_ok = device_all_finite(ctx,dout,n_rows*n_outputs)
     # the answer lands straight in the result list (no host copy loop)
-    var result = List[Float32](length=n_rows*n_outputs, fill=Float32(0.0))
+    var result = List[Float32](unsafe_uninit_length=n_rows*n_outputs)
     ctx.enqueue_copy(dst_ptr=result.unsafe_ptr(),src_buf=dout)
     ctx.synchronize()
     # Keep borrowed host inputs and device operands live through the drain.

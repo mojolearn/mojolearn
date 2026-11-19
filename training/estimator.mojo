@@ -1465,7 +1465,7 @@ def identical_ce_loss_host(
     var cfg = CeConfig(vocab, ignore_index, reduction, label_smoothing, num_items)
 
     # The targets as a host List (N int32: one memcpy), for `ce_count`.
-    var h_targets = List[Int32](length=n_rows, fill=Int32(0))
+    var h_targets = List[Int32](unsafe_uninit_length=n_rows)
     unsafe_memcpy(dest=h_targets.unsafe_ptr(), src=targets_ptr, count=n_rows)
     # The shape third of `ce_refuse_inputs` here, before any buffer is
     # sized from N * V; the non-finite scan and the targets walk are the
@@ -1539,7 +1539,7 @@ def identical_ce_loss_dev(
     bit moves. Returns `count`."""
     identical_ce_admit_call(reduction, want_grad, n_rows)
     var cfg = CeConfig(vocab, ignore_index, reduction, label_smoothing, num_items)
-    var h_targets = List[Int32](length=n_rows, fill=Int32(0))
+    var h_targets = List[Int32](unsafe_uninit_length=n_rows)
     unsafe_memcpy(dest=h_targets.unsafe_ptr(), src=targets_ptr, count=n_rows)
     ce_refuse_shape(n_rows, n_rows * vocab, cfg)
     var count = ce_count(h_targets, ignore_index)

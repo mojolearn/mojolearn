@@ -66,6 +66,7 @@ from std.atomic import Atomic
 from std.memory import bitcast, stack_allocation
 from std.sys.compile import is_defined
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
+from core.device_zero import enqueue_fill_n
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
@@ -311,18 +312,6 @@ def mf_draw_kernel(dist: F32Ptr, nc: Int32, r: Int32, seed: UInt32, stream0: UIn
         if v != v:
             err.unsafe_store(0, Int32(1))
         dist.unsafe_store(t, v)
-
-
-def mf_fill_i_kernel(dst: I32Ptr, count: Int32, v: Int32):
-    var i = Int(block_idx.x) * MF_TPB + Int(thread_idx.x)
-    if i < Int(count):
-        dst.unsafe_store(i, v)
-
-
-def mf_fill_f_kernel(dst: F32Ptr, count: Int32, v: Float32):
-    var i = Int(block_idx.x) * MF_TPB + Int(thread_idx.x)
-    if i < Int(count):
-        dst.unsafe_store(i, v)
 
 
 # ---------------------------------------------------------------- the step
@@ -1100,9 +1089,9 @@ def _run_phase(
     comptime if MCD_PROFILE:
         t0 = _pms(ctx)
         tp = t0
-    ctx.enqueue_function[mf_fill_i_kernel](_i(ph.active), Int32(nc), Int32(1), grid_dim=_blocks(nc), block_dim=MF_TPB)
-    ctx.enqueue_function[mf_fill_i_kernel](_i(ph.needp), Int32(nc), Int32(0), grid_dim=_blocks(nc), block_dim=MF_TPB)
-    ctx.enqueue_function[mf_fill_i_kernel](_i(ph.fin), Int32(nc), Int32(0), grid_dim=_blocks(nc), block_dim=MF_TPB)
+    enqueue_fill_n(ctx, ph.active, nc, Int32(1))
+    enqueue_fill_n(ctx, ph.needp, nc, Int32(0))
+    enqueue_fill_n(ctx, ph.fin, nc, Int32(0))
     if has_init:
         # P0 = pinvh(cov0), dist = mahal(X, loc0, P0), sel = the h smallest
         comptime if MCD_BATCH_COMPAT:
@@ -1148,7 +1137,7 @@ def _run_phase(
         _mma_covariance(ctx, ph, dx, rows, d, par, hinv)
         _lap(ctx, prof, 1, tp)
         _det(ctx, ph, d, s, err)
-        ctx.enqueue_function[mf_fill_i_kernel](_i(anyb), Int32(1), Int32(0), grid_dim=1, block_dim=MF_TPB)
+        enqueue_fill_n(ctx, anyb, 1, Int32(0))
         ctx.enqueue_function[mf_any_kernel](_i(ph.active), Int32(nc), _i(anyb), grid_dim=_blocks(nc), block_dim=MF_TPB)
         ctx.enqueue_copy(dst_ptr=hany.unsafe_ptr(), src_buf=anyb)
         ctx.synchronize()
@@ -1158,9 +1147,7 @@ def _run_phase(
         if not want_dist:
             if Int(hany[0]) == 0:
                 break
-            ctx.enqueue_function[mf_fill_i_kernel](
-                _i(ph.needp), Int32(nc), Int32(0), grid_dim=_blocks(nc), block_dim=MF_TPB,
-            )
+            enqueue_fill_n(ctx, ph.needp, nc, Int32(0))
         # the -inf start's pinvh (needp) runs even when no candidate is active
         comptime if MCD_BATCH_COMPAT:
             _compat_pinvh(ctx, ph, _f(ph.cov1) if par == 1 else _f(ph.cov0), d, err)
@@ -1297,8 +1284,8 @@ def _finish(
     var ddist = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
     var dloc = ctx.enqueue_create_buffer[DType.float32](max(d, 1))
     var dcov = ctx.enqueue_create_buffer[DType.float32](max(d * d, 1))
-    ctx.enqueue_function[mf_fill_i_kernel](_i(dsup), Int32(n), Int32(0), grid_dim=_blocks(n), block_dim=MF_TPB)
-    ctx.enqueue_function[mf_fill_f_kernel](_f(ddist), Int32(n), Float32(0), grid_dim=_blocks(n), block_dim=MF_TPB)
+    enqueue_fill_n(ctx, dsup, n, Int32(0))
+    enqueue_fill_n(ctx, ddist, n, Float32(0))
     ctx.enqueue_function[mf_scatter_kernel](
         _i(rows), Int32(ph.ident), _i(ph.mask0), _i(ph.mask1), _f(ph.dist), _i(ph.fin), _i(order), Int32(ph.r),
         _i(dsup), _f(ddist), grid_dim=_blocks(ph.r), block_dim=MF_TPB,
@@ -1309,9 +1296,9 @@ def _finish(
         grid_dim=_blocks(d + d * d), block_dim=MF_TPB,
     )
     var dcnt = ctx.enqueue_create_buffer[DType.int32](1)
-    ctx.enqueue_function[mf_fill_i_kernel](_i(dcnt), Int32(1), Int32(0), grid_dim=1, block_dim=MF_TPB)
+    enqueue_fill_n(ctx, dcnt, 1, Int32(0))
     ctx.enqueue_function[mf_count_kernel](_i(dsup), Int32(n), _i(dcnt), grid_dim=_blocks(n), block_dim=MF_TPB)
-    var hcnt = List[Int32](length=1, fill=Int32(-1))
+    var hcnt = List[Int32](unsafe_uninit_length=1)
     ctx.enqueue_copy(dst_ptr=hcnt.unsafe_ptr(), src_buf=dcnt)
     var herr = List[Int32](length=MF_ERR, fill=Int32(0))
     ctx.enqueue_copy(dst_ptr=herr.unsafe_ptr(), src_buf=err)
@@ -1388,7 +1375,7 @@ def fast_mcd_fast(
     var dx = ctx.enqueue_create_buffer[DType.float32](max(n * d, 1))
     ctx.enqueue_copy(dst_buf=dx, src_ptr=X.p())
     var err = ctx.enqueue_create_buffer[DType.int32](MF_ERR)
-    ctx.enqueue_function[mf_fill_i_kernel](_i(err), Int32(MF_ERR), Int32(0), grid_dim=1, block_dim=MF_TPB)
+    enqueue_fill_n(ctx, err, MF_ERR, Int32(0))
     var anyb = ctx.enqueue_create_buffer[DType.int32](1)
     var hany = List[Int32](length=1, fill=Int32(0))
     var ident = ctx.enqueue_create_buffer[DType.int32](1)

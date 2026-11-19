@@ -225,7 +225,7 @@ struct _XiPool(Movable):
         return (ex, tot)
 
     def read1(mut self, s: Int) raises -> Int:
-        var h = List[Int32](length=1, fill=Int32(0))
+        var h = List[Int32](unsafe_uninit_length=1)
         var view = self.i[s].create_sub_buffer[DType.int32](0, 1)
         self.ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=view)
         self.ctx.synchronize()
@@ -423,7 +423,7 @@ def optics_xi_device(
         ctx.enqueue_function[xi_label_kernel](
             ordering, P.ip(z), P.ip(z), P.ip(z), labels, Int32(n), grid_dim=pgrid(n), block_dim=PTPB,
         )
-    var out = List[Int32](length=2 * c, fill=Int32(0))
+    var out = List[Int32](unsafe_uninit_length=max(2 * c, 0))
     if c > 0:
         var view = P.i[cl].create_sub_buffer[DType.int32](0, 2 * c)
         ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=view)

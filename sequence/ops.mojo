@@ -36,6 +36,7 @@ from std.sys.compile import is_defined
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from std.math import fma as _std_fma
 from std.memory import bitcast
+from core.row_cells import softmax_row_from_max_f32
 
 # TOMBSTONE: MOJOLEARN_NN42_INPUT_BIAS_FUSED (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at c906dcaf57.
 # Restore: git apply experiments/removed/MOJOLEARN_NN42_INPUT_BIAS_FUSED.patch
@@ -1055,12 +1056,8 @@ def op_softmax(t: Int, a: Args):
         var v = ld(a.p0, base + c)
         if v > m:
             m = v
-    var s = Float32(0.0)
-    # each exp once: parked in the output row (p1 may be p0: element c
-    # is read before it is written), read back for the division
-    for c in range(C):
-        var e = ftz(identical_exp(sub(ld(a.p0, base + c), m)))
-        st(a.p1, base + c, e)
-        s = add(s, e)
-    for c in range(C):
-        st(a.p1, base + c, ftz(identical_div(ld(a.p1, base + c), s)))
+    # core/row_cells.mojo, the one body: each exp once, parked in the
+    # output row (p1 may be p0: element c is read before it is written),
+    # read back for the division. The same flushes as the statements that
+    # stood here.
+    softmax_row_from_max_f32(a.p0, a.p1, base, C, m)

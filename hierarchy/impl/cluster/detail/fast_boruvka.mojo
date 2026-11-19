@@ -27,6 +27,7 @@ from max.gpu.sync import barrier
 from std.math import sqrt
 from std.memory import bitcast
 from std.atomic import Atomic
+from core.device_zero import enqueue_fill_n
 from core.fast_radix_sort import (
     fast_radix_sort_pairs_u32,
     frs_counts_len,
@@ -254,12 +255,6 @@ def _fbr_grid(count: Int) -> Int:
 @always_inline
 def _fbr_tid() -> Int:
     return Int(block_idx.x) * FBR_TPB + Int(thread_idx.x)
-
-
-def fbr_fill_kernel(buf: _FI, n: Int32, v: Int32):
-    var i = _fbr_tid()
-    if i < Int(n):
-        buf[i] = v
 
 
 def fbr_iota_kernel(a: _FI, b: _FI, n: Int32):
@@ -539,13 +534,13 @@ def fast_euclidean_mst(
     var ew_d = ctx.enqueue_create_buffer[DType.uint32](ecap)
     var mi = Int32(m)
     ctx.enqueue_function[fbr_iota_kernel](comp_d.unsafe_ptr(), todo_d.unsafe_ptr(), mi, grid_dim=mg, block_dim=FBR_TPB)
-    ctx.enqueue_function[fbr_fill_kernel](dropped_d.unsafe_ptr(), mi, Int32(0), grid_dim=mg, block_dim=FBR_TPB)
-    ctx.enqueue_function[fbr_fill_kernel](ub_d.unsafe_ptr(), mi, FBR_NONE, grid_dim=mg, block_dim=FBR_TPB)
-    ctx.enqueue_function[fbr_fill_kernel](minlb_d.unsafe_ptr(), mi, FBR_NONE, grid_dim=mg, block_dim=FBR_TPB)
-    ctx.enqueue_function[fbr_fill_kernel](arg_d.unsafe_ptr(), mi, FBR_NONE, grid_dim=mg, block_dim=FBR_TPB)
-    ctx.enqueue_function[fbr_fill_kernel](cbd_d.unsafe_ptr(), mi, FBR_NONE, grid_dim=mg, block_dim=FBR_TPB)
-    ctx.enqueue_function[fbr_fill_kernel](cba_d.unsafe_ptr(), mi, FBR_NONE, grid_dim=mg, block_dim=FBR_TPB)
-    ctx.enqueue_function[fbr_fill_kernel](cbb_d.unsafe_ptr(), mi, FBR_NONE, grid_dim=mg, block_dim=FBR_TPB)
+    enqueue_fill_n(ctx, dropped_d, m, Int32(0))
+    enqueue_fill_n(ctx, ub_d, m, FBR_NONE)
+    enqueue_fill_n(ctx, minlb_d, m, FBR_NONE)
+    enqueue_fill_n(ctx, arg_d, m, FBR_NONE)
+    enqueue_fill_n(ctx, cbd_d, m, FBR_NONE)
+    enqueue_fill_n(ctx, cba_d, m, FBR_NONE)
+    enqueue_fill_n(ctx, cbb_d, m, FBR_NONE)
     var n_comp = m
     var n_edges = 0
     var rounds = 0
@@ -578,7 +573,7 @@ def fast_euclidean_mst(
                 todo_d.unsafe_ptr(), Int32(n_todo), comp_d.unsafe_ptr(), bd_d.unsafe_ptr(),
                 bj_d.unsafe_ptr(), ub_d.unsafe_ptr(), grid_dim=_fbr_grid(n_todo), block_dim=FBR_TPB,
             )
-            ctx.enqueue_function[fbr_fill_kernel](cnt_d.unsafe_ptr(), Int32(4), Int32(0), grid_dim=1, block_dim=FBR_TPB)
+            enqueue_fill_n(ctx, cnt_d, 4, Int32(0))
             ctx.enqueue_function[fbr_phase_b_list_kernel](
                 defer_d.unsafe_ptr(), Int32(n_defer), comp_d.unsafe_ptr(), bd_d.unsafe_ptr(),
                 bj_d.unsafe_ptr(), ub_d.unsafe_ptr(), dropped_d.unsafe_ptr(), listb_d.unsafe_ptr(),
@@ -597,7 +592,7 @@ def fast_euclidean_mst(
                   + " phaseB=" + String(n_b) + " droppedB=" + String(n_drop_b)
                   + " ms=" + String((Int(perf_counter_ns()) - _tq0) // 1000000))
         # Each component's cheapest edge, then the refusal row.
-        ctx.enqueue_function[fbr_fill_kernel](cnt_d.unsafe_ptr(), Int32(4), FBR_NONE, grid_dim=1, block_dim=FBR_TPB)
+        enqueue_fill_n(ctx, cnt_d, 4, FBR_NONE)
         for stage in range(3):
             ctx.enqueue_function[fbr_edge_pass_kernel](
                 mi, comp_d.unsafe_ptr(), bd_d.unsafe_ptr(), bj_d.unsafe_ptr(), dropped_d.unsafe_ptr(),
@@ -632,7 +627,7 @@ def fast_euclidean_mst(
         var passes = 0
         while True:
             passes += 1
-            ctx.enqueue_function[fbr_fill_kernel](cnt_d.unsafe_ptr(), Int32(1), Int32(0), grid_dim=1, block_dim=FBR_TPB)
+            enqueue_fill_n(ctx, cnt_d, 1, Int32(0))
             ctx.enqueue_function[fbr_label_hook_kernel](
                 mi, keep_d.unsafe_ptr(), comp_d.unsafe_ptr(), cba_d.unsafe_ptr(), cbb_d.unsafe_ptr(),
                 lab_p, cnt_d.unsafe_ptr(), grid_dim=mg, block_dim=FBR_TPB,
@@ -643,9 +638,9 @@ def fast_euclidean_mst(
             if passes > m + 2:
                 raise Error("fast_euclidean_mst: the component labels did not settle")
         ctx.enqueue_function[fbr_relabel_kernel](mi, comp_d.unsafe_ptr(), lab_p, grid_dim=mg, block_dim=FBR_TPB)
-        ctx.enqueue_function[fbr_fill_kernel](cbd_d.unsafe_ptr(), mi, FBR_NONE, grid_dim=mg, block_dim=FBR_TPB)
-        ctx.enqueue_function[fbr_fill_kernel](cba_d.unsafe_ptr(), mi, FBR_NONE, grid_dim=mg, block_dim=FBR_TPB)
-        ctx.enqueue_function[fbr_fill_kernel](cbb_d.unsafe_ptr(), mi, FBR_NONE, grid_dim=mg, block_dim=FBR_TPB)
+        enqueue_fill_n(ctx, cbd_d, m, FBR_NONE)
+        enqueue_fill_n(ctx, cba_d, m, FBR_NONE)
+        enqueue_fill_n(ctx, cbb_d, m, FBR_NONE)
         n_edges += kept
         n_comp -= kept
         if n_comp <= 1:
@@ -660,12 +655,12 @@ def fast_euclidean_mst(
         # index is still searched); it sits the round out, ignored by the
         # edge pass above and listed again the next round. Phase B repeats
         # the test after phase A's exact values join the bound.
-        ctx.enqueue_function[fbr_fill_kernel](ub_d.unsafe_ptr(), mi, FBR_NONE, grid_dim=mg, block_dim=FBR_TPB)
+        enqueue_fill_n(ctx, ub_d, m, FBR_NONE)
         ctx.enqueue_function[fbr_plan_bound_kernel](
             mi, comp_d.unsafe_ptr(), bd_d.unsafe_ptr(), bj_d.unsafe_ptr(), dropped_d.unsafe_ptr(),
             listed_d.unsafe_ptr(), ub_d.unsafe_ptr(), grid_dim=mg, block_dim=FBR_TPB,
         )
-        ctx.enqueue_function[fbr_fill_kernel](cnt_d.unsafe_ptr(), Int32(4), Int32(0), grid_dim=1, block_dim=FBR_TPB)
+        enqueue_fill_n(ctx, cnt_d, 4, Int32(0))
         for stage in range(3):
             ctx.enqueue_function[fbr_plan_pass_kernel](
                 mi, comp_d.unsafe_ptr(), bd_d.unsafe_ptr(), bj_d.unsafe_ptr(), dropped_d.unsafe_ptr(),
@@ -673,8 +668,8 @@ def fast_euclidean_mst(
                 todo_d.unsafe_ptr(), defer_d.unsafe_ptr(), cnt_d.unsafe_ptr(), Int32(stage),
                 grid_dim=mg, block_dim=FBR_TPB,
             )
-        ctx.enqueue_function[fbr_fill_kernel](minlb_d.unsafe_ptr(), mi, FBR_NONE, grid_dim=mg, block_dim=FBR_TPB)
-        ctx.enqueue_function[fbr_fill_kernel](arg_d.unsafe_ptr(), mi, FBR_NONE, grid_dim=mg, block_dim=FBR_TPB)
+        enqueue_fill_n(ctx, minlb_d, m, FBR_NONE)
+        enqueue_fill_n(ctx, arg_d, m, FBR_NONE)
         var pc = _fbr_read(ctx, cnt_d, 3)
         n_todo = pc[0]
         n_defer = pc[1]

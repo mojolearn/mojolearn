@@ -2600,7 +2600,7 @@ def walk_leaf_values(
     `_estimate_complete` enqueued, after the caller's drain: the host model's
     download (the boosting loop keeps its ensemble on the host; lane
     cpu4-gbdt's device-resident model item is not done)."""
-    var out = List[Float32](length=n_leaves, fill=Float32(0.0))
+    var out = List[Float32](unsafe_uninit_length=n_leaves)
     unsafe_memcpy(
         dest=out.unsafe_ptr(),
         src=est_ws[0].h_est.unsafe_ptr(),

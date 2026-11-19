@@ -47,6 +47,8 @@ from std.atomic import Atomic
 from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.math import isfinite
 from std.memory import unsafe_memcpy
+from core.device_zero import enqueue_fill
+from core.transfer import transfer_upload_list, transfer_upload_ptr
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from checks.soft_f64 import (
@@ -587,35 +589,31 @@ struct ResidentCtrPlan(Movable):
 
 def _upload_i64(ctx: DeviceContext, values: List[Int]) raises -> DeviceBuffer[DType.int64]:
     """One bulk copy of a host list of model metadata (at least one word)."""
-    var n = max(len(values), 1)
-    var h = ctx.enqueue_create_host_buffer[DType.int64](n)
-    var d = ctx.enqueue_create_buffer[DType.int64](n)
-    ctx.synchronize()
-    h.unsafe_ptr().unsafe_store(0, Int64(0))
-    if len(values) > 0:
-        unsafe_memcpy(
-            dest=h.unsafe_ptr(),
-            src=values.unsafe_ptr().bitcast[Int64](),
-            count=len(values),
-        )
-    ctx.enqueue_copy(dst_buf=d, src_ptr=h.unsafe_ptr())
-    ctx.synchronize()
-    _ = h^
-    return d^
+    # core/transfer.mojo (lane fx-dup-next, 2026-11-19): copied in place from
+    # the caller's list (an Int is 64 bits), one wait. Gone: a pinned host
+    # buffer per call, a memcpy into it and a wait before it. An empty list
+    # is still one zero word.
+    var n = len(values)
+    if n == 0:
+        var z = ctx.enqueue_create_buffer[DType.int64](1)
+        enqueue_fill(ctx, z, Int64(0))
+        ctx.synchronize()
+        return z^
+    return transfer_upload_ptr[DType.int64](
+        ctx, MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(values.unsafe_ptr())), n, n,
+    )
 
 
 def _upload_f32(ctx: DeviceContext, values: List[Float32]) raises -> DeviceBuffer[DType.float32]:
-    var n = max(len(values), 1)
-    var h = ctx.enqueue_create_host_buffer[DType.float32](n)
-    var d = ctx.enqueue_create_buffer[DType.float32](n)
-    ctx.synchronize()
-    h.unsafe_ptr().unsafe_store(0, Float32(0.0))
-    if len(values) > 0:
-        unsafe_memcpy(dest=h.unsafe_ptr(), src=values.unsafe_ptr(), count=len(values))
-    ctx.enqueue_copy(dst_buf=d, src_ptr=h.unsafe_ptr())
-    ctx.synchronize()
-    _ = h^
-    return d^
+    # As `_upload_i64`: in place from the caller's list; an empty list is
+    # still one zero word.
+    var n = len(values)
+    if n == 0:
+        var z = ctx.enqueue_create_buffer[DType.float32](1)
+        enqueue_fill(ctx, z, Float32(0.0))
+        ctx.synchronize()
+        return z^
+    return transfer_upload_list[DType.float32](ctx, values, n, n)
 
 
 def _grid(total: Int) -> Int:

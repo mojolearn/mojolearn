@@ -73,7 +73,7 @@ struct ResidentLabeledReference(Movable):
         ctx.synchronize()
         var ur = List[Float32]()
         if metric == LABELED_METRIC_COSINE:
-            var rr = List[Float32](length=n_refs * d, fill=Float32(0))
+            var rr = List[Float32](unsafe_uninit_length=n_refs * d)
             unsafe_memcpy(dest=rr.unsafe_ptr(), src=refs_ptr, count=n_refs * d)
             ur = cosine_unit_rows(rr, n_refs, d, "labeled_reference_predict")
             ctx.enqueue_copy(dst_buf=refs, src_ptr=ur.unsafe_ptr())
@@ -221,7 +221,7 @@ def labeled_reference_predict_resident(
     entry.ctx.synchronize()
     var uq = List[Float32]()
     if metric == LABELED_METRIC_COSINE:
-        var qq = List[Float32](length=n_queries * d, fill=Float32(0))
+        var qq = List[Float32](unsafe_uninit_length=n_queries * d)
         unsafe_memcpy(dest=qq.unsafe_ptr(), src=queries_ptr, count=n_queries * d)
         uq = cosine_unit_rows(qq, n_queries, d, "labeled_reference_predict")
         entry.ctx.enqueue_copy(dst_buf=queries, src_ptr=uq.unsafe_ptr())
