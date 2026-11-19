@@ -84,8 +84,6 @@ from bindings.admitted_input_run import admitted_finite_entry_refuse
 from bindings.admitted_input_run import AdmittedXView
 from bindings.classical_arrays_door import classical_dtype_str, classical_c_order, classical_is_f32
 from bindings.py_optional import py_or_none, py_present
-from bindings.classical_labels_door import (
-    ClassicalLabels,
 from bindings.x_linear_keys_unpack import (
     x_linear_keys,
     X_LINEAR_OPN_CD_FIT,
@@ -127,6 +125,8 @@ from bindings.x_linear_keys_unpack import (
 )
 from bindings.py_keys import py_op_code
 from bindings.py_balanced import py_item
+from bindings.classical_labels_door import (
+    ClassicalLabels,
     labels_full_f32,
     labels_address,
     labels_cast,

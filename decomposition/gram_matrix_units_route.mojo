@@ -94,13 +94,18 @@ def decomp_gram_units_into(
         ),
         block_dim=(TRANSPOSE_TILE, TRANSPOSE_TILE, 1),
     )
-    # The self-Gram reads `xt` as both operands (the form of core/gemm.mojo::gemm_nt_gram).
+    # The self-Gram reads `xt` as both operands (the form of core/gemm.mojo::gemm_nt_gram). `matmul` takes its
+    # operands mutably, and one variable may not be passed mutably twice ("aliasing values passed mutably to 'a'
+    # and 'b'"), so the second operand is a second HANDLE of the same device storage: a reference-count copy of
+    # the buffer handle, no second copy of X^T and no extra device memory.
+    var xt_b = xt
     var tz = TileTensor(z, row_major(m, m))
     var tx = TileTensor(xt, row_major(m, k))
-    var ty = TileTensor(xt, row_major(m, k))
+    var ty = TileTensor(xt_b, row_major(m, k))
     matmul[transpose_b=True, target="gpu"](tz, tx, ty, ctx)
     # `xt` is this function's: wait for the two launches that read it before it is released.
     ctx.synchronize()
+    _ = xt_b^
     _ = xt^
     return True
 
