@@ -5,6 +5,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import threading
 
 import pytest
 
@@ -1208,18 +1209,36 @@ def test_sliding_window_starts_a_group_as_soon_as_a_core_frees(repo, tmp_path, m
     first = plan(repo, tmp_path)
     for row in first["support"]:
         cache_row(cache, row)
+    groups = len(first["groups"])
     seen = []
-    monkeypatch.setattr(dev, "run_logged", fake_group_compiler(seen))
+    compile_group = fake_group_compiler(seen)
+    # The group started k-th finishes only once the (k+2)-th has started (the last two at once), so the
+    # scheduler always sees one finish while the other group still runs. Before 2026-11-18 the fake finished
+    # at once: on a slow runner both running groups could finish inside one scheduler wait, the window then
+    # restarted from an idle host and a lone last group rightly took both cores ({'1', '2'}; runs
+    # 44389691574, 44428091067, 44431531617), which says nothing about starting on a freed core.
+    started = threading.Condition()
+
+    def ordered_compiler(command, root, env, log):
+        with started:
+            rank = len(seen)
+            result = compile_group(command, root, env, log)
+            started.notify_all()
+            assert started.wait_for(lambda: len(seen) >= min(rank + 2, groups), timeout=60), \
+                "the scheduler did not start the next group while this one ran"
+        return result
+    monkeypatch.setattr(dev, "run_logged", ordered_compiler)
     evidence = tmp_path / "evidence"
     assert dev.main(["build", "--sets", "identical", "--cache", str(cache), "--evidence", str(evidence)]) == 0
     report = json.loads((evidence / "result.json").read_text())
-    groups = len(first["groups"])
     assert groups > 2 and len(seen) == groups
     # Two cores: two groups at a time, one thread each, never more threads than cores.
     assert report["groups_concurrent_max"] == 2 and report["threads_running_max"] == 2
     assert {jobs for _, jobs, _ in seen} == {"1"}
     assert all(r["threads_running_at_launch"] <= 2 and r["groups_running_at_launch"] <= 2
                for r in report["results"])
+    # As soon as a core frees: every group after the first started beside a running one.
+    assert sorted(r["groups_running_at_launch"] for r in report["results"]) == [1] + [2] * (groups - 1)
     assert report["state"] == "activated"
 
 

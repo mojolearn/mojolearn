@@ -94,16 +94,19 @@ load_job() {  # JSON RES set
 expired() { [ "$(date +%s)" -ge $(( EXP - 30 )) ]; }
 
 lock() {  # waits up to $1 seconds for the job's upload lock
-    local i=0 p
-    while ! mkdir "$ST/lock" 2> /dev/null; do
-        p=$(cat "$ST/lock/pid" 2> /dev/null || true)
+    # The lock is a file holding its owner's pid, created and written in ONE command (noclobber, in a subshell so
+    # set -C never leaks): a signal trap of this shell runs only after that command, so it never finds the lock
+    # taken but without its pid. (Before 2026-11-18 it was `mkdir lock` then `echo pid > lock/pid`; a TERM between
+    # the two left this shell's own lock with no pid, and the trap's final upload waited 90 s for it.)
+    local i=0 p me="${BASHPID:-$$}"
+    while ! ( set -C; printf '%s\n' "$me" > "$ST/lock" ) 2> /dev/null; do
+        p=$(cat "$ST/lock" 2> /dev/null || true)
         if [ -n "$p" ] && ! kill -0 "$p" 2> /dev/null; then rm -rf "$ST/lock"; continue; fi
         # our own: a signal trap's final upload interrupted this process's periodic one, which never resumes
-        if [ "$p" = "${BASHPID:-$$}" ]; then rm -rf "$ST/lock"; continue; fi
+        if [ "$p" = "$me" ]; then rm -rf "$ST/lock"; continue; fi
         i=$((i + 1)); [ $i -lt "${1:-120}" ] || return 1
         sleep 1
     done
-    echo "${BASHPID:-$$}" > "$ST/lock/pid"
 }
 unlock() { rm -rf "$ST/lock"; }
 
@@ -302,6 +305,13 @@ final_upload() {  # <exit> <why>
     [ "$FINAL_DONE" = 0 ] || return 0
     IN_FINAL=1
     trap '' TERM INT        # ignored dispositions are inherited: curl and tar finish (bounded by their own timeouts)
+    # A periodic upload this trap interrupted can leave fd 7 (the whole-stream fifo's write end) open and its sha
+    # reader still running or blocked opening the fifo. The final's rm + mkfifo below would orphan that reader on
+    # the unlinked fifo for ever, holding the caller's stdout and stderr open (GitHub run 44431531617: the runner
+    # exited but its caller never saw EOF). Close fd 7 and stop every leftover helper job except the command.
+    exec 7>&-
+    local j
+    for j in $(jobs -p); do [ "$j" = "$CPID" ] || kill -KILL "$j" 2> /dev/null; done
     snapshot final "$1" "$2"; local r=$?
     FINAL_DONE=1
     # a final that did not land stays registered (its pid dead): the box's --flush-all retries it before any delete
