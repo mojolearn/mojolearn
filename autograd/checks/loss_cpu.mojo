@@ -3,6 +3,6 @@ from sequence.exec import HostExec
 from autograd.checks.losses import run_loss_checks
 
 
-def main() raises:
+def run_checks() raises:
     var ex = HostExec()
     run_loss_checks(ex)

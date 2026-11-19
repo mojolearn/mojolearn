@@ -32,7 +32,7 @@ def _wrong_chunk_local_loss(logits: List[Float32], targets: List[Int32], rows: I
     return ftz(identical_div(total, Float32(rows)))
 
 
-def main() raises:
+def run_checks() raises:
     comptime rows = 3
     comptime vocab = 513  # crosses two full chunks and a one-column tail
     comptime width = 5

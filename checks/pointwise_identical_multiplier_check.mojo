@@ -194,10 +194,10 @@ def run_policy(
     var d_first = ctx.enqueue_create_buffer[DType.uint32](n)
     var d_folds = ctx.enqueue_create_buffer[DType.uint32](n)
     var d_oh = ctx.enqueue_create_buffer[DType.uint8](n)
-    ctx.enqueue_copy(dst_buf=d_off, src_ptr=p.offset.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_first, src_ptr=p.first.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_folds, src_ptr=p.folds.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_oh, src_ptr=p.one_hot.unsafe_ptr())
+    upload_whole_into[DType.uint32](ctx, d_off, p.offset)
+    upload_whole_into[DType.uint32](ctx, d_first, p.first)
+    upload_whole_into[DType.uint32](ctx, d_folds, p.folds)
+    upload_whole_into[DType.uint8](ctx, d_oh, p.one_hot)
 
     var line2 = p.line * 2
     var fh = FoldsHistogram()

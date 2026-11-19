@@ -509,7 +509,7 @@ def run_checks() raises:
                            d_wt.unsafe_ptr(), d_idx.unsafe_ptr(),
                            d_part2.unsafe_ptr(), d_sums2.unsafe_ptr(),
                            total_bin_features, scale, N_GROUPS, 2)
-    ctx.enqueue_copy(dst_buf=h_sums2, src_buf=d_sums2)
+    download_buffer_into[DType.float32](ctx, d_sums2, h_sums2)
     ctx.synchronize()
 
     # host: pair 0's smaller is part 0 (600 rows), filed at slot 2;
@@ -586,7 +586,7 @@ def run_checks() raises:
 # checks/ that no CI job ran. One process per check name in CI keeps any
 # fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
 from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
-from checks.native_tests.kit import download_host_into, upload_whole_into
+from checks.native_tests.kit import download_buffer_into, download_host_into, upload_whole_into
 
 
 def run_cases(column: Column, mut report: Report):

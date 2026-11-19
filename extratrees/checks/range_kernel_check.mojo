@@ -175,7 +175,7 @@ def _shuffled_row_ids(n_rows: Int) -> List[Int32]:
     return ids^
 
 
-def main() raises:
+def run_checks() raises:
     comptime assert has_accelerator(), "this check must run on a GPU"
 
     # ---------------------------------------------------------------------

@@ -15,6 +15,7 @@ list (order AND orientation: `children[2i] = find(src)`,
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 
 struct UnionFind(Movable):
@@ -114,9 +115,9 @@ def build_dendrogram_host(
     var v_rows = rows.create_sub_buffer[DType.int32](0, n_edges)
     var v_cols = cols.create_sub_buffer[DType.int32](0, n_edges)
     var v_data = data.create_sub_buffer[DType.float32](0, n_edges)
-    ctx.enqueue_copy(dst_ptr=mst_src_h.unsafe_ptr(), src_buf=v_rows)
-    ctx.enqueue_copy(dst_ptr=mst_dst_h.unsafe_ptr(), src_buf=v_cols)
-    ctx.enqueue_copy(dst_ptr=mst_weights_h.unsafe_ptr(), src_buf=v_data)
+    download_host_into[DType.int32](ctx, v_rows, mst_src_h)
+    download_host_into[DType.int32](ctx, v_cols, mst_dst_h)
+    download_host_into[DType.float32](ctx, v_data, mst_weights_h)
     ctx.synchronize()
 
     var children_h = ctx.enqueue_create_host_buffer[DType.int32](n_edges * 2)
@@ -145,16 +146,10 @@ def build_dendrogram_host(
     var v_children = children.create_sub_buffer[DType.int32](0, n_edges * 2)
     var v_size = out_size.create_sub_buffer[DType.int32](0, n_edges)
     var v_delta = out_delta.create_sub_buffer[DType.float32](0, n_edges)
-    ctx.enqueue_copy(dst_buf=v_children, src_ptr=children_h.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=v_size, src_ptr=out_size_h.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=v_delta, src_ptr=out_delta_h.unsafe_ptr())
+    upload_host_into[DType.int32](ctx, v_children, children_h)
+    upload_host_into[DType.int32](ctx, v_size, out_size_h)
+    upload_host_into[DType.float32](ctx, v_delta, out_delta_h)
     ctx.synchronize()
-    _ = mst_src_h^
-    _ = mst_dst_h^
-    _ = mst_weights_h^
-    _ = children_h^
-    _ = out_size_h^
-    _ = out_delta_h^
     _ = v_rows^
     _ = v_cols^
     _ = v_data^

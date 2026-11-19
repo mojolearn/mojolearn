@@ -185,7 +185,7 @@ def run_checks() raises:
     var h_bins = ctx.enqueue_create_host_buffer[DType.uint32](
         lay.total_indices
     )
-    ctx.enqueue_copy(dst_buf=h_bins, src_buf=d_bins)
+    download_buffer_into[DType.uint32](ctx, d_bins, h_bins)
     ctx.synchronize()
     var bad5 = 0
     for d in range(lay.total_indices):
@@ -278,7 +278,7 @@ def run_checks() raises:
         bad7 += 1
     write_fold_based_initial_bins(ctx, g7, subs.bins)
     var hb7 = ctx.enqueue_create_host_buffer[DType.uint32](n7)
-    ctx.enqueue_copy(dst_buf=hb7, src_buf=subs.bins)
+    download_buffer_into[DType.uint32](ctx, subs.bins, hb7)
     ctx.synchronize()
     var tally = List[Int]()
     for _ in range(len(g7.parts)):
@@ -320,7 +320,7 @@ def run_checks() raises:
 # checks/ that no CI job ran. One process per check name in CI keeps any
 # fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
 from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
-from checks.native_tests.kit import upload_host_into
+from checks.native_tests.kit import download_buffer_into, upload_host_into
 
 
 def run_cases(column: Column, mut report: Report):

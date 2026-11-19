@@ -79,7 +79,7 @@ from gemm.checks.gemm_int15_apple_tuned_dev import (
     identical_gemm_int15_apple_dev_from_pieces_into,
     int15_apple_tuned_dev_variant_name,
 )
-from gemm.checks.gemm_int15_check import (
+from gemm.checks.gemm_int15_check_suite import (
     SHAPE_COUNT,
     _digest,
     _download_cells,

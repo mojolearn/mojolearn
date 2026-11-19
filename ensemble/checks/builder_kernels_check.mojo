@@ -1483,7 +1483,7 @@ def arm_f_sabotage(ctx: DeviceContext, mut fx: Fixture) raises -> Int:
     return failures
 
 
-def main() raises:
+def run_checks() raises:
     print(
         "builder_kernels_check:"
         " ensemble/decisiontree/batched_levelalgo/kernels/"

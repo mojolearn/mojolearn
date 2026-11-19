@@ -135,10 +135,8 @@ def _device_fold_and_pack(
             2 * n if n > 0 else 2
         )
         if n > 0:
-            ctx.enqueue_copy(dst_buf=di, src_ptr=helpers[h].ids.unsafe_ptr())
-            ctx.enqueue_copy(
-                dst_buf=ds, src_ptr=helpers[h].scores.unsafe_ptr()
-            )
+            upload_whole_into[DType.uint32](ctx, di, helpers[h].ids)
+            upload_whole_into[DType.float32](ctx, ds, helpers[h].scores)
         d_res_ids.append(di^)
         d_res_scores.append(ds^)
 
@@ -179,7 +177,7 @@ def _device_fold_and_pack(
     var h_sb = ctx.enqueue_create_host_buffer[DType.float32](1)
     var h_desc = ctx.enqueue_create_host_buffer[DType.uint32](5)
     download_host_into[DType.uint32](ctx, d_winners_ids, h_w)
-    ctx.enqueue_copy(dst_buf=h_ws, src_buf=d_winners_scores)
+    download_buffer_into[DType.float32](ctx, d_winners_scores, h_ws)
     download_host_into[DType.float32](ctx, d_sb, h_sb)
     download_host_into[DType.uint32](ctx, d_desc, h_desc)
     ctx.synchronize()
@@ -387,7 +385,7 @@ def run_checks() raises:
 # checks/ that no CI job ran. One process per check name in CI keeps any
 # fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
 from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
-from checks.native_tests.kit import download_host_into, upload_whole_into
+from checks.native_tests.kit import download_buffer_into, download_host_into, upload_whole_into
 
 
 def run_cases(column: Column, mut report: Report):

@@ -52,6 +52,7 @@ from cluster.impl.kmeans_params import (
     METRIC_L2_EXPANDED,
 )
 from checks.fixed_point import choose_scale
+from checks.native_tests.kit import upload_whole_into
 
 
 comptime EST_ROWS = 512
@@ -96,7 +97,7 @@ def _upload_scale(
     ctx: DeviceContext, hx: List[Float32], n: Int, d: Int
 ) raises -> Float64:
     var x = ctx.enqueue_create_buffer[DType.float32](n * d)
-    ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
+    upload_whole_into[DType.float32](ctx, x, hx)
     ctx.synchronize()
     var s = plan_sum_scale(ctx, x, n, d)
     _ = x^

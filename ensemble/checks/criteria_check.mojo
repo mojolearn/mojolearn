@@ -541,7 +541,7 @@ def arm_f_params_reach_the_device(ctx: DeviceContext) raises -> Int:
     return wrong
 
 
-def main() raises:
+def run_checks() raises:
     print("criteria_check: every split criterion cuML accepts, actually run")
     var ctx = DeviceContext()
     var fails = 0

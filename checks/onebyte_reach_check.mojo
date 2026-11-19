@@ -278,7 +278,7 @@ def claim_counts(
                     fcb, sm_count, scale,
                 )
             ctx.synchronize()
-            ctx.enqueue_copy(dst_buf=hh, src_buf=h.d_hist)
+            download_buffer_into[DType.float32](ctx, h.d_hist, hh)
             ctx.synchronize()
             var nz = 0
             for i in range(cells):
@@ -429,7 +429,7 @@ def run_checks() raises:
 # checks/ that no CI job ran. One process per check name in CI keeps any
 # fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
 from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
-from checks.native_tests.kit import upload_host_into
+from checks.native_tests.kit import download_buffer_into, upload_host_into
 
 
 def run_cases(column: Column, mut report: Report):

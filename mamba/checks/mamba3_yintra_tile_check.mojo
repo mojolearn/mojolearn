@@ -61,7 +61,7 @@ def run_case(ctx: DeviceContext, l: Int, q0: Int, q: Int, adverse: Bool) raises 
     return count
 
 
-def main() raises:
+def run_checks() raises:
     if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
         raise Error("requires IDENTICAL")
     var ctx = DeviceContext()

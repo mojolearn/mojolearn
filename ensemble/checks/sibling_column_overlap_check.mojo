@@ -117,7 +117,7 @@ def report_shape(n: Int, k: Int, n_triples: Int, seed: UInt64) -> Float64:
     return Float64(total) / Float64(pairs)
 
 
-def main() raises:
+def run_checks() raises:
     print("PARENT/CHILD COLUMN OVERLAP, forest per-node feature sampler")
     print("seed 7, treeid 0, sample_offset 0, 4096 parent nodes per shape")
     print("")

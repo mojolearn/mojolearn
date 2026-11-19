@@ -144,7 +144,7 @@ def check_case(length: Int, k: Int, select_min: Bool) raises -> Int:
         return flagged
 
 
-def main() raises:
+def run_checks() raises:
     comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
         raise Error("bound-compact selector check requires IDENTICAL")
     var lengths: List[Int] = [64, 65, 255, 256, 257, 2047, 2048, 4096, 6784, 16384, 65536, 65537]

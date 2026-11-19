@@ -19,15 +19,15 @@ from std.memory import bitcast
 from max.gpu.host import DeviceContext
 
 from checks.native_tests.kit import (
-    all_finite, allclose, download, download_host_into, download_into, download_undrained_keep,
-    download_whole_into, same_words, upload, upload_address, upload_host, upload_host_into, upload_into,
-    upload_into_undrained_keep, upload_whole_into, word_hex,
+    all_finite, allclose, copy_device_into, download, download_buffer_into, download_host_into, download_into,
+    download_undrained_keep, download_whole_into, same_words, upload, upload_address, upload_buffer_into,
+    upload_host, upload_host_into, upload_into, upload_into_undrained_keep, upload_whole_into, word_hex,
 )
 from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
 
 
 comptime KIT_WORDS = 1031
-comptime KIT_GPU_CASES = 11
+comptime KIT_GPU_CASES = 12
 comptime KIT_CPU_CASES = 6
 
 
@@ -199,6 +199,32 @@ def _host_forms(ctx: DeviceContext) raises:
     _ = third^
 
 
+def _buffer_forms(ctx: DeviceContext) raises:
+    """The buffer to buffer forms: pinned to device, device to device and
+    device to pinned, each read back bit for bit."""
+    var values = _u32_words()
+    var host = ctx.enqueue_create_host_buffer[DType.uint32](KIT_WORDS)
+    ctx.synchronize()
+    for i in range(KIT_WORDS):
+        host.unsafe_ptr().unsafe_store(i, values[i])
+    var first = ctx.enqueue_create_buffer[DType.uint32](KIT_WORDS)
+    upload_buffer_into[DType.uint32](ctx, first, host)
+    same_words[DType.uint32](download[DType.uint32](ctx, first, KIT_WORDS), values, "upload_buffer_into")
+    var second = ctx.enqueue_create_buffer[DType.uint32](KIT_WORDS)
+    copy_device_into[DType.uint32](ctx, second, first)
+    same_words[DType.uint32](download[DType.uint32](ctx, second, KIT_WORDS), values, "copy_device_into")
+    var back = ctx.enqueue_create_host_buffer[DType.uint32](KIT_WORDS)
+    download_buffer_into[DType.uint32](ctx, second, back)
+    var read = List[UInt32](length=KIT_WORDS, fill=0)
+    for i in range(KIT_WORDS):
+        read[i] = back.unsafe_ptr().unsafe_load(i)
+    same_words[DType.uint32](read, values, "download_buffer_into")
+    _ = host^
+    _ = back^
+    _ = first^
+    _ = second^
+
+
 def _gpu_case(ctx: DeviceContext, which: Int) raises:
     if which == 0:
         _roundtrip[DType.float32](ctx, _f32_words())
@@ -220,8 +246,10 @@ def _gpu_case(ctx: DeviceContext, which: Int) raises:
         _empty(ctx)
     elif which == 9:
         _undrained(ctx)
-    else:
+    elif which == 10:
         _host_forms(ctx)
+    else:
+        _buffer_forms(ctx)
 
 
 def _run_gpu(mut report: Report) raises:

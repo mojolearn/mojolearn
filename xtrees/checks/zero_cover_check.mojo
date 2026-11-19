@@ -12,7 +12,7 @@ def _a[dt: DType](mut x: List[Scalar[dt]]) -> Int:
     return Int(x.unsafe_ptr())
 
 
-def main() raises:
+def run_checks() raises:
     # Background row 0 reaches the left leaf only. The right subtree splits
     # the same feature again; its cold path has zero one/zero fractions.
     var offsets: List[Int32] = [0, 5]

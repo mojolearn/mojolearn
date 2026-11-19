@@ -444,7 +444,7 @@ def _column_spread(
     return (lo, hi)
 
 
-def main() raises:
+def run_checks() raises:
     comptime assert has_accelerator(), "this check must run on a GPU"
     print("=== sampler_kernel_check ===")
     print(

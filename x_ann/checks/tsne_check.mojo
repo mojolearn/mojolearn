@@ -11,7 +11,6 @@ With MOJOLEARN_IDENTITY_TRACE set, the card holds tsne.<fixture>.embedding
 and tsne.<fixture>.kl."""
 
 from std.memory import bitcast
-from std.sys import exit
 from core.identity_trace import IdentityTrace
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_exp, identical_mul
 from x_ann.tsne_device import tsne_fit_device
@@ -26,7 +25,7 @@ def y_start(n: Int) -> List[Float32]:
     return y^
 
 
-def main() raises:
+def run_checks() raises:
     comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL, "run under tools/with_identical_mode.sh"
     var failed = 0
     var trace = IdentityTrace()
@@ -102,7 +101,7 @@ def main() raises:
           "repulsion", sep_rep, "attraction", sep_attr, "gain-branch", sep_gain)
     if sep_knn == 0 or sep_perp == 0 or sep_norm == 0 or sep_rep == 0 or sep_attr == 0:
         print("VACUOUS: a fixture does not separate its seam")
-        exit(2)
+        raise Error("VACUOUS: a fixture does not separate its seam")
 
     # ---- device == oracle
     for f in range(2):
@@ -119,5 +118,5 @@ def main() raises:
         report(name + ": KL == oracle", bitcast[DType.uint32](kd) == bitcast[DType.uint32](ko), failed)
     if failed > 0:
         print("tsne_check: FAILED", failed)
-        exit(1)
+        raise Error("tsne_check: FAILED")
     print("tsne_check: ALL OK")

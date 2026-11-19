@@ -505,37 +505,37 @@ def run_checks() raises:
     var d_tgt = ctx.enqueue_create_buffer[DType.float32](N_ROWS)
     var d_wt = ctx.enqueue_create_buffer[DType.float32](N_ROWS)
     var d_ci = ctx.enqueue_create_buffer[DType.uint32](N_COLUMNS * N_ROWS)
-    ctx.enqueue_copy(dst_buf=d_idx, src_ptr=fx.indices.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_tgt, src_ptr=fx.target.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_wt, src_ptr=fx.weight.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_ci, src_ptr=fx.cindex.unsafe_ptr())
+    upload_whole_into[DType.uint32](ctx, d_idx, fx.indices)
+    upload_whole_into[DType.float32](ctx, d_tgt, fx.target)
+    upload_whole_into[DType.float32](ctx, d_wt, fx.weight)
+    upload_whole_into[DType.uint32](ctx, d_ci, fx.cindex)
 
     var d_ob_off = ctx.enqueue_create_buffer[DType.uint32](N_OB)
     var d_ob_first = ctx.enqueue_create_buffer[DType.uint32](N_OB)
     var d_ob_folds = ctx.enqueue_create_buffer[DType.uint32](N_OB)
     var d_ob_oh = ctx.enqueue_create_buffer[DType.uint8](N_OB)
-    ctx.enqueue_copy(dst_buf=d_ob_off, src_ptr=fx.ob_offset.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_ob_first, src_ptr=fx.ob_first.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_ob_folds, src_ptr=fx.ob_folds.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_ob_oh, src_ptr=fx.ob_one_hot.unsafe_ptr())
+    upload_whole_into[DType.uint32](ctx, d_ob_off, fx.ob_offset)
+    upload_whole_into[DType.uint32](ctx, d_ob_first, fx.ob_first)
+    upload_whole_into[DType.uint32](ctx, d_ob_folds, fx.ob_folds)
+    upload_whole_into[DType.uint8](ctx, d_ob_oh, fx.ob_one_hot)
 
     var d_hb_off = ctx.enqueue_create_buffer[DType.uint32](N_HB)
     var d_hb_first = ctx.enqueue_create_buffer[DType.uint32](N_HB)
     var d_hb_folds = ctx.enqueue_create_buffer[DType.uint32](N_HB)
     var d_hb_oh = ctx.enqueue_create_buffer[DType.uint8](N_HB)
-    ctx.enqueue_copy(dst_buf=d_hb_off, src_ptr=fx.hb_offset.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_hb_first, src_ptr=fx.hb_first.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_hb_folds, src_ptr=fx.hb_folds.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_hb_oh, src_ptr=fx.hb_one_hot.unsafe_ptr())
+    upload_whole_into[DType.uint32](ctx, d_hb_off, fx.hb_offset)
+    upload_whole_into[DType.uint32](ctx, d_hb_first, fx.hb_first)
+    upload_whole_into[DType.uint32](ctx, d_hb_folds, fx.hb_folds)
+    upload_whole_into[DType.uint8](ctx, d_hb_oh, fx.hb_one_hot)
 
     var d_b_off = ctx.enqueue_create_buffer[DType.uint32](N_B)
     var d_b_first = ctx.enqueue_create_buffer[DType.uint32](N_B)
     var d_b_folds = ctx.enqueue_create_buffer[DType.uint32](N_B)
     var d_b_oh = ctx.enqueue_create_buffer[DType.uint8](N_B)
-    ctx.enqueue_copy(dst_buf=d_b_off, src_ptr=fx.b_offset.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_b_first, src_ptr=fx.b_first.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_b_folds, src_ptr=fx.b_folds.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_b_oh, src_ptr=fx.b_one_hot.unsafe_ptr())
+    upload_whole_into[DType.uint32](ctx, d_b_off, fx.b_offset)
+    upload_whole_into[DType.uint32](ctx, d_b_first, fx.b_first)
+    upload_whole_into[DType.uint32](ctx, d_b_folds, fx.b_folds)
+    upload_whole_into[DType.uint8](ctx, d_b_oh, fx.b_one_hot)
 
     # =============================================================== F1
     # one part, offset 8, 23,800 rows: not the whole pool, so a launcher
@@ -1051,7 +1051,7 @@ def run_checks() raises:
         d_sent.unsafe_ptr(), fx.hb_line, False, FoldsHistogram(), SM_COUNT,
         FIXED_SCALE,
     )
-    ctx.enqueue_copy(dst_buf=h_sent, src_buf=d_sent)
+    download_buffer_into[DType.float32](ctx, d_sent, h_sent)
     ctx.synchronize()
     var bad5 = 0
     for k in range(fx.hb_line * 2):
@@ -1070,7 +1070,7 @@ def run_checks() raises:
         d_sent.unsafe_ptr(), fx.hb_line, True, FoldsHistogram(), SM_COUNT,
         FIXED_SCALE,
     )
-    ctx.enqueue_copy(dst_buf=h_sent, src_buf=d_sent)
+    download_buffer_into[DType.float32](ctx, d_sent, h_sent)
     ctx.synchronize()
     var bad5b = 0
     for k in range(fx.hb_line * 2):
@@ -1213,7 +1213,7 @@ def run_checks() raises:
 # checks/ that no CI job ran. One process per check name in CI keeps any
 # fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
 from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
-from checks.native_tests.kit import download_host_into, upload_whole_into
+from checks.native_tests.kit import download_buffer_into, download_host_into, upload_whole_into
 
 
 def run_cases(column: Column, mut report: Report):

@@ -13,7 +13,7 @@ from gemm.checks.gemm_step_arms import (
 )
 
 
-def main() raises:
+def run_checks() raises:
     comptime assert GEMM_REUSE_GROUP_WS, "this check must exercise reusable grouped scratch"
     var ctx = DeviceContext()
     var ws = GemmWorkspace(ctx)

@@ -12,7 +12,7 @@ from gemm.neural_dispatch import identical_gemm_workspace_max_floats
 from training.chunked_lm_head_panel_math import LMHEAD_FAST_GEMM_PANEL
 
 
-def main() raises:
+def run_checks() raises:
     comptime rows = 7
     # Exercise a complete 1024-token chunk plus the one-token tail.  The
     # backward must keep both dHidden's token fold and dWeight's row fold
