@@ -2180,6 +2180,8 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             cols = self.tape.reserve(self.ex, sz[0])
             yconv = self.tape.reserve(self.ex, sz[1])
         comptime if Self.E.IS_DEVICE:
+            if self.steps.cnn_other_queue:
+                self.ex.sync()  # a public session: its queue is not the x_cnn entries' (BlockStepScratch)
             cnn_block_forward_device(
                 xp, wp, bp, cprm, pprm, pool, dst, idx, Int(cols) if keep else 0, Int(yconv) if keep else 0
             )
@@ -2244,6 +2246,8 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         var bp = self.tape.value_of(self.ex, x[2])
         var dst = self.tape.reserve(self.ex, n * d_out)
         comptime if Self.E.IS_DEVICE:
+            if self.steps.cnn_other_queue:
+                self.ex.sync()  # a public session: its queue is not the x_cnn entries' (BlockStepScratch)
             cnn_linear_forward_device(hp, wp, bp, n, d_in, d_out, dst)
         else:
             var hb: List[FP] = [hp, wp, bp, dst]

@@ -76,9 +76,11 @@ comptime PROGRAM_PARAM_STATE_WORDS = 2
 # Session operations (`lm_head_loss`, `small_mlp`), so a program captured
 # from them and saved loads again; `program_words` already wrote them as
 # version 3 records (any code above PROGRAM_MAX_CODE_V2) and the loader
-# refused them. Codes 90, 91 and 93 have no public name and stay refused.
+# refused them. 90, 91 and 93 (2026-11-19): `conv_block`, `conv_linear` and
+# `lm_embedding`, public the same way; 89 and 92 are unused codes, which a
+# replay refuses by name.
 comptime PROGRAM_MAX_CODE_V2 = 80
-comptime PROGRAM_MAX_CODE = 88
+comptime PROGRAM_MAX_CODE = 93
 
 
 struct OpsLog(Movable):

@@ -123,3 +123,5 @@ Session.lm_embedding	added 2026-11-19, not yet in a release verification
 Session.lm_rows	added 2026-11-19, not yet in a release verification
 Session.lm_pick	added 2026-11-19, not yet in a release verification
 Session.lm_alive	added 2026-11-19, not yet in a release verification
+Session.conv_block	added 2026-11-19, not yet in a release verification
+Session.conv_linear	added 2026-11-19, not yet in a release verification

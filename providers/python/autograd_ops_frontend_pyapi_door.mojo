@@ -68,7 +68,8 @@ from autograd.autograd_ops_frontend_run import (
     _SOP_DROPOUT, _SOP_PERMUTATION, _SOP_GATHER_ROWS, _SOP_MSE, _SOP_MAE, _SOP_HUBER,
     _SOP_BCE_WITH_LOGITS, _SOP_CROSS_ENTROPY, _SOP_ACCURACY, _SOP_LOG_LOSS, _SOP_ROC_AUC,
     _SOP_STATE, _SOP_MAMBA_BLOCK, _SOP_ATTENTION_BLOCK, _SOP_MAMBA_STEP, _SOP_ATTENTION_STEP, _SOP_SMALL_MLP,
-    _SOP_LM_HEAD_LOSS, _SOP_LM_ROWS, _SOP_LM_PICK, _SOP_LM_ALIVE, _SOP_LM_EMBEDDING,
+    _SOP_LM_HEAD_LOSS, _SOP_LM_ROWS, _SOP_LM_PICK, _SOP_LM_ALIVE, _SOP_LM_EMBEDDING, _SOP_CONV_BLOCK,
+    _SOP_CONV_LINEAR,
 )
 
 
@@ -1000,6 +1001,17 @@ def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
         code = 88
         hs = [_int(args[0], "input", 1), _int(args[1], "weight1", 1), _int(args[2], "bias1", 1),
               _int(args[3], "weight2", 1), _int(args[4], "bias2", 1)]
+    elif op == _SOP_CONV_BLOCK:
+        # OPS_CNN_CONV_BLOCK (autograd/cnn_block_op.mojo): args (x, weight,
+        # bias, padding, pool_size or None); ints [pad, pool 0 / 1, pool size]
+        code = 90
+        hs = [_int(args[0], "input", 1), _int(args[1], "weight", 1), _int(args[2], "bias", 1)]
+        ints = [_int(args[3], "padding", 0), 0 if _nil(args[4]) else 1,
+                1 if _nil(args[4]) else _int(args[4], "pool_size", 1)]
+    elif op == _SOP_CONV_LINEAR:
+        # OPS_CNN_LINEAR: args (x, weight (outputs, inputs), bias)
+        code = 91
+        hs = [_int(args[0], "input", 1), _int(args[1], "weight", 1), _int(args[2], "bias", 1)]
     elif op == _SOP_LM_EMBEDDING:
         # OPS_LM_EMBEDDING (autograd/lm_embedding_op.mojo): a table and an
         # ids() tensor; ints [padding_idx, -1 for none] as `embedding`

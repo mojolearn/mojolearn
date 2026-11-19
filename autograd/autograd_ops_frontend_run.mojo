@@ -159,6 +159,9 @@ comptime _SOP_LM_ROWS = 140
 comptime _SOP_LM_PICK = 141
 comptime _SOP_LM_ALIVE = 142
 comptime _SOP_LM_EMBEDDING = 143
+# the fused CNN block and head (90, 91)
+comptime _SOP_CONV_BLOCK = 144
+comptime _SOP_CONV_LINEAR = 145
 
 
 struct _SessionOpCodes(Defaultable, Movable):
@@ -309,6 +312,8 @@ struct _SessionOpCodes(Defaultable, Movable):
         self.codes["lm_pick"] = _SOP_LM_PICK
         self.codes["lm_alive"] = _SOP_LM_ALIVE
         self.codes["lm_embedding"] = _SOP_LM_EMBEDDING
+        self.codes["conv_block"] = _SOP_CONV_BLOCK
+        self.codes["conv_linear"] = _SOP_CONV_LINEAR
 
 
 # One table per process (identical contents in every extension that links this file).

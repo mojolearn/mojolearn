@@ -899,6 +899,30 @@ class Session:
         """
         return _SESSION_CALL(self, "lm_head_loss", (hidden, weight, codes))
 
+    def conv_block(self, x, weight, bias, *, padding=0, pool_size=None):
+        """A convolution block ``max_pool(relu(conv2d(x, weight) + bias))``.
+
+        ``x`` is ``(N, C, H, W)``, ``weight`` ``(out_channels, C, k, k)``
+        and ``bias`` holds ``out_channels`` values. The convolution has
+        stride 1 and zero ``padding`` on every side; ``pool_size=p`` adds a
+        ``p`` by ``p`` max pool with stride ``p``, and None leaves the pool
+        out. One operation for the whole block, as
+        :class:`mojolearn.CNNClassifier` runs it, and one for its gradients
+        in a recording session.
+        """
+        return _SESSION_CALL(self, "conv_block", (x, weight, bias, padding, pool_size))
+
+    def conv_linear(self, x, weight, bias):
+        """A dense layer ``x @ weight.T + bias`` in PyTorch's layout.
+
+        ``x`` holds ``rows * inputs`` values (a ``(N, C, H, W)`` block
+        output is read as ``N`` rows), ``weight`` is ``(outputs, inputs)``
+        as in ``torch.nn.Linear`` and ``bias`` holds ``outputs`` values. It
+        is the output layer :class:`mojolearn.CNNClassifier` puts after its
+        convolution blocks.
+        """
+        return _SESSION_CALL(self, "conv_linear", (x, weight, bias))
+
     def lm_embedding(self, table, ids, padding_idx=None):
         """Rows of ``table`` picked by a tensor of token ids.
 
