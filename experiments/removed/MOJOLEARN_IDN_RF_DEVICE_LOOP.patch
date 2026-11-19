@@ -1,0 +1,101 @@
+diff --git a/checks/native_tests/rf_device_loop_early_exit_gpu_suite.mojo b/checks/native_tests/rf_device_loop_early_exit_gpu_suite.mojo
+index b31f6ffc93..90e11e92e7 100644
+--- a/checks/native_tests/rf_device_loop_early_exit_gpu_suite.mojo
++++ b/checks/native_tests/rf_device_loop_early_exit_gpu_suite.mojo
+@@ -6,7 +6,8 @@
+         -D MOJOLEARN_IDN_RF_DEVICE_LOOP_EARLY_EXIT=1 -I . \
+         checks/native_tests/rf_device_loop_early_exit_gpu.mojo
+ 
+-`-D MOJOLEARN_IDN_RF_DEVICE_LOOP_EARLY_EXIT` must be set: without the device-loop form both
++`-D MOJOLEARN_IDN_RF_DEVICE_LOOP_EARLY_EXIT` (or the plain device loop,
++`-D MOJOLEARN_IDN_RF_DEVICE_LOOP`) must be set: without a device-loop form both
+ fits take the host queue and the comparison proves nothing, so the suite
+ refuses to run.
+ 
+@@ -214,7 +215,8 @@ def run_checks() raises:
+     comptime if not RF_DEVICE_QUEUE:
+         raise Error(
+             "rf_device_loop_early_exit: build with"
+-            " -D MOJOLEARN_IDN_RF_DEVICE_LOOP_EARLY_EXIT=1; without the device-loop form"
++            " -D MOJOLEARN_IDN_RF_DEVICE_LOOP_EARLY_EXIT=1 (or"
++            " -D MOJOLEARN_IDN_RF_DEVICE_LOOP=1); without a device-loop form"
+             " both fits take the host queue and nothing is compared"
+         )
+     var ctx = DeviceContext()
+diff --git a/ensemble/decisiontree/batched_levelalgo/builder.mojo b/ensemble/decisiontree/batched_levelalgo/builder.mojo
+index 7b3f49f107..350fd07861 100644
+--- a/ensemble/decisiontree/batched_levelalgo/builder.mojo
++++ b/ensemble/decisiontree/batched_levelalgo/builder.mojo
+@@ -973,15 +973,18 @@ comptime IDN_RF_FUSED_PARTITION = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+ # Same kernels, same node ids, same queue order, same retry sets: the trees
+ # (and the output hashes 46ef5c27f84cf904 istella / a660fbfbad84ade8 taxi)
+ # do not move; the device loop was built to equal this queue.
+-# TOMBSTONE: MOJOLEARN_IDN_RF_DEVICE_LOOP (LOSER: the plain device level loop as the fit route, fit istella 4407 -> 30417 ms (6.90), taxi 5352 -> 8918 (1.67), infer 1.00; NV L40S ab4 2026-11-18, job nvc-ab-20261118T201200Z-d21ba0) deleted 2026-11-19 by lane/fx-old-arms-triage; code recoverable at a7c89e7558. The define only: the device loop's body stays, the early-exit form below runs it (single-round trees, and the batch machinery of every round).
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_RF_DEVICE_LOOP.patch; record in docs/TOMBSTONES.md.
++# `-D MOJOLEARN_IDN_RF_DEVICE_LOOP` restores the device loop (B arm of the
++# owed A/B `restore-rf-device-loop` in bench/results/paper_compare/
++# owed-pre0867.json; RUN OWED, NVIDIA + AMD, istella + taxi, fit). Until that
++# A/B lands neither arm is deleted.
++comptime IDN_RF_DEVICE_LOOP = is_defined["MOJOLEARN_IDN_RF_DEVICE_LOOP"]()
+ 
+ # THIRD FORM (lane fix-rf-et-device-loop-early-exit, 2026-11-13): the device
+ # loop that EARLY-EXITS like the host queue. `-D
+ # MOJOLEARN_IDN_RF_DEVICE_LOOP_EARLY_EXIT` (default off; the host queue above
+-# stays the default). It decides
++# stays the default, the plain device loop stays the B arm). It decides
+ # whether the device queue (same kernels, same node ids, same queue order,
+-# same retry sets as the plain device loop) may stop a batch's sampling rounds
++# same retry sets as `IDN_RF_DEVICE_LOOP`) may stop a batch's sampling rounds
+ # at the first round with nothing to retry. Per round r >= 1 the retry
+ # compaction (`launch_loop_retry_next`) writes the round's count into
+ # `LOOP_H_NEXT`; the host reads that ONE 4-byte word back and, when it is
+@@ -995,22 +998,21 @@ comptime IDN_RF_FUSED_PARTITION = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+ # enqueued after the queue emptied is inert end to end, as in the device
+ # loop. A tree with one sampling round (`max_sampling_rounds_for == 1`) has
+ # nothing to exit early from and runs the device loop's `LOOP_K` batches per
+-# drain unchanged. SAME BITS as the plain device loop and the host queue: the
++# drain unchanged. SAME BITS as `IDN_RF_DEVICE_LOOP` and the host queue: the
+ # rounds skipped are exactly the inert ones. Owed A/B: row
+ # `rf-device-loop-early-exit` in bench/results/paper_compare/
+-# owed-pre0867.json (RUN OWED, istella + taxi, fit). Wins over the host
+-# queue -> promote; loses -> delete with the device loop body.
++# owed-pre0867.json (RUN OWED, NVIDIA + AMD, istella + taxi, fit). Wins over
++# both arms -> promote and retire the plain device loop; loses -> delete.
+ comptime IDN_RF_DEVICE_LOOP_EARLY_EXIT = is_defined[
+     "MOJOLEARN_IDN_RF_DEVICE_LOOP_EARLY_EXIT"
+ ]()
+-# The device-loop form: the device tables are sized and `begin_tree` takes
+-# the device route.
+-comptime RF_DEVICE_QUEUE = IDN_RF_DEVICE_LOOP_EARLY_EXIT
++# Either device-loop form: the device tables are sized and `begin_tree`
++# takes the device route.
++comptime RF_DEVICE_QUEUE = IDN_RF_DEVICE_LOOP or IDN_RF_DEVICE_LOOP_EARLY_EXIT
+ 
+ # The level loop's control plane ON THE DEVICE (fam2-forests' candidate
+ # `IDN_RF_DEVICE_LOOP`; the only GPU route from cpu4-forest, 2026-10-04, to
+-# 2026-11-13; its define was deleted 2026-11-19 (tombstone above), the body
+-# serves the early-exit form). The queue
++# 2026-11-13, now the B arm above, in IDENTICAL and FAST). The queue
+ # (`NodeQueue::Pop`/`Push`), the block maps (`updateWorkloadInfo`), the
+ # sampling rounds' retry sets (`doSplit`, `:452-458`) and the `max_leaves`
+ # budget run as kernels (`kernels/level_loop_kernels.mojo`), so a tree
+@@ -3699,7 +3701,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
+     ) raises:
+         """`Builder::SetLeafPredictions`, `:630-687`, for a tree the HOST
+         queue built (every fit tree by default; under
+-        `-D MOJOLEARN_IDN_RF_DEVICE_LOOP_EARLY_EXIT` a fit's tree is finished by
++        `-D MOJOLEARN_IDN_RF_DEVICE_LOOP` a fit's tree is finished by
+         `_finish_tree_device` instead).
+ 
+         Their `leafKernel` runs over EVERY node and returns immediately for
+@@ -3882,8 +3884,8 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
+         )
+         self.loop_active = False
+         comptime if sabotage == 0 and RF_DEVICE_QUEUE:
+-            # B arm (`-D MOJOLEARN_IDN_RF_DEVICE_LOOP_EARLY_EXIT`, the block
+-            # above `RF_DEVICE_QUEUE`): a fit's tree with an expandable root
++            # B arm (`-D MOJOLEARN_IDN_RF_DEVICE_LOOP`, the block above
++            # `IDN_RF_DEVICE_LOOP`): a fit's tree with an expandable root
+             # runs its queue on the device. The default is the host queue
+             # below, the 0.8.25 route.
+             if (

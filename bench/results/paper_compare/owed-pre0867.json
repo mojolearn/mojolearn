@@ -73,8 +73,9 @@
   },
   "if-fit-own-x": {
    "define": "MOJOLEARN_IDN_IF_FIT_OWN_X",
-   "status": "define in code (bindings/trees_public_iforest_door.mojo _IF_FIT_OWN_X): B = the fit owns a parallel copy of a borrowed float32 X (0292b73ab3); A = a resident binary borrows X (0.8.55)",
-   "owed": "RUN"
+   "status": "deleted 2026-11-19 (lane fx-old-arms-triage): decided B arm: L40S fit istella 1.36, taxi 1.15 slower; was: define in code (bindings/trees_public_iforest_door.mojo _IF_FIT_OWN_X): B = the fit owns a parallel copy of a borrowed float32 X (0292b73ab3); A = a resident binary borrows X (0.8.55)",
+   "owed": "DECIDED",
+   "evidence": "ab4 2026-11-18, NVIDIA L40S, wheel d652a4b0a1, base and arm back to back, one run per arm (~/mojolearn-evidence/measure-candidate/build-ec1c4b5aff/fetched/nvc-ab-20261118T201200Z-d21ba0/x/SUMMARY-TG-nvidia.txt): fit istella 197 -> 267 ms (1.36), taxi 149 -> 171 (1.15), infer 1.00-1.02; LOSER, deleted by lane fx-old-arms-triage 2026-11-19 (docs/TOMBSTONES.md)"
   },
   "if-scores-f64-off": {
    "define": "MOJOLEARN_IDN_IF_SCORES_F64_OFF",
@@ -93,8 +94,9 @@
   },
   "rf-device-loop": {
    "define": "MOJOLEARN_IDN_RF_DEVICE_LOOP",
-   "status": "define in code (ensemble/decisiontree/batched_levelalgo/builder.mojo:1016 IDN_RF_DEVICE_LOOP): B = the device level loop (every sampling round enqueued per batch at proven bounds, 2026-10-04 to 2026-11-13 default); A = the host-queue level loop, K trees pipelined (0.8.25 route)",
-   "owed": "RUN"
+   "status": "deleted 2026-11-19 (lane fx-old-arms-triage): decided B arm: L40S rf fit istella 6.90, taxi 1.67 slower; was: define in code (ensemble/decisiontree/batched_levelalgo/builder.mojo:1016 IDN_RF_DEVICE_LOOP): B = the device level loop (every sampling round enqueued per batch at proven bounds, 2026-10-04 to 2026-11-13 default); A = the host-queue level loop, K trees pipelined (0.8.25 route)",
+   "owed": "DECIDED",
+   "evidence": "ab4 2026-11-18, NVIDIA L40S, wheel d652a4b0a1, base and arm back to back, one run per arm (~/mojolearn-evidence/measure-candidate/build-ec1c4b5aff/fetched/nvc-ab-20261118T201200Z-d21ba0/x/SUMMARY-TG-nvidia.txt): rf fit istella 4407 -> 30417 ms (6.90), taxi 5352 -> 8918 (1.67), infer 1.00; LOSER, define deleted by lane fx-old-arms-triage 2026-11-19 (docs/TOMBSTONES.md); the body stays for rf-device-loop-early-exit"
   },
   "et-device-loop": {
    "define": "MOJOLEARN_IDN_ET_DEVICE_LOOP",

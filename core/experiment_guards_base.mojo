@@ -190,6 +190,11 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_METRICS_FAST_DENSE_LABELS_OFF.patch; record in docs/TOMBSTONES.md.
     comptime assert not is_defined["MOJOLEARN_METRICS_FAST_DENSE_LABELS_OFF"](), "removed 2026-11-18 (lane/fx-verdicts, A/B ab2 NVIDIA L40S, wheel d652a4b0a1, one run per arm): the LSD radix label encode was slower on 68 of 72 classification metric cells (arm/base geomean 3.62, median 4.16), digests and scores equal; the dense label table is the one route for in-range signed labels; recoverable at 0c65d61fed"
     # ---- end lane fx-verdicts
+    # ---- lane fx-old-arms-triage (2026-11-19): measured losers of ab4 (NVIDIA L40S, wheel d652a4b0a1, job nvc-ab-20261118T201200Z-d21ba0)
+    # TOMBSTONE: MOJOLEARN_IDN_IF_FIT_OWN_X (LOSER, A/B ab4 NVIDIA L40S, wheel d652a4b0a1, job nvc-ab-20261118T201200Z-d21ba0, one run per arm) deleted 2026-11-19 by lane/fx-old-arms-triage; code recoverable at a7c89e7558.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_IF_FIT_OWN_X.fx-old-arms-triage.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_IDN_IF_FIT_OWN_X"](), "removed 2026-11-19 (lane/fx-old-arms-triage, A/B ab4 NVIDIA L40S, wheel d652a4b0a1, job nvc-ab-20261118T201200Z-d21ba0, one run per arm): the IsolationForest fit owning a copy of a borrowed float32 X was slower, fit istella 197 -> 267 ms (1.36), taxi 149 -> 171 (1.15); the resident borrow stays; code at a7c89e7558; restore: experiments/removed/MOJOLEARN_IDN_IF_FIT_OWN_X.fx-old-arms-triage.patch"
+    # ---- end lane fx-old-arms-triage
     return True
 
 
