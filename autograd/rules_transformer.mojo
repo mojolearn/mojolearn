@@ -499,6 +499,13 @@ struct TransformerRules(BackwardRules):
             # lane fx-gemm-epi: the fan-in members under the arm
             if mode != TF_DX_PLAIN:
                 self._dx_fanin_epi(mode, saved.i9, dc, w, gradients[0], m, n, k)
+                comptime if NEURAL_GEMM_WORKLIST:
+                    # lane/fx-gemm-worklist with the epilogue arm: the dX above took its own launch (an
+                    # epilogue product is never listed); the weight gradients queued by _route_b go out as
+                    # one list with the member that completes its fan-in. Without this no branch below
+                    # runs the list for a joined member and the last layer's would never launch.
+                    if mode == TF_DX_TMP0_ADD2 or mode == TF_DX_TMP2_ADD3:
+                        bst.gemm_workspace.list_run(self.ctx)
                 mode = TF_DX_JOINED
         if mode == TF_DX_PLAIN:
             var dx = _view(self.ctx, gradients[0], m * k)
