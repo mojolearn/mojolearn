@@ -237,6 +237,117 @@ def case_samba_train_step(row, arm_cases):
     return out
 
 
+def _median_of_calls(call, n):
+    """(median ms of n consecutive calls after one warm-up, None, spread dict), or (None, 'REFUSED: ...', {}).
+    For a call of a few milliseconds one timed call is first-touch and allocator noise (AGENTS.md, small rows)."""
+    try:
+        call()
+        walls = []
+        for _ in range(n):  # serial by nature: consecutive timed calls on one GPU
+            t0 = time.perf_counter()
+            call()
+            walls.append((time.perf_counter() - t0) * 1000.0)
+        walls.sort()
+        mid = walls[n // 2] if n % 2 else 0.5 * (walls[n // 2 - 1] + walls[n // 2])
+        return mid, None, {"calls": n, "min_ms": walls[0], "max_ms": walls[-1]}
+    except Exception as exc:  # noqa: BLE001 -- a refusal is a result
+        return None, "REFUSED: %s: %s" % (type(exc).__name__, str(exc)[:400]), {}
+
+
+def case_transformer_forward(row, arm_cases):
+    """TransformerBlock.forward(x) (no state: the stateless full-attention prefill) at each case of the row's
+    shape: {"name", "batch", "length", "d_model", "n_heads", "head_dim", "intermediate"; optional "n_kv"
+    (n_heads)}. Weights from default_rng(7) uniform(-0.035, 0.035), +1 on the two norms; x uniform(-0.9, 0.9).
+    The time is the median of 20 consecutive calls after one warm-up; the digest is the last output's, so two
+    arms that must return the same bytes show it beside the time."""
+    import hashlib
+    import numpy as np
+    ml = _ml()
+    out = []
+    for spec in row["shape"]["cases"]:  # serial by nature: timed calls on one GPU
+        b, l, dm = int(spec["batch"]), int(spec["length"]), int(spec["d_model"])
+        nh, hd, it = int(spec["n_heads"]), int(spec["head_dim"]), int(spec["intermediate"])
+        nkv = int(spec.get("n_kv", nh))
+        label = "TransformerBlock.forward %s b=%d l=%d d_model=%d heads=%d head_dim=%d ff=%d" % (
+            spec["name"], b, l, dm, nh, hd, it)
+        seen = {}
+        try:
+            rng = np.random.default_rng(7)
+            f = lambda *shape: rng.uniform(-0.035, 0.035, shape).astype(np.float32)  # noqa: E731
+            weights = {"input_layernorm.weight": f(dm) + np.float32(1.0), "q_proj.weight": f(nh * hd, dm),
+                       "k_proj.weight": f(nkv * hd, dm), "v_proj.weight": f(nkv * hd, dm),
+                       "o_proj.weight": f(dm, nh * hd), "post_attention_layernorm.weight": f(dm) + np.float32(1.0),
+                       "gate_proj.weight": f(it, dm), "up_proj.weight": f(it, dm), "down_proj.weight": f(dm, it)}
+            x = rng.uniform(-0.9, 0.9, (b, l, dm)).astype(np.float32)
+            block = ml.TransformerBlock(weights, n_heads=nh, n_kv_heads=nkv, head_dim=hd)
+        except Exception as exc:  # noqa: BLE001 -- a refusal is a result
+            out.append((label, None, "REFUSED: %s: %s" % (type(exc).__name__, str(exc)[:400])))
+            continue
+
+        def call(block=block, x=x, seen=seen):
+            seen["y"] = block.forward(x)
+        ms, why, spread = _median_of_calls(call, 20)
+        if seen.get("y") is not None:
+            y = np.ascontiguousarray(np.asarray(seen["y"], dtype=np.float32))
+            spread["output_sha256_16"] = hashlib.sha256(y.tobytes()).hexdigest()[:16]
+        out.append((label, ms, why, spread))
+    return out
+
+
+def case_lm_logits(row, arm_cases):
+    """LanguageModelTrainer(resident=True).logits(ids) at each case of the row's shape: {"name", "batch",
+    "length", "d_model", "n_heads", "n_kv", "head_dim", "intermediate", "n_layers", "vocab_size"} (the board's
+    LM_FIELDS). Parameters from default_rng(7).normal(0, .02), +1 on the norms (the board's rule), ids from
+    default_rng(0). Two times per case: "fresh" is the second call while the first call's result is still held
+    (the output store is new memory, as for a caller that keeps its results), "pooled" the median of 5 further
+    calls that drop the previous result first (the store is reused). The digest is the last output's."""
+    import hashlib
+    import numpy as np
+    ml = _ml()
+    out = []
+    fields = ("batch", "length", "d_model", "n_heads", "n_kv", "head_dim", "intermediate", "n_layers", "vocab_size")
+    for spec in row["shape"]["cases"]:  # serial by nature: timed calls on one GPU
+        dims = [int(spec[k]) for k in fields]
+        label = "LanguageModelTrainer.logits %s b=%d l=%d d_model=%d layers=%d vocab=%d" % (
+            spec["name"], dims[0], dims[1], dims[2], dims[7], dims[8])
+        try:
+            cfg = ml.LanguageModelConfig(*dims)
+            shapes = [(e["name"], tuple(e["shape"])) for e in ml.LanguageModelTrainer.parameter_registry(cfg)]
+            rng = np.random.default_rng(7)
+            flat = rng.normal(0, .02, sum(int(np.prod(sh)) for _, sh in shapes)).astype(np.float32)
+            off = 0
+            for name, sh in shapes:
+                size = int(np.prod(sh))
+                if "norm" in name:
+                    flat[off:off + size] += np.float32(1)
+                off += size
+            trainer = ml.LanguageModelTrainer(
+                flat, shape=cfg, resident=True, step_result="lean",
+                data_schedule={"fixture": "tools/measure_owed_driver.py", "seed": 7, "batches": "none (logits only)"})
+            ids = np.random.default_rng(0).integers(0, min(dims[8], 256), (dims[0], dims[1])).astype(np.int32)
+            held = trainer.logits(ids)                 # warm-up; its result stays held
+            t0 = time.perf_counter()
+            fresh_out = trainer.logits(ids)            # a new output store: the first result is still alive
+            fresh = (time.perf_counter() - t0) * 1000.0
+            del held
+            walls = []
+            last = fresh_out
+            for _ in range(5):  # serial by nature: consecutive timed calls on one GPU
+                last = None                            # the previous store goes back to the pool before the call
+                t0 = time.perf_counter()
+                last = trainer.logits(ids)
+                walls.append((time.perf_counter() - t0) * 1000.0)
+            walls.sort()
+            y = np.ascontiguousarray(np.asarray(last, dtype=np.float32))
+            extra = {"pooled_median_ms": walls[2], "pooled_min_ms": walls[0], "pooled_max_ms": walls[-1],
+                     "logits_mib": y.nbytes / float(1 << 20),
+                     "output_sha256_16": hashlib.sha256(y.tobytes()).hexdigest()[:16]}
+            out.append((label + " [fresh store]", fresh, None, extra))
+        except Exception as exc:  # noqa: BLE001 -- a refusal is a result
+            out.append((label, None, "REFUSED: %s: %s" % (type(exc).__name__, str(exc)[:400])))
+    return out
+
+
 def case_cnn_widths(row, arm_cases):
     """CNNClassifier.fit on synthetic (C, H, W) images at each conv_channels tuple the row names (the NI12 fill
     rule's neighbouring, non-board channel widths: x_cnn/device.mojo `ni12_implicit_layer`)."""
@@ -330,7 +441,8 @@ def case_gemm_shapes(row, arm_cases):
 DRIVERS = {"gemm_shapes": case_gemm_shapes, "f16_widen": case_f16_widen, "while_loop": case_while_loop, "pandas_input": case_pandas_input, "mlp_fit": case_mlp_fit,
            "kde_widths": case_kde_widths, "mamba_backward": case_mamba_backward, "cnn_widths": case_cnn_widths,
            "samba_train_step": case_samba_train_step,
-           "samba_step": case_samba_step}
+           "samba_step": case_samba_step,
+           "transformer_forward": case_transformer_forward, "lm_logits": case_lm_logits}
 
 
 def arm_cases(row, arm):
