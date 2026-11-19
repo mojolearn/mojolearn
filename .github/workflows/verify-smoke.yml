@@ -83,14 +83,8 @@ jobs:
           WHEEL_NAME: ${{ inputs.wheel_name }}
           WHEEL_SHA256: ${{ inputs.wheel_sha256 }}
           REF: ${{ inputs.ref }}
-        run: |
-          set -eu
-          [[ "$REF" =~ ^[0-9a-f]{40}$ ]] || { echo "ref must be a full commit sha" >&2; exit 2; }
-          [[ "$WHEEL_NAME" =~ ^[A-Za-z0-9_.+-]+\.whl$ ]] || { echo "bad wheel name" >&2; exit 2; }
-          [[ "$WHEEL_SHA256" =~ ^[0-9a-f]{64}$ ]] || { echo "wheel_sha256 must be a sha256" >&2; exit 2; }
-          mkdir -p "$RUNNER_TEMP/wheels"
-          curl -fsSL --retry 5 "$WHEEL_URL" -o "$RUNNER_TEMP/wheels/$WHEEL_NAME"
-          echo "$WHEEL_SHA256  $RUNNER_TEMP/wheels/$WHEEL_NAME" | sha256sum -c -
+        # the one fetch path, shared with fast-trial.yml
+        run: bash tooling/tools/ops/fetch_built_wheel.sh "$RUNNER_TEMP/wheels"
       # gdb for crash traces: a unit that dies by a signal is rerun under gdb (bt + thread apply all bt 12) into
       # smoke-out/crashes/<unit>.txt. Fail soft: without gdb the smoke still runs and keeps the faulthandler trace.
       - name: Install gdb (crash traces)
