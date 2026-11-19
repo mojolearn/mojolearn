@@ -25,10 +25,13 @@ from x_cnn.tensor_run import (
 from bindings.xcnn_tensor_native_unpack import (
     _shape,
 )
+from bindings.xcnn_keys_unpack import xcnn_keys
+from bindings.py_balanced import py_item
 
 
 def xcnn_tensor_operation(owner: PythonObject, operation: String, args: PythonObject,
                            context: PythonObject) raises -> PythonObject:
+    var nk = xcnn_keys()
     if operation == "tensor_finalize":
         # fx-cnn-layers (2026-11-18): tested first and without the builtins
         # read. Every output tensor a layer call returns is released through
@@ -73,7 +76,7 @@ def xcnn_tensor_operation(owner: PythonObject, operation: String, args: PythonOb
             return array
         return xcnn_wrap(entries, array, context)
     if operation == "tensor_new" or operation == "tensor_new_out" or operation == "tensor_wrap":
-        if owner is not context["xcnn_tensor_class"]:
+        if owner is not py_item(context, nk[].k_xcnn_tensor_class):
             raise Error("TypeError: CNN tensor allocation requires the connected class")
         var entries = xcnn_module_entries(args[0], context)
         if operation == "tensor_wrap":
@@ -81,7 +84,7 @@ def xcnn_tensor_operation(owner: PythonObject, operation: String, args: PythonOb
             return xcnn_wrap(entries, args[1], context)
         var shape = _shape(args[1], context)
         return xcnn_new(entries, shape, False, context) if operation == "tensor_new" else xcnn_out_new(entries, shape, context)
-    if py_type(owner) is not context["xcnn_tensor_class"]:
+    if py_type(owner) is not py_item(context, nk[].k_xcnn_tensor_class):
         raise Error("TypeError: CNN tensor operation requires its exact native owner")
     if operation == "tensor_init":
         var entries = xcnn_module_entries(args[0], context)
@@ -96,7 +99,7 @@ def xcnn_tensor_operation(owner: PythonObject, operation: String, args: PythonOb
             raise Error("TypeError: CNN tensor base requires an exact native tensor")
         # One layout check for the five slot writes (it ran once per slot).
         xcnn_tensor_layout(context)
-        _xcnn_set_raw(owner, "b", entries["module"], context)
+        _xcnn_set_raw(owner, "b", py_item(entries, nk[].k_module), context)
         _xcnn_set_raw(owner, "shape", xcnn_tuple(shape), context)
         _xcnn_set_raw(owner, "h", args[2], context)
         _xcnn_set_raw(owner, "_host", args[3], context)
@@ -112,7 +115,7 @@ def xcnn_tensor_operation(owner: PythonObject, operation: String, args: PythonOb
         var result = xcnn_host_of(owner, context)
         if operation == "tensor_numpy":
             return result
-        return sequence_array_cast(result, args[0], context["xcnn_array_context"])
+        return sequence_array_cast(result, args[0], py_item(context, nk[].k_xcnn_array_context))
     if operation == "tensor_reshape":
         var requested = args[0]
         if py_type(requested) is not b.tuple:

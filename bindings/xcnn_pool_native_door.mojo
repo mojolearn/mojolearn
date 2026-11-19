@@ -52,6 +52,8 @@ from x_cnn.pool_run import (
     pool_run_avg_backward_m, pool_run_dropout, pool_run_dropout_m, pool_run_adaptive, pool_run_adaptive_m,
     pool_run_download, pool_run_mask_m, pool_run_mul,
 )
+from bindings.xcnn_keys_unpack import xcnn_keys
+from bindings.py_balanced import py_item
 
 
 def _set(fields: PythonObject, name: String, value: PythonObject) raises:
@@ -70,7 +72,8 @@ def _is(model: PythonObject, key: String, context: PythonObject) raises -> Bool:
 
 
 def _class_name(model: PythonObject) raises -> String:
-    return String(py=py_call(xcnn_builtins().type.__dict__["__name__"].__get__, py_type(model)))
+    var nk = xcnn_keys()
+    return String(py=py_call(py_item(xcnn_builtins().type.__dict__, nk[].k___name__).__get__, py_type(model)))
 
 
 # ---------------------------------------------------------------- 2-D pools
@@ -326,9 +329,10 @@ def xcnn_pool_forward(model: PythonObject, x: PythonObject, context: PythonObjec
 # ---------------------------------------------------------------- passive settings and backward
 
 def _pool_scalar(value: PythonObject, context: PythonObject) raises:
+    var nk = xcnn_keys()
     var b = xcnn_builtins()
     var cls = py_type(value)
-    if cls is not b.int and cls is not b.float and cls is not b.bool and not _one_of(cls, context["scalar_types"]):
+    if cls is not b.int and cls is not b.float and cls is not b.bool and not _one_of(cls, py_item(context, nk[].k_scalar_types)):
         raise Error("TypeError: pool settings require native numeric scalars, not Python conversion hooks")
 
 
@@ -373,9 +377,10 @@ def _pool_sequence(value: PythonObject, name: String, context: PythonObject) rai
 
 
 def _pool_pair(value: PythonObject, name: String, one: Bool, context: PythonObject) raises -> PythonObject:
+    var nk = xcnn_keys()
     var b = xcnn_builtins()
     var cls = py_type(value)
-    if cls is b.int or cls is b.float or cls is b.bool or _one_of(cls, context["scalar_types"]):
+    if cls is b.int or cls is b.float or cls is b.bool or _one_of(cls, py_item(context, nk[].k_scalar_types)):
         var a = _pool_int(value, context)
         return Python.tuple(0 if name == "padding" else 1, a) if one else Python.tuple(a, a)
     var sequence = _pool_sequence(value, name, context)
@@ -542,11 +547,12 @@ def xcnn_pool_backward(model: PythonObject, source: PythonObject, context: Pytho
 def xcnn_rows(model: PythonObject, source: PythonObject, required: Bool, context: PythonObject) raises -> PythonObject:
     """`Conv2d._rows(X)` (`required`: a row input without `input_shape` is
     refused) and `BatchNorm2d._rows(X)` (it passes through)."""
+    var nk = xcnn_keys()
     var fields = _fields(model)
     var a = xcnn_f32(source, "X", context)
     var s = xcnn_shape(a)
     if len(s) == 2:
-        var shape = py_get(fields, "input_shape")
+        var shape = py_get(fields, nk[].k_input_shape)
         if shape is None:
             if required:
                 raise Error("mojolearn: row input needs input_shape=(C, H, W)")
@@ -581,21 +587,23 @@ def _dropout_words(fields: PythonObject, p: Float64, n: Int, c: Int, hw: Int, co
     probability the forward already admitted (`_dropout_probability`).
     UNPACK reads the seed and the call count; the words are
     `x_cnn/pool_run.mojo` `pool_run_dropout_words`."""
-    var state = fields["random_state"]
+    var nk = xcnn_keys()
+    var state = py_item(fields, nk[].k_random_state)
     _pool_scalar(state, context)
     state = py_call(xcnn_builtins().int, state)
     ref cpy = Python().cpython()
     var seed = cpy.lib.get_function[UInt64]("PyLong_AsUnsignedLongLongMask")(state._obj_ptr)
-    var calls = _pool_int(fields["calls_"], context)
+    var calls = _pool_int(py_item(fields, nk[].k_calls_), context)
     _set(fields, "calls_", PythonObject(calls + 1))
     return pool_run_dropout_words(p, seed, calls, n, c, hw)
 
 
 def xcnn_dropout_forward(model: PythonObject, x: PythonObject, context: PythonObject) raises -> PythonObject:
     """`Dropout2d.forward(x)`."""
+    var nk = xcnn_keys()
     var fields = _fields(model)
-    var training = _pool_bool(fields["training"], context)
-    var probability = _dropout_probability(fields["p"], context)
+    var training = _pool_bool(py_item(fields, nk[].k_training), context)
+    var probability = _dropout_probability(py_item(fields, nk[].k_p), context)
     if xcnn_is_t(x, context):
         var bt = xcnn_entries(fields, context)
         var xs = xcnn_shape(x)
@@ -677,8 +685,9 @@ def _pool_layer(fields: PythonObject, entries: PythonObject, k: List[Int], maxed
     the one caller reads the inner pool's fields next and writes it there
     (`xcnn_adaptive_forward`), so the inner dictionary is admitted once per
     forward, not twice."""
+    var nk = xcnn_keys()
     # `maxed`: the caller's `_adaptive_max(model)` (the class walk runs once per call)
-    var cls = context["xcnn_maxpool_class"] if maxed else context["xcnn_avgpool_class"]
+    var cls = py_item(context, nk[].k_xcnn_maxpool_class) if maxed else py_item(context, nk[].k_xcnn_avgpool_class)
     var hit = xcnn_get(fields, XK_POOL_CACHE)
     if xcnn_resident(entries, context) and hit is not None:
         if not xcnn_exact(hit, XT_TUPLE) or len(hit) != 2:
@@ -695,15 +704,15 @@ def _pool_layer(fields: PythonObject, entries: PythonObject, k: List[Int], maxed
     var layer = py_call(py_call(b.getattr, b.object, "__new__"), cls)
     var state = _fields(layer)
     var pair = Python.tuple(k[0], k[1])
-    py_setitem(state, "ceil_mode", PythonObject(False))
-    py_setitem(state, "divisor_override", PythonObject(None))
-    py_setitem(state, "kernel_size", pair)
-    py_setitem(state, "stride", pair)
-    py_setitem(state, "padding", Python.tuple(0, 0))
-    py_setitem(state, "dilation", Python.tuple(1, 1))
-    py_setitem(state, "count_include_pad", PythonObject(True))
-    py_setitem(state, "input_shape", PythonObject(None))
-    py_setitem(state, "numeric_mode", xcnn_get(fields, XK_NUMERIC_MODE))
+    py_setitem(state, nk[].k_ceil_mode, PythonObject(False))
+    py_setitem(state, nk[].k_divisor_override, PythonObject(None))
+    py_setitem(state, nk[].k_kernel_size, pair)
+    py_setitem(state, nk[].k_stride, pair)
+    py_setitem(state, nk[].k_padding, Python.tuple(0, 0))
+    py_setitem(state, nk[].k_dilation, Python.tuple(1, 1))
+    py_setitem(state, nk[].k_count_include_pad, PythonObject(True))
+    py_setitem(state, nk[].k_input_shape, PythonObject(None))
+    py_setitem(state, nk[].k_numeric_mode, xcnn_get(fields, XK_NUMERIC_MODE))
     xcnn_put(fields, XK_POOL_CACHE, Python.tuple(pair, layer))
     return layer
 
@@ -711,32 +720,33 @@ def _pool_layer(fields: PythonObject, entries: PythonObject, k: List[Int], maxed
 def _layer_indices(layer: PythonObject, context: PythonObject) raises -> PythonObject:
     """`MaxPool2d.indices_` of a pool this call ran: the host winners, read
     back once from the resident ones when they stayed on the device."""
+    var nk = xcnn_keys()
     var d = _fields(layer)
-    var held = py_get(d, "_idx_host")
-    if held is None and py_get(d, "_idx_dev") is not None:
+    var held = py_get(d, nk[].k__idx_host)
+    if held is None and py_get(d, nk[].k__idx_dev) is not None:
         var b = xcnn_builtins()
-        var shape = _pool_shape_words(d["_idx_shape"], "_idx_shape", context)
+        var shape = _pool_shape_words(py_item(d, nk[].k__idx_shape), "_idx_shape", context)
         var idx = xcnn_host_i32(shape, context)
-        var dev = d["_dev"]
-        var entries = context["xcnn_bindings"]
+        var dev = py_item(d, nk[].k__dev)
+        var entries = py_item(context, nk[].k_xcnn_bindings)
         # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
         var connected = Optional[PythonObject]()
         var keys = Python.tuple("identical", "fast")
         for i in range(2):  # driver-loop: over the two numeric modes
             var e = py_get(entries, keys[i])
-            if e is not None and not Bool(py=py_call(b.isinstance, e, b.str)) and e["module"] is _fields(dev)["b"]:
+            if e is not None and not Bool(py=py_call(b.isinstance, e, b.str)) and py_item(e, nk[].k_module) is py_item(_fields(dev), nk[].k_b):
                 connected = e
         if not connected:
             raise Error("RuntimeError: a resident array of a binding this process did not connect")
         var owner = connected.value()
-        var handle = _pool_int(d["_idx_dev"], context)
+        var handle = _pool_int(py_item(d, nk[].k__idx_dev), context)
         var key = xcnn_ref(owner)
         var dst = xcnn_ptr(idx)
         var py = Python()
         with GILReleased(py):
             pool_run_download(key, handle, dst, xcnn_size(shape))
         _ = idx  # keep the Python object alive through the native call above
-        py_setitem(d, "_idx_host", idx)
+        py_setitem(d, nk[].k__idx_host, idx)
         return idx
     return held
 
@@ -884,13 +894,14 @@ def xcnn_dropout_init(model: PythonObject, args: PythonObject, context: PythonOb
 
 
 def xcnn_dropout_mask(model: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = xcnn_keys()
     var fields = _fields(model)
-    var mask = py_get(fields, "_mask_host")
-    var handle = py_get(fields, "_mask_dev")
+    var mask = py_get(fields, nk[].k__mask_host)
+    var handle = py_get(fields, nk[].k__mask_dev)
     if mask is None and handle is not None:
-        var shape = _pool_shape_words(fields["_mask_shape"], "_mask_shape", context)
+        var shape = _pool_shape_words(py_item(fields, nk[].k__mask_shape), "_mask_shape", context)
         mask = xcnn_host_f32(shape, context)
-        var entries = xcnn_module_entries(_fields(fields["_dev"])["b"], context)
+        var entries = xcnn_module_entries(py_item(_fields(py_item(fields, nk[].k__dev)), nk[].k_b), context)
         var key = xcnn_ref(entries)
         var handle_word = _pool_int(handle, context)
         var dst = xcnn_ptr(mask)
@@ -903,19 +914,20 @@ def xcnn_dropout_mask(model: PythonObject, context: PythonObject) raises -> Pyth
 
 
 def xcnn_dropout_backward(model: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = xcnn_keys()
     var fields = _fields(model)
-    var host = py_get(fields, "_mask_host")
-    var handle = py_get(fields, "_mask_dev")
+    var host = py_get(fields, nk[].k__mask_host)
+    var handle = py_get(fields, nk[].k__mask_dev)
     if xcnn_is_t(source, context):
         var entries = xcnn_entries(fields, context)
         var shape = xcnn_shape(source)
         if xcnn_on_dev(entries, source, context) and xcnn_idn(entries, XCNN_F_LAYER_IO):
             if host is None and handle is None:
                 return xcnn_reshape_t(source, shape, context)
-            var dev = py_get(fields, "_dev")
-            if handle is not None and dev is not None and _fields(dev)["b"] is entries["module"]:
+            var dev = py_get(fields, nk[].k__dev)
+            if handle is not None and dev is not None and py_item(_fields(dev), nk[].k_b) is py_item(entries, nk[].k_module):
                 pool_run_check_count(xcnn_size(shape),
-                                     xcnn_size(_pool_shape_words(fields["_mask_shape"], "_mask_shape", context)))
+                                     xcnn_size(_pool_shape_words(py_item(fields, nk[].k__mask_shape), "_mask_shape", context)))
                 var out = xcnn_new(entries, shape, True, context)
                 var key = xcnn_ref(entries)
                 var addrs: List[Int] = [xcnn_word(source.h), _pool_int(handle, context), xcnn_word(out.h)]
@@ -930,9 +942,9 @@ def xcnn_dropout_backward(model: PythonObject, source: PythonObject, context: Py
     var count = xcnn_size(shape)
     var out = xcnn_host_f32(shape, context)
     var entries = xcnn_entries(fields, context)
-    var dev = py_get(fields, "_dev")
-    if handle is not None and xcnn_mixed(entries) and dev is not None and _fields(dev)["b"] is entries["module"]:
-        pool_run_check_count(count, xcnn_size(_pool_shape_words(fields["_mask_shape"], "_mask_shape", context)))
+    var dev = py_get(fields, nk[].k__dev)
+    if handle is not None and xcnn_mixed(entries) and dev is not None and py_item(_fields(dev), nk[].k_b) is py_item(entries, nk[].k_module):
+        pool_run_check_count(count, xcnn_size(_pool_shape_words(py_item(fields, nk[].k__mask_shape), "_mask_shape", context)))
         var key = xcnn_ref(entries)
         var addrs: List[Int] = [xcnn_ptr(g), _pool_int(handle, context), xcnn_ptr(out)]
         var py = Python()
@@ -955,6 +967,7 @@ comptime _ADAPTIVE_MAX_SLOT = "xcnn_adaptive_max_v1"
 
 
 def _adaptive_max(model: PythonObject, context: PythonObject) raises -> Bool:
+    var nk = xcnn_keys()
     # p3-cnn-sequence-tsa: the class flag is kept per class under the type
     # watcher (`class_record`; an edit of the class or an ancestor misses)
     var cls = py_type(model)
@@ -963,11 +976,11 @@ def _adaptive_max(model: PythonObject, context: PythonObject) raises -> Bool:
     if kept is not None:
         return Bool(py=kept)
     var b = xcnn_builtins()
-    var ancestry = py_call(b.type.__dict__["__mro__"].__get__, cls)
+    var ancestry = py_call(py_item(b.type.__dict__, nk[].k___mro__).__get__, cls)
     var result = False
     for i in range(len(ancestry)):  # driver-loop: native class metadata without descriptors/metaclass hooks
         var namespace = _class_fields(ancestry[i])
-        var flag = py_get(namespace, "_max")
+        var flag = py_get(namespace, nk[].k__max)
         if flag is not None:
             _pool_scalar(flag, context)
             result = Bool(py=flag)
@@ -1000,17 +1013,19 @@ def xcnn_adaptive_init(model: PythonObject, args: PythonObject, context: PythonO
 
 
 def xcnn_adaptive_indices(model: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = xcnn_keys()
     var fields = _fields(model)
-    var host = py_get(fields, "_idx_host")
+    var host = py_get(fields, nk[].k__idx_host)
     if host is not None:
         return host
-    var layer = py_get(fields, "_layer")
+    var layer = py_get(fields, nk[].k__layer)
     if layer is not None:
         return _layer_indices(layer, context) if _adaptive_max(model, context) else PythonObject(None)
     return _layer_indices(model, context)
 
 
 def _adaptive_host_indices(value: PythonObject, shape: List[Int], context: PythonObject) raises -> PythonObject:
+    var nk = xcnn_keys()
     sequential_admit_value(value, context)
     var array = sequential_input(value, context)
     pool_run_check_shape(xcnn_shape(array), shape)
@@ -1023,7 +1038,7 @@ def _adaptive_host_indices(value: PythonObject, shape: List[Int], context: Pytho
         # Native buffer packing preserves logical C order without ndarray
         # conversion/iteration hooks, including strided caller index arrays.
         var packed = py_call(native_buffer_view(array).tobytes, "C")
-        array = py_call(context["ndarray"], xcnn_tuple(shape), dtype=array.dtype, buffer=packed)
+        array = py_call(py_item(context, nk[].k_ndarray), xcnn_tuple(shape), dtype=array.dtype, buffer=packed)
     var out = xcnn_host_i32(shape, context)
     var src = Int(py=xcnn_addr(array))
     var dst = Int(py=xcnn_addr(out))
@@ -1035,6 +1050,7 @@ def _adaptive_host_indices(value: PythonObject, shape: List[Int], context: Pytho
 
 
 def xcnn_adaptive_backward(model: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = xcnn_keys()
     var fields = _fields(model)
     var saved = xcnn_get(fields, XK_XSHAPE)
     if saved is None:
@@ -1062,10 +1078,10 @@ def xcnn_adaptive_backward(model: PythonObject, source: PythonObject, context: P
     var hbit = 0
     var idx = PythonObject(None)
     if maxed:
-        var held = py_get(fields, "_idx_dev")
-        var dev = py_get(fields, "_dev")
-        if mixed and held is not None and dev is not None and _fields(dev)["b"] is entries["module"]:
-            pool_run_check_shape(_pool_shape_words(fields["_idx_shape"], "_idx_shape", context), expected)
+        var held = py_get(fields, nk[].k__idx_dev)
+        var dev = py_get(fields, nk[].k__dev)
+        if mixed and held is not None and dev is not None and py_item(_fields(dev), nk[].k_b) is py_item(entries, nk[].k_module):
+            pool_run_check_shape(_pool_shape_words(py_item(fields, nk[].k__idx_shape), "_idx_shape", context), expected)
             handle = PythonObject(_pool_int(held, context))
             hbit = 4
         else:
