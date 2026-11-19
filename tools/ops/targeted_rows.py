@@ -158,36 +158,43 @@ def rows_text(rows, header=()):
 # ---------------------------------------------------------------------------------------------------------------
 # the estimate and the split
 # ---------------------------------------------------------------------------------------------------------------
-def estimate(rows, chunk_s=DEFAULT_CHUNK_S, one_arm=False):
-    """{candidate_s, prior_s, smoke_s, overhead_s, chunks, total_s, total_min} of a job over ROWS. ONE_ARM: the job
-    times our new wheel only against the stored baseline (no 0.8.55 venv, smoke or races; Andrew, 2026-11-17)."""
+def estimate(rows, chunk_s=DEFAULT_CHUNK_S, one_arm=False, prior_wheels=0):
+    """{candidate_s, prior_s, wheels_s, smoke_s, overhead_s, chunks, total_s, total_min} of a job over ROWS. ONE_ARM:
+    the job times no 0.8.55 arm (the stored baseline; Andrew, 2026-11-17). PRIOR_WHEELS: how many of our own earlier
+    built wheels (measure_candidate.py --prior-wheel) the job times on every row beside the candidate; each is
+    estimated at the candidate's stored seconds (the same code base a few commits back), with its smoke and its
+    process per chunk."""
     if one_arm:
         rows = [dict(r, prior_s=None) for r in rows]
     new = sum(r.get("new_s") or 0.0 for r in rows)
     prior = sum(r.get("prior_s") or 0.0 for r in rows)
+    wheels = prior_wheels * new
     nchunks = len(chunk_ids([r["id"] for r in rows], {r["id"]: r for r in rows}, chunk_s))
-    smoke = SMOKE_S_PER_RACE * (len(rows) + sum(1 for r in rows if (r.get("prior_s") or 0) > 0))
-    arms = 1 if one_arm else 2
+    smoke = SMOKE_S_PER_RACE * ((1 + prior_wheels) * len(rows) + sum(1 for r in rows if (r.get("prior_s") or 0) > 0))
+    arms = (1 if one_arm else 2) + prior_wheels
     over = FIXED_S + PREP_S + arms * PROC_S * nchunks
-    total = new + prior + smoke + over
-    return {"candidate_s": new, "prior_s": prior, "smoke_s": smoke, "overhead_s": over, "chunks": nchunks,
-            "total_s": total, "total_min": total / 60.0, "one_arm": one_arm}
+    total = new + prior + wheels + smoke + over
+    return {"candidate_s": new, "prior_s": prior, "wheels_s": wheels, "prior_wheels": prior_wheels, "smoke_s": smoke,
+            "overhead_s": over, "chunks": nchunks, "total_s": total, "total_min": total / 60.0, "one_arm": one_arm}
 
 
 def estimate_line(est):
-    return ("TG-ESTIMATE minutes total=%.0f candidate=%.0f 0.8.55=%s smoke=%.0f overhead=%.0f (chunks=%d, %d s per "
+    return ("TG-ESTIMATE minutes total=%.0f candidate=%.0f 0.8.55=%s%s smoke=%.0f overhead=%.0f (chunks=%d, %d s per "
             "process, %d s of prep once)" % (est["total_min"], est["candidate_s"] / 60,
-                                             "stored (one arm)" if est.get("one_arm") else "%.0f" % (est["prior_s"] / 60),
+                                             ("stored (screen)" if est.get("prior_wheels") else "stored (one arm)")
+                                             if est.get("one_arm") else "%.0f" % (est["prior_s"] / 60),
+                                             " prior-wheels=%.0f (%d)" % (est["wheels_s"] / 60, est["prior_wheels"])
+                                             if est.get("prior_wheels") else "",
                                              est["smoke_s"] / 60, est["overhead_s"] / 60, est["chunks"], PROC_S,
                                              PREP_S))
 
 
-def split_rows(rows, cap_min, chunk_s=DEFAULT_CHUNK_S, one_arm=False):
+def split_rows(rows, cap_min, chunk_s=DEFAULT_CHUNK_S, one_arm=False, prior_wheels=0):
     """ROWS in file order cut into parts whose estimate is under CAP_MIN each (a row alone over the cap is a part of
     its own: it cannot be split further)."""
     parts, cur = [], []
     for r in rows:
-        if cur and estimate(cur + [r], chunk_s, one_arm)["total_min"] > cap_min:
+        if cur and estimate(cur + [r], chunk_s, one_arm, prior_wheels)["total_min"] > cap_min:
             parts.append(cur)
             cur = []
         cur.append(r)
@@ -196,21 +203,22 @@ def split_rows(rows, cap_min, chunk_s=DEFAULT_CHUNK_S, one_arm=False):
     return parts
 
 
-def check_cap(rows_path, cap_min, chunk_s=DEFAULT_CHUNK_S, write_split=True, one_arm=False):
+def check_cap(rows_path, cap_min, chunk_s=DEFAULT_CHUNK_S, write_split=True, one_arm=False, prior_wheels=0):
     """(estimate, [split file paths]) of a rows file; the split list is empty when it fits under CAP_MIN. The parts
     are written beside it as <stem>.part<i>.tsv, each one complete job (every arm it times on the same box)."""
     rows = read_rows(rows_path)
-    est = estimate(rows, chunk_s, one_arm)
+    est = estimate(rows, chunk_s, one_arm, prior_wheels)
     if est["total_min"] <= cap_min:
         return est, []
     p = Path(rows_path)
     files = []
-    for i, part in enumerate(split_rows(rows, cap_min, chunk_s, one_arm), 1):
+    for i, part in enumerate(split_rows(rows, cap_min, chunk_s, one_arm, prior_wheels), 1):
         f = p.with_name("%s.part%d%s" % (p.stem, i, p.suffix or ".tsv"))
+        e = estimate(part, chunk_s, one_arm, prior_wheels)
         if write_split:
             PC.write_atomic(str(f), rows_text(part, ["part %d of %s (cap %s min): %s" % (
-                i, p.name, cap_min, estimate_line(estimate(part, chunk_s, one_arm)))]))
-        files.append((str(f), estimate(part, chunk_s, one_arm)))
+                i, p.name, cap_min, estimate_line(e))]))
+        files.append((str(f), e))
     return est, files
 
 
@@ -236,8 +244,9 @@ def chunk_ids(ids, by_id, chunk_s):
 # ---------------------------------------------------------------------------------------------------------------
 def compare_rows(doc):
     """[(race id, ratio vs the on-box paper baseline or None, row, kind)] of every recipe, extra and internal row
-    (kind: recipe / extra / internal). A recipe row's ratio counts only with a verdict flag (an on-box baseline)."""
-    pv = doc.get("paper_version") or PC.PAPER_VERSION
+    (kind: recipe / extra / internal). A recipe row's ratio counts only with a verdict flag (an on-box baseline). The
+    baseline is the compare's own (baseline_version: a prior wheel under --verdict-prior), else the paper's version."""
+    pv = doc.get("baseline_version") or doc.get("paper_version") or PC.PAPER_VERSION
     out = []
     for r in doc.get("rows") or []:
         verdict = any(f in ("REGRESSION", "FASTER", "SAME") for f in r.get("flags") or [])
@@ -757,7 +766,7 @@ def cmd_plan(a):
     by_id = {r["id"]: r for r in rows}
     print("TG-PLAN vendor=%s rows=%d planned=%d not_planned=%d paper_recipes=%d" % (
         a.vendor, len(want), len(ids), len(not_planned), len(rec["recipes"])))
-    print(estimate_line(estimate([by_id[i] for i in ids], a.chunk_s, a.one_arm)))
+    print(estimate_line(estimate([by_id[i] for i in ids], a.chunk_s, a.one_arm, a.prior_wheels)))
     return 0
 
 
@@ -861,7 +870,7 @@ def _statuses(board_path, ids):
     return ", ".join("%s %d" % kv for kv in sorted(out.items()))
 
 
-def untimed(results, ids, units_path=None, only_arms=None):
+def untimed(results, ids, units_path=None, only_arms=None, prior_wheels=()):
     """[(arm, why)]: every staged arm of a targeted job that has no timed race (lane fx-pod-job2, 2026-11-18: 12 of
     14 B arms were skipped with a quiet "no race to time" and the job's only failure was a missing board). The
     candidate counts when rows are listed (board-tg); each owed unit counts with its arm board and its base board
@@ -880,6 +889,21 @@ def untimed(results, ids, units_path=None, only_arms=None):
                 why = "no listed race done in board-tg (%s; logs/board-tg.log: %s)" % (
                     _statuses(b, ids) or "no board", _first(os.path.join(logs, "board-tg.log"), last=True) or "-")
             out.append(("candidate", why))
+    for name in prior_wheels or ():
+        # a prior wheel (PC_PRIOR_WHEELS) is the verdict baseline: with no timed listed race there is no verdict
+        arm = "prior-" + name
+        b = os.path.join(results, "board-tg-" + arm, "board.json")
+        if ids and _done(b, ids) == 0:
+            passed = _lines(os.path.join(results, "plan-tg", arm, "race-ids-pass.txt"))
+            if passed is not None and not passed:
+                why = "none of the listed races passed both smokes: %s" % (
+                    _first(os.path.join(logs, "pass-ids-tg-%s.log" % arm), "PAPER-PASS-IDS-FAILED") or "?")
+            else:
+                why = "no listed race done in board-tg-%s (%s; logs/install-tg-%s.log: %s; logs/board-tg-%s.log: %s)" % (
+                    arm, _statuses(b, ids) or "no board", arm,
+                    _first(os.path.join(logs, "install-tg-%s.log" % arm), last=True) or "-", arm,
+                    _first(os.path.join(logs, "board-tg-%s.log" % arm), last=True) or "-")
+            out.append((arm, why))
     if not units_path or not os.path.isfile(units_path):
         return out
     with open(units_path) as fh:
@@ -925,7 +949,7 @@ def untimed(results, ids, units_path=None, only_arms=None):
 def cmd_timed_check(a):
     ids = _lines(a.ids) or []
     only = [x for x in (a.arms or "").split(",") if x] or None
-    bad = untimed(a.results, ids, a.units, only)
+    bad = untimed(a.results, ids, a.units, only, [x for x in (a.prior_wheels or "").split(",") if x])
     for arm, why in bad:
         print("UNTIMED %s: %s" % (arm, why))
     print("TG-TIMED-CHECK untimed=%d%s" % (len(bad), "" if not bad else " (the job exits non-zero)"))
@@ -971,11 +995,15 @@ def summary(doc, rows, results, ids, units=(), prior_versions=None):
     want = {r["id"] for r in rows}
     input_ratio = {r["id"]: r.get("input_ratio") for r in rows}
     control = {r["id"] for r in rows if "control" in r.get("reasons", [])}
-    pv = doc.get("paper_version") or PC.PAPER_VERSION
+    # the verdict baseline: the paper's version, or a prior wheel timed in this job (compare --verdict-prior)
+    pv = doc.get("baseline_version") or doc.get("paper_version") or PC.PAPER_VERSION
     stored = bool(doc.get("baseline_stored"))
     lines = []
     if stored:
         lines += [doc.get("verdict_basis") or "STORED BASELINE"] + list(doc.get("baseline_warnings") or [])
+    elif doc.get("screen_stored"):
+        lines.append("verdict: %s; the stored %s board is a screen column only (no flag)" % (
+            doc.get("verdict_basis"), doc.get("paper_version")))
     lines.append("TARGETED vendor=%s %s -> %s rows=%d (%s)" % (
         doc.get("vendor"), pv, doc.get("new_label"), len(rows),
         "baseline stored, our new wheel timed alone" if stored else (doc.get("verdict_basis") or "no verdict")))
@@ -1019,8 +1047,8 @@ def summary(doc, rows, results, ids, units=(), prior_versions=None):
         lines.append("BOX-STATE rows (%d), ratio not counted:" % len(box))
         lines += ["  %.2fx %s; probe %s" % (ratio, key, PC.probe_text(p)) for ratio, key, p in sorted(box, reverse=True)]
     lines.append("done/total candidate %d/%d" % (_done(os.path.join(results, "board-tg", "board.json"), ids), len(ids)))
-    if stored:
-        lines.append("%s: stored, not timed in this job" % pv)
+    if stored or doc.get("screen_stored"):
+        lines.append("%s: stored, not timed in this job" % doc.get("paper_version"))
     for v in ([] if stored else (prior_versions or [pv])):
         pid = os.path.join(results, "plan-tg", "prior-%s" % v, "race-ids-pass.txt")
         lines.append("done/total %s %d/%d (of the listed races; %s passed its own smoke)" % (
@@ -1123,7 +1151,9 @@ def build_box_parser():
     pl.add_argument("--recipes", required=True)
     pl.add_argument("--out-dir", required=True)
     pl.add_argument("--chunk-s", type=int, default=DEFAULT_CHUNK_S)
-    pl.add_argument("--one-arm", action="store_true", help="the stored-baseline job: our new wheel timed alone")
+    pl.add_argument("--one-arm", action="store_true", help="the stored-baseline job: no 0.8.55 arm")
+    pl.add_argument("--prior-wheels", type=int, default=0,
+                    help="how many of our own earlier built wheels (PC_PRIOR_WHEELS) the job times beside the candidate")
     ch = sub.add_parser("chunks")
     ch.add_argument("--ids", required=True)
     ch.add_argument("--rows", default=None)
@@ -1137,6 +1167,8 @@ def build_box_parser():
     tc.add_argument("--ids", required=True, help="the listed races (plan-tg/race-ids-full.txt)")
     tc.add_argument("--units", default=None, help="the owed plan's units.tsv")
     tc.add_argument("--arms", default=None, help="only these arms (a split submit's PC_OWED_ARMS)")
+    tc.add_argument("--prior-wheels", default=None,
+                    help="comma list of the prior wheels (PC_PRIOR_WHEELS names): each must have a timed listed race")
     eb = sub.add_parser("empty-board", help="board-tg/board.json with no race, when the candidate timed none")
     eb.add_argument("--out", required=True)
     eb.add_argument("--host-probe", default=None)
