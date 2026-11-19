@@ -116,7 +116,9 @@ TT_PEAK=$(peak_of tool-test-file $(( GIB / 2 )))
 matrix_field() {  # <host|device> <key> <field>
     python3 -c 'import json,sys;print(next(e[sys.argv[3]] for e in json.load(open(sys.argv[1] + ".json")) if e["key"] == sys.argv[2]))' "$@"
 }
-run_unit() {  # <name>: runs in the background from the worktree; rc to $RES/rc/<name>
+# run_unit <name>: starts the unit in the background FROM THIS SHELL (UNIT_PID), so this shell reaps it (a container's
+# pid 1 may not reap an orphan, and kill -0 answers for a zombie); the unit is over when $RES/rc/<name> exists
+run_unit() {
     local name=$1 cmd
     case "$name" in
         build-cpu)
@@ -138,13 +140,14 @@ run_unit() {  # <name>: runs in the background from the worktree; rc to $RES/rc/
                 pixi install --locked -e test || exit 2
                 MOJOLEARN_TOOL_TESTS_OUT="$2/tools" MOJOLEARN_TEST_PY="$PWD/.pixi/envs/test/bin/python" MOJOLEARN_TEST_WORKERS="$3" \
                     bash tools/run_tool_tests.sh' "$SRC" "$BASE" "$RES" "$CORES") ;;
-        *) echo "unknown unit $name" >&2; return 2 ;;
+        *) echo "unknown unit $name" >&2; UNIT_PID=''; return 2 ;;
     esac
+    rm -f "$RES/rc/$name"
     (
         if [ -x /usr/bin/time ]; then /usr/bin/time -v -o "$RES/time/$name.txt" "${cmd[@]}"; else "${cmd[@]}"; fi
         echo $? > "$RES/rc/$name"
     ) > "$RES/logs/$name.log" 2>&1 < /dev/null 8>&- 9>&- &   # never inherit the ledger lock
-    echo $!
+    UNIT_PID=$!
 }
 
 # ---- the box-wide memory ledger (shared by every check job on this box) ----
@@ -166,7 +169,7 @@ say "plan: ${#QUEUE[@]} units to start (more when the build passes), memory budg
 while [ ${#QUEUE[@]} -gt 0 ] || [ ${#PID[@]} -gt 0 ]; do
     # reap
     for name in "${!PID[@]}"; do
-        if ! kill -0 "${PID[$name]}" 2> /dev/null; then
+        if [ -f "$RES/rc/$name" ] || ! kill -0 "${PID[$name]}" 2> /dev/null; then
             wait "${PID[$name]}" 2> /dev/null
             rm -f "$BASE/ledger/$TAG-$name"
             rc=$(cat "$RES/rc/$name" 2> /dev/null || echo none)
@@ -199,10 +202,10 @@ while [ ${#QUEUE[@]} -gt 0 ] || [ ${#PID[@]} -gt 0 ]; do
         exec 8> "$BASE/ledger.lock"; flock 8
         used=$(ledger_sum)
         if [ $(( used + est )) -le "$BUDGET_KB" ] || [ "$used" -eq 0 ]; then
-            pid=$(run_unit "$name")
-            if [ -n "$pid" ]; then
-                echo "$pid $est" > "$BASE/ledger/$TAG-$name"
-                PID[$name]=$pid; started=1
+            run_unit "$name" || true
+            if [ -n "$UNIT_PID" ]; then
+                echo "$UNIT_PID $est" > "$BASE/ledger/$TAG-$name"
+                PID[$name]=$UNIT_PID; started=1
                 say "start $name (estimate $(( est / GIB )) GiB, reserved now $(( (used + est) / GIB )) of $(( BUDGET_KB / GIB )) GiB)"
             fi
         fi
