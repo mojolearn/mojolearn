@@ -4,6 +4,7 @@
 # Python forward. The public API now requires an already exported artifact
 # (owner authorization 2026-10-27); it never performs an implicit export.
 from bindings.mode_answer_door import answer_mode_object
+from core.mode_answer import MODE_FAMILY_NEURAL
 from std.python import Python, PythonObject
 from bindings.byte_checkpoint_io_unpack import ByteCheckpointIOError
 from providers.python.framework_metadata_pyapi_pack import framework_metadata_operation
@@ -81,7 +82,7 @@ def _import(source: PythonObject, label: PythonObject, shapes: PythonObject,
     var normalized_word = String(normalized)
     if normalized_word != "identical" and normalized_word != "fast":
         raise Error("ValueError: numeric_mode must be fast, identical or None")
-    answer_mode_object(normalized, normalized_word)
+    answer_mode_object(normalized, normalized_word, MODE_FAMILY_NEURAL)
     var entries = context["modes"][normalized]
     if py_type(entries) is b.str:
         raise Error(String(entries))

@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Complete standalone queries, sharing the worker's native search ownership.
 from bindings.mode_answer_door import answer_mode_object
+from core.mode_answer import MODE_FAMILY_NEIGHBORS
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
@@ -65,7 +66,7 @@ def _query_route(model: PythonObject, kind: PythonObject, group: String, context
     var mode_word = String(mode)
     if mode_word != "identical" and mode_word != "fast":
         raise Error("ValueError: numeric_mode must be identical or fast")
-    answer_mode_object(mode, mode_word)
+    answer_mode_object(mode, mode_word, MODE_FAMILY_NEIGHBORS)
     var routes = context["neighbor_query_host_routes"] if host else context["neighbor_query_routes"]
     var result = routes[group][mode]
     if py_type(result) is b.str:

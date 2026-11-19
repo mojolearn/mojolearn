@@ -12,7 +12,7 @@ against y on the metrics binding of the model's numeric mode, the kernel
 
 The same kernels in the same order, so the score keeps its bits.
 """
-from core.mode_answer import answer_mode_word
+from core.mode_answer import MODE_FAMILY_XSEQ, answer_mode_word
 from bindings.mode_answer_door import answer_mode_object
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
@@ -79,8 +79,8 @@ def _metrics_key(model: PythonObject, context: PythonObject) raises -> MetricsEn
     var expected = context["backend_fields"]["_DEFAULT_MODE"] if mode is None else mode
     expected = py_call(py_call(expected.strip).lower)
     var expected_word = String(py=expected)
-    answer_mode_object(expected, expected_word)
-    answer_mode_word(expected_word)
+    answer_mode_object(expected, expected_word, MODE_FAMILY_XSEQ)
+    answer_mode_word(expected_word, MODE_FAMILY_XSEQ)
     var table = context["xseq_metrics"]
     var record = table[expected]
     if py_type(record) is b.str:

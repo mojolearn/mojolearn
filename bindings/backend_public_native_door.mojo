@@ -472,7 +472,13 @@ def backend_public_operation(operation: String, args: PythonObject, context: Pyt
     if operation == "connect_mode_answer":
         # Import only: hand the selector's one decision to every door's mode
         # admission (core/mode_answer.mojo).
-        connect_mode_answer_words(py_get(fields, "_FAST_ANSWER") is not None, PythonObject("identical"))
+        # The families answered are the compiled constant
+        # MODE_FAMILIES_ANSWERED; a single int argument is the built-install
+        # test's trial mask (never passed by the package).
+        var trial_families = -1
+        if len(args) == 1:
+            trial_families = Int(py=args[0])
+        connect_mode_answer_words(py_get(fields, "_FAST_ANSWER") is not None, PythonObject("identical"), trial_families)
         return PythonObject(None)
     var mode = _mode(fields)
     if operation == "set_default_mode":

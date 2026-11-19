@@ -2,6 +2,7 @@
 # StandardScaler.fit owns admission, buffers, route selection, launches and
 # fitted-state publication here. The existing statistics kernels are unchanged.
 from bindings.mode_answer_door import answer_mode_object
+from core.mode_answer import MODE_FAMILY_SCALER
 from std.memory import unsafe_memcpy
 from bindings.native_loaded_module_door import native_loaded_module
 from std.python import Python, PythonObject
@@ -306,7 +307,7 @@ def scaler_fit(model: PythonObject, source: PythonObject, weight_source: PythonO
     var mode_word = String(mode)
     if mode_word != "fast" and mode_word != "identical":
         raise Error("numeric_mode must be fast, identical or None")
-    answer_mode_object(mode, mode_word)
+    answer_mode_object(mode, mode_word, MODE_FAMILY_SCALER)
     if Bool(py=py_get(context,"scaler_explicit_host",False)) and String(mode) != "identical":
         raise Error("HostStandardScaler runs identical only on the host")
     # Preserve refit's invalidation semantics, including failure after a valid

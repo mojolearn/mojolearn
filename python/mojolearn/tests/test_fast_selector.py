@@ -22,7 +22,8 @@ under test (`_backend._FAST_ANSWER`):
   * on Apple nothing changes: `fast` names the fast set, built or not;
   * `binding` and `load_set` still name the fast set under 'fast' (a
     per-estimator `numeric_mode='fast'` is answered in the compiled doors,
-    core/mode_answer.mojo: `BuiltInstallFamilies` below);
+    per door family, core/mode_answer.mojo MODE_FAMILIES_ANSWERED; a family
+    not named there refuses it in every operation: `BuiltInstallFamilies`);
   * a retired mode value is refused with its wording.
 
 The result hash of a `fast` process against an `identical` one on a built
@@ -294,77 +295,162 @@ class BuiltInstall(unittest.TestCase):
 
 
 _FAMILY_CHILD = r"""
-import hashlib, json, sys
+import hashlib, json, os, pickle, sys, tempfile
 import mojolearn
 import numpy as np
 X = (np.arange(192, dtype=np.float32).reshape(48, 4) * np.float32(0.37)) % np.float32(5.0) + np.float32(0.25)
 y_reg = np.ascontiguousarray(X[:, 0] * np.float32(2.0) - X[:, 1], dtype=np.float32)
 y_cls = np.ascontiguousarray((X[:, 0] > X[:, 1]).astype(np.int32))
 FAMILIES = json.loads(sys.argv[1])
-rows = {}
+if sys.argv[2] != "compiled":
+    # The test's switch (never used by the package): a trial mask of door
+    # families (bits of core/mode_answer.mojo) that answer `fast`, so one
+    # built install lists the families that are whole under that set.
+    from mojolearn import _native_backend_public as public
+    public._NATIVE("connect_mode_answer", (int(sys.argv[2], 0),), public._CONTEXT)
+READ = ("predict", "predict_proba", "predict_log_proba", "decision_function", "transform", "score_samples",
+        "apply", "kneighbors")
+def digest(value):
+    if isinstance(value, tuple):
+        return "+".join(digest(part) for part in value)
+    if hasattr(value, "toarray"):
+        value = value.toarray()
+    value = np.ascontiguousarray(np.asarray(value))
+    return hashlib.sha256(value.tobytes() + str(value.dtype).encode() + str(value.shape).encode()).hexdigest()
+def target(kind):
+    return () if kind == "unsup" else ((y_cls,) if kind == "cls" else (y_reg,))
+def operations(model, kind):
+    # Every public operation the class has, after fit: name -> a call.
+    ops = {}
+    for name in READ:
+        if hasattr(model, name):
+            ops[name] = (lambda name=name: getattr(model, name)(X))
+    if hasattr(model, "score"):
+        ops["score"] = lambda: np.float64(model.score(X, *target(kind)))
+    if hasattr(model, "inverse_transform") and hasattr(model, "transform"):
+        ops["inverse_transform"] = lambda: model.inverse_transform(model.transform(X))
+    if hasattr(model, "partial_fit"):
+        def again():
+            extra = dict(classes=np.unique(y_cls)) if kind == "cls" else {}
+            model.partial_fit(X, *target(kind), **extra)
+            return getattr(model, "transform" if hasattr(model, "transform") else "predict")(X)
+        ops["partial_fit"] = again
+    def after(restored):
+        return getattr(restored, "transform" if hasattr(restored, "transform") else "predict")(X)
+    ops["pickle"] = lambda: after(pickle.loads(pickle.dumps(model)))
+    if hasattr(model, "save") and hasattr(type(model), "load"):
+        def round_trip():
+            with tempfile.TemporaryDirectory() as folder:
+                path = os.path.join(folder, "model.npz")
+                model.save(path)
+                return after(type(model).load(path))
+        ops["save_load"] = round_trip
+    return ops
 def run(name, kind, extra, mode):
+    # (fit error or None, {operation: digest or "refused: ..."}, model)
     model = getattr(mojolearn, name)(numeric_mode=mode, **extra)
-    if kind == "unsup":
-        model.fit(X)
-    else:
-        model.fit(X, y_cls if kind == "cls" else y_reg)
-    out = model.transform(X) if hasattr(model, "transform") else model.predict(X)
-    out = np.ascontiguousarray(np.asarray(out))
-    return model, hashlib.sha256(out.tobytes() + str(out.dtype).encode()).hexdigest()
+    try:
+        model.fit(X, *target(kind))
+    except Exception as error:
+        return f"{type(error).__name__}: {error}"[:300], {}, model
+    done = {}
+    for op, call in operations(model, kind).items():
+        try:
+            done[op] = digest(call())
+        except Exception as error:
+            done[op] = "refused: " + f"{type(error).__name__}: {error}"[:300]
+    return None, done, model
+rows = {}
 for name, kind, extra in FAMILIES:
-    try:
-        _, want = run(name, kind, extra, None)
-    except Exception as error:
-        rows[name] = dict(status="unavailable", why=f"{type(error).__name__}: {error}"[:300])
+    failed, want, _ = run(name, kind, extra, None)
+    if failed is not None:
+        rows[name] = dict(status="unavailable", why=failed)
         continue
-    try:
-        model, got = run(name, kind, extra, "fast")
-    except Exception as error:
-        rows[name] = dict(status="refused", why=f"{type(error).__name__}: {error}"[:300])
+    failed, got, model = run(name, kind, extra, "fast")
+    if failed is not None:
+        # The family refuses the word at fit: nothing of it runs under `fast`.
+        rows[name] = dict(status="refused", why=failed)
         continue
-    rows[name] = dict(status="same" if got == want else "different", attribute=model.numeric_mode,
+    ops = {}
+    for op, expected in want.items():
+        if expected.startswith("refused: "):
+            continue  # not runnable under `identical` either on this data
+        value = got.get(op, "refused: operation missing")
+        ops[op] = "same" if value == expected else ("refused" if value.startswith("refused: ") else "different")
+        if ops[op] != "same":
+            ops[op] += " " + value[:200]
+    whole = all(value == "same" for value in ops.values())
+    rows[name] = dict(status="answered" if whole else "mixed", ops=ops, attribute=model.numeric_mode,
                       param=model.get_params()["numeric_mode"])
 print(json.dumps(dict(answer=mojolearn._backend._FAST_ANSWER, vendor=mojolearn.vendor(), rows=rows)))
 """
 
-#: One estimator per converted family door: (class, kind, constructor extras).
+#: One estimator per door family that has a mode-answer step: (class, kind, constructor extras).
 FAMILIES = [
     ["RandomForestClassifier", "cls", {"n_estimators": 4, "random_state": 0}],
     ["RandomForestRegressor", "reg", {"n_estimators": 4, "random_state": 0}],
     ["ExtraTreesClassifier", "cls", {"n_estimators": 4, "random_state": 0}],
     ["GradientBoostingRegressor", "reg", {"n_estimators": 4}],
+    ["GradientBoostingClassifier", "cls", {"n_estimators": 4}],
     ["IsolationForest", "unsup", {"n_estimators": 4, "random_state": 0}],
     ["StandardScaler", "unsup", {}],
     ["MinMaxScaler", "unsup", {}],
+    ["MaxAbsScaler", "unsup", {}],
+    ["RobustScaler", "unsup", {}],
     ["PCA", "unsup", {"n_components": 2}],
     ["IncrementalPCA", "unsup", {"n_components": 2}],
     ["TruncatedSVD", "unsup", {"n_components": 2}],
     ["KernelPCA", "unsup", {"n_components": 2}],
     ["NMF", "unsup", {"n_components": 2}],
+    ["PLSRegression", "reg", {"n_components": 2}],
     ["LinearRegression", "reg", {}],
     ["Ridge", "reg", {}],
     ["LogisticRegression", "cls", {}],
     ["ElasticNet", "reg", {}],
+    ["SGDClassifier", "cls", {"random_state": 0}],
     ["KernelRidge", "reg", {}],
     ["KNeighborsClassifier", "cls", {}],
+    ["KNeighborsRegressor", "reg", {}],
+    ["KMeans", "unsup", {"n_clusters": 2, "random_state": 0}],
+    ["GaussianMixture", "unsup", {"n_components": 2, "random_state": 0}],
+    ["SVC", "cls", {}],
+    ["GaussianNB", "cls", {}],
 ]
 
 
 class BuiltInstallFamilies(unittest.TestCase):
-    """On a built install off Apple with no fast set: `Estimator(numeric_mode='fast')`
-    fits, its result bytes equal the `numeric_mode=None` (identical) ones, and its
-    `numeric_mode` attribute and `get_params()` read back 'fast'. One process."""
+    """On a built install off Apple with no fast set, `Estimator(numeric_mode='fast')`
+    answers the same way in EVERY public operation of its family. Either the
+    family is answered: fit, each other operation the class has (predict,
+    predict_proba, decision_function, transform, inverse_transform, score,
+    score_samples, partial_fit), a pickle and a save/load round trip all run,
+    their result bytes equal the `numeric_mode=None` (identical) ones, and the
+    attribute and `get_params()` read back 'fast'. Or the family refuses the
+    word at fit, as an install with no fast set always has. A family that fits
+    under `fast` and then refuses or differs in another call fails here.
 
-    def test_per_estimator_fast_runs_the_identical_set(self):
+    `MOJOLEARN_FAST_ANSWER_TRIAL_FAMILIES=<mask>` (a switch of this test, not
+    of the package; `0x7fffff` is every door family, bits in
+    core/mode_answer.mojo) answers `fast` for that set of families, so the run
+    lists which are whole under it; `MOJOLEARN_FAST_LEDGER=<path>` keeps the
+    report. A family is added to MODE_FAMILIES_ANSWERED only when a run with
+    exactly the candidate set shows no `mixed` row."""
+
+    def test_per_estimator_fast_answers_every_operation_alike(self):
         import json
         if sys.platform == "darwin":
             self.skipTest("Apple: `fast` names the fast set (unchanged); the answer under test is off Apple")
-        done = subprocess.run([sys.executable, "-c", _FAMILY_CHILD, json.dumps(FAMILIES)],
+        every = os.environ.get("MOJOLEARN_FAST_ANSWER_TRIAL_FAMILIES", "compiled")
+        done = subprocess.run([sys.executable, "-c", _FAMILY_CHILD, json.dumps(FAMILIES), every],
                               env=dict(os.environ, MOJOLEARN_NUMERIC_MODE="identical"),
                               capture_output=True, text=True, timeout=1800)
         if done.returncode != 0:
             self.skipTest("no built mojolearn in this environment: " + done.stderr[-300:])
         report = json.loads(done.stdout.strip().splitlines()[-1])
+        ledger = os.environ.get("MOJOLEARN_FAST_LEDGER")
+        if ledger:
+            with open(ledger, "w") as out:
+                json.dump(dict(report, families=every), out, indent=1, sort_keys=True)
         if report["answer"] != "identical":
             self.skipTest("this install carries a fast set, which answers the word itself")
         ran = 0
@@ -373,8 +459,9 @@ class BuiltInstallFamilies(unittest.TestCase):
                 if row["status"] == "unavailable":
                     continue  # not runnable under `identical` either on this install
                 ran += 1
-                self.assertEqual(row["status"], "same", row.get("why", ""))
-                self.assertEqual((row["attribute"], row["param"]), ("fast", "fast"))
+                self.assertIn(row["status"], ("answered", "refused"), row.get("ops", ""))
+                if row["status"] == "answered":
+                    self.assertEqual((row["attribute"], row["param"]), ("fast", "fast"))
         self.assertGreater(ran, 0, report["rows"])
 
 

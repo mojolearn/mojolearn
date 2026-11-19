@@ -4,6 +4,7 @@
 # The PACK half of the former `bindings/spectral_umap_routes.mojo` (fence-flip-2 split, 2026-11-12);
 # the UNPACK half is `bindings/spectral_umap_routes_unpack.mojo`.
 from bindings.mode_answer_door import answer_mode_object
+from core.mode_answer import MODE_FAMILY_SPECTRAL
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_get, py_type
 from bindings.native_loaded_module_door import native_loaded_module, _loaded_fields
@@ -19,7 +20,7 @@ def spectral_umap_route(context: PythonObject, group: String, requested: PythonO
     var mode_word = String(mode)
     if mode_word != "identical" and mode_word != "fast":
         raise Error("numeric_mode must be fast, identical or None")
-    answer_mode_object(mode, mode_word)
+    answer_mode_object(mode, mode_word, MODE_FAMILY_SPECTRAL)
     var module = context["family_spectral_umap_bindings"][PythonObject(group)][mode]
     if py_type(module) is b.str:
         raise Error(String(module))

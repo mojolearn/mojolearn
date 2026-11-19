@@ -8,7 +8,7 @@ nothing per call."""
 
 from std.python import PythonObject
 from std.sys.info import CompilationTarget
-from core.mode_answer import connect_mode_answer, fast_is_answered_by_identical
+from core.mode_answer import MODE_FAMILIES_ALL, MODE_FAMILIES_ANSWERED, connect_mode_answer, fast_is_answered_by_identical
 from core.shared_slot import SharedSlot
 
 
@@ -25,23 +25,29 @@ struct ModeAnswerWords(Defaultable, Movable):
 comptime MODE_ANSWER_WORDS = SharedSlot[ModeAnswerWords, "MojolearnModeAnswerWordsV1"]
 
 
-def connect_mode_answer_words(fast_is_identical: Bool, identical: PythonObject) raises:
-    """Store the selector's decision and the retained word, once, at import."""
+def connect_mode_answer_words(fast_is_identical: Bool, identical: PythonObject, trial_families: Int = -1) raises:
+    """Store the selector's decision and the retained word, once, at import.
+    `trial_families` (0 or more) is the built-install test's switch: that
+    family mask replaces MODE_FAMILIES_ANSWERED, so one built install can
+    show which families are whole under any candidate set."""
     var held = MODE_ANSWER_WORDS.get_or_create_ptr()
     if len(held[].words) == 0:
         held[].words.append(identical)
-    connect_mode_answer(fast_is_identical)
+    var families = 0
+    if fast_is_identical:
+        families = MODE_FAMILIES_ANSWERED if trial_families < 0 else (trial_families & MODE_FAMILIES_ALL)
+    connect_mode_answer(families)
 
 
 @always_inline
-def answer_mode_object(mut mode: PythonObject, word: String) raises:
-    """`mode` is an admitted Python mode word and `word` its text. Replace
-    `fast` by the retained `identical` object where the identical set
-    answers it."""
+def answer_mode_object(mut mode: PythonObject, word: String, family: Int) raises:
+    """`mode` is an admitted Python mode word of a door of `family` and `word`
+    its text. Replace `fast` by the retained `identical` object where the
+    identical set answers it for that family."""
     comptime if CompilationTarget.is_macos():
         return
     if word == "fast":
-        if fast_is_answered_by_identical():
+        if fast_is_answered_by_identical(family):
             var held = MODE_ANSWER_WORDS.get_or_create_ptr()
             if len(held[].words) > 0:
                 mode = held[].words[0]

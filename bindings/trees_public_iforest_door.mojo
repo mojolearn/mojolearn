@@ -26,7 +26,7 @@
 # read-back); `fit_predict` is ONE `iforest_run` (fit a fresh forest and
 # predict X with it) instead of the fit's one-row run and a second run for
 # predict, and X is converted and handed over once.
-from core.mode_answer import answer_mode_word
+from core.mode_answer import MODE_FAMILY_IFOREST, answer_mode_word
 from std.memory import unsafe_memcpy
 from std.sys.compile import is_defined
 from std.python import Python, PythonObject
@@ -209,7 +209,7 @@ def _mode(fields: PythonObject, context: PythonObject) raises -> String:
     var clean = String(py_call(py_call(mode.strip).lower))
     if clean != "fast" and clean != "identical":
         raise Error("numeric_mode must be fast, identical or None")
-    answer_mode_word(clean)
+    answer_mode_word(clean, MODE_FAMILY_IFOREST)
     return clean
 
 
