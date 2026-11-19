@@ -341,5 +341,13 @@ struct RegistryKey(Copyable, Movable):
 # an arm build (a door without its stamp and a step without the arm would
 # leave other copies stale; a step with the arm under a door that still
 # stamps only re-uploads, i.e. the default behaviour).
+# A/B round 2, 2026-11-19 (lane fx-verdicts4; NVIDIA L40S host bd9c355c19c0, wheel 0c68d6cd27 and its B set, base and
+# arm in one pod job, tag nvc-ab-20261119T154232Z-0642a5; digests and quality equal). Base -> arm ms: samba-train-step
+# 49.61 -> 47.24 (0.952; the row's other base 48.73, so 0.97 against it; the predicted -1 to -2 ms), control
+# lm-train-step 1.00, samba-forward 0.99. Driver SambaStack.train_step: 4 x 300 d256 m/a/m/a 41.60 -> 40.74 (0.98),
+# 4 x 256 d256 six layers 56.33 -> 55.52 (0.99), 2 x 192 d128 m/m 22.38 -> 28.14 (1.26); first forward after a step
+# 6.29 -> 5.04, 6.30 -> 5.26, 2.55 -> 2.46. NOT DECIDED: the row's rule lets one slower driver case block the
+# promotion, and the m/m case is one call with no spread (the same case on another arm's wheel in the job: 20.96).
+# Stays opt-in, owed RUN: re-time fx-samba-step-shapes with the median of 20 steps a case.
 comptime SAMBA_STEP_REGISTRY_RESIDENT = is_defined["MOJOLEARN_SAMBA_FAST_STEP_REGISTRY_RESIDENT"]()
 

@@ -229,6 +229,11 @@ from autograd.kernels.mamba2_prefill import Mamba2PrefillGradients
 # never run) deleted 2026-11-15 by lane/expdel2-24-neural; code recoverable at f97dc11e84.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_MAMBA_BACKWARD_GENERIC.patch
 # RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
+# A/B round 2, 2026-11-19 (lane fx-verdicts4; NVIDIA L40S, wheel 0c68d6cd27 and its B set, job
+# nvc-ab-20261119T154232Z-0642a5). The arm's only row is a driver row, so the job holds no board for it; its driver
+# cases ran: hand (default) -> tape graph ms, 4 x 512 d256, ONE call each: Mamba1Block.backward 10.999 -> 10.463
+# (0.95), Mamba2Block.backward 14.935 -> 14.763 (0.99). NOT DECIDED: one call an arm with no spread, and the n = 20
+# record on file reads the other way (1.05, 1.01). Stays opt-in, owed RUN: the driver now times the median of 20.
 comptime IDN_MAMBA_BACKWARD_GENERIC = is_defined["MOJOLEARN_IDN_MAMBA_BACKWARD_GENERIC"]()
 
 # Tags in a range of their own, clear of LayerNorm (1) and recurrent (16-18).

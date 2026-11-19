@@ -82,11 +82,6 @@ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from std.memory import unsafe_memcpy
 from max.gpu.primitives.block import prefix_sum
 
-from std.sys.compile import is_defined
-
-from core.stable_radix_sort import (
-    stable_radix_bsum_len, stable_radix_counts_len, stable_radix_sort_pairs_u32,
-)
 from gbdt.gpu_util.copy import COPY_BLOCK, copy_u32_kernel
 from gbdt.gpu_util.kernel.reorder_one_bit import (
     REORDER_BLOCK,
@@ -290,75 +285,13 @@ def launch_radix_sort_bins(
         )
 
 
-#: EXPERIMENT `-D MOJOLEARN_GBDT_FAST_RADIX8`, default off (lane fx-dup-next,
-#: 2026-11-19; A/B owed: gbdt-radix8-rows, gbdt-radix8-sizes). The sorts of
-#: the low `bits` bits of a key (CTR bins by category code, the leaf
-#: partition by leaf id) run `core/stable_radix_sort` (eight-bit digits: 2
-#: passes of 5 launches up to 16 bits, 4 passes above) instead of one pass of
-#: 4 launches per bit. Same pairs in the same order: both are stable LSD
-#: sorts and every key at these sites is below `2^bits`, so the digits above
-#: `bits` are zero and their passes are the identity. Not decided on
-#: reasoning: at 1 or 2 bits the one-bit sort is fewer launches (4, 8
-#: against 10), from 3 bits it is more (12 to 64 against 10 or 20), and a
-#: launch of the eight-bit count costs more than a one-bit scan.
-comptime GBDT_FAST_RADIX8 = is_defined["MOJOLEARN_GBDT_FAST_RADIX8"]()
-
-
-def radix_low_offsets_len(size: Int) -> Int:
-    """int32 slots the `offsets` scratch of `launch_radix_sort_low_bins`
-    holds for `size` elements."""
-    comptime if GBDT_FAST_RADIX8:
-        var c = stable_radix_counts_len(size)
-        return c if c > size else size
-    else:
-        return size
-
-
-def radix_low_block_sums_len(size: Int) -> Int:
-    """int32 slots the `block_sums` scratch of `launch_radix_sort_low_bins`
-    holds for `size` elements."""
-    var blocks = (size + REORDER_BLOCK - 1) // REORDER_BLOCK
-    comptime if GBDT_FAST_RADIX8:
-        var b = stable_radix_bsum_len(size)
-        return b if b > blocks else blocks
-    else:
-        return blocks
-
-
-def launch_radix_sort_low_bins(
-    ctx: DeviceContext,
-    size: Int,
-    bits: Int,
-    mut keys: DeviceBuffer[DType.uint32],
-    mut values: DeviceBuffer[DType.uint32],
-    mut temp_keys: DeviceBuffer[DType.uint32],
-    mut temp_values: DeviceBuffer[DType.uint32],
-    mut offsets: DeviceBuffer[DType.int32],
-    mut block_sums: DeviceBuffer[DType.int32],
-) raises:
-    """`launch_radix_sort_bins(ctx, size, 0, bits, ...)` for keys that are
-    ALL below `2^bits` (the caller's guarantee). `offsets` and `block_sums`
-    hold `radix_low_offsets_len(size)` and `radix_low_block_sums_len(size)`
-    slots. Enqueued only; `keys` and `values` hold the answer."""
-    comptime if GBDT_FAST_RADIX8:
-        if size <= 0 or bits <= 0:
-            return
-        if bits > 32:
-            raise Error(
-                String("radix sort bit range out of a ui32: [0, ")
-                + String(bits) + ")"
-            )
-        stable_radix_sort_pairs_u32(
-            ctx, size, bits, keys, values, temp_keys, temp_values,
-            offsets, block_sums,
-        )
-    else:
-        launch_radix_sort_bins(
-            ctx, size, 0, bits, keys, values, temp_keys, temp_values,
-            offsets, block_sums,
-        )
-
-
+# TOMBSTONE: MOJOLEARN_GBDT_FAST_RADIX8 (launch_radix_sort_low_bins, radix_low_offsets_len, radix_low_block_sums_len:
+# the low-bit sorts, CTR bins by category code and the leaf partition by leaf id, on core/stable_radix_sort's
+# eight-bit digits; NOISE, A/B round 2 NVIDIA L40S, wheel 0c68d6cd27, job nvc-ab-20261119T154232Z-0642a5, digests and
+# quality equal on 30 cells: fit lossguide 0.975 / 0.965, ordered 0.99 / 1.00, depthwise 1.00 / 1.01, multiclass
+# 1.02 / 1.01, symmetric 1.03 / 1.02; its rule needed every row at least as fast) deleted 2026-11-19 by
+# lane/fx-verdicts4; code recoverable at 8f3f639b13.
+# Restore: git apply experiments/removed/MOJOLEARN_GBDT_FAST_RADIX8.patch; record in docs/TOMBSTONES.md.
 def float_sort_key_kernel(
     keys: MutPointer[UInt32, MutAnyOrigin], n_in: Int32, forward: Int32
 ):

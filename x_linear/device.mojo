@@ -101,8 +101,7 @@ from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from checks.kernel_matrix import TARGET_COLUMN, lib_smem_page_fits_for
-from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
-from core.host_bytes_equal import host_bytes_equal
+from core.shared_slot import SharedSlot
 from core.resident_upload_count import RUC_ISOTONIC, RUC_X_LINEAR, resident_upload_note
 
 
@@ -6158,66 +6157,18 @@ def decision_codes_kernel(s: FP, n: Int32, k: Int32, strict: Int32, below: Int32
         codes.unsafe_store(i, decision_code_row(s, i, Int(k), Int(strict), Int(below), Int(above)))
 
 
-#: lane fx-missing-checks (2026-11-19), EXPERIMENT ARM, default OFF, A/B owed
-#: (docs/apple-fast/EXPERIMENTS.md; owed row xlinear-wb-resident):
-#: `-D MOJOLEARN_XLINEAR_FAST_WB_RESIDENT`. Every decision entry (predict,
-#: decision_function, predict_proba of the linear models) uploads the fitted
-#: weight block [coef | intercept] on every call, beside the queries: a second
-#: host-to-device copy per predict whose words did not change since the last
-#: call. Under the arm the last block stays on the device with a host copy of
-#: its words; a call whose block has the same length and the same bits takes
-#: the resident buffer (one compare of k (d + 1) words, no upload, no
-#: allocation). Any other block uploads once and replaces it. The same words
-#: reach `decision_kernel`: no bit moves. Decided by timing because the hit
-#: costs a lock and a compare per call where the default pays the copy.
-comptime XL_FAST_WB_RESIDENT = is_defined["MOJOLEARN_XLINEAR_FAST_WB_RESIDENT"]()
-
-
-struct _WbResident(Defaultable, Movable):
-    """The arm's one resident weight block: the device buffer, the words it
-    holds (for the hit test) and the slot's lock word."""
-    var words: List[Float32]
-    var buf: Optional[DeviceBuffer[DType.float32]]
-    var lock: List[Int64]
-
-    def __init__(out self):
-        self.words = List[Float32]()
-        self.buf = Optional[DeviceBuffer[DType.float32]]()
-        self.lock = List[Int64](length=1, fill=0)
-
-
-comptime _WB_NAME = "MojolearnXLinearWbResidentIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXLinearWbResidentFastV1"
-# Referenced only under the arm's comptime branch: a default build never creates the slot.
-comptime X_LINEAR_WB_RESIDENT = SharedSlot[_WbResident, _WB_NAME]
-
-
+# TOMBSTONE: MOJOLEARN_XLINEAR_FAST_WB_RESIDENT (its constant, the resident slot and struct, and the resident branch of
+# _decision_wb: the fitted weight block of the last decision call kept on the device with a host copy of its words, a
+# call with the same bits taking it after one compare; NOISE, A/B round 2 NVIDIA L40S, wheel 0c68d6cd27, job
+# nvc-ab-20261119T154232Z-0642a5, digests and quality equal on 28 cells: of the 18 pairs whose two cells ran on one
+# NUMA node, fits 0.98-1.01 and predicts 0.94-1.20 with three slower, huber istella 5.68 -> 6.79 ms, sgd-clf taxi
+# 1.09 -> 1.24, bayesian-ridge taxi 0.755 -> 0.788, medians of 20) deleted 2026-11-19 by lane/fx-verdicts4; code
+# recoverable at 8f3f639b13.
+# Restore: git apply experiments/removed/MOJOLEARN_XLINEAR_FAST_WB_RESIDENT.patch; record in docs/TOMBSTONES.md.
 def _decision_wb(ctx: DeviceContext, wb: FP, count: Int) raises -> DeviceBuffer[DType.float32]:
-    """The weight block `wb[0:count]` on the device for one decision entry.
-    Default: a new buffer and one queued copy that reads `wb` until the
-    entry's wait, as each entry did inline. Under XL_FAST_WB_RESIDENT: the
-    resident buffer when it holds these bits; else one upload, drained here
-    (the kept buffer must hold the words before `wb` can be freed by a
-    caller whose entry raises before its wait), which replaces it. Call
-    site: once per decision entry, no loop reaches it."""
-    comptime if XL_FAST_WB_RESIDENT:
-        var slot = X_LINEAR_WB_RESIDENT.get_or_create_ptr()
-        var lock = slot[].lock.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
-        shared_slot_lock(lock)
-        try:
-            if (slot[].buf and len(slot[].words) == count
-                    and host_bytes_equal(Int(slot[].words.unsafe_ptr()), Int(wb), 4 * count)):
-                return slot[].buf.value().copy()
-            var fresh = ctx.enqueue_create_buffer[DType.float32](count)
-            ctx.enqueue_copy(dst_buf=fresh, src_ptr=wb)
-            ctx.synchronize()
-            resident_upload_note(RUC_X_LINEAR, count)  # check-only count (compiles to nothing by default)
-            var words = List[Float32](length=count, fill=Float32(0))
-            copy_f32(wb, words.unsafe_ptr(), count)
-            slot[].words = words^
-            slot[].buf = fresh.copy()
-            return fresh^
-        finally:
-            shared_slot_unlock(lock)
+    """The weight block `wb[0:count]` on the device for one decision entry:
+    a new buffer and one queued copy that reads `wb` until the entry's wait.
+    Call site: once per decision entry, no loop reaches it."""
     var dwb = ctx.enqueue_create_buffer[DType.float32](count)
     ctx.enqueue_copy(dst_buf=dwb, src_ptr=wb)
     resident_upload_note(RUC_X_LINEAR, count)  # check-only count (compiles to nothing by default)

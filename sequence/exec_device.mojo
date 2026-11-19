@@ -277,6 +277,14 @@ comptime SEQ_MOE_TILED = not is_defined["MOJOLEARN_SEQ_MOE_TILED_OFF"]()
 #: keeps the one-thread ops (the A/B arm)
 comptime SEQ_VAR_BLOCK = not is_defined["MOJOLEARN_SEQ_VAR_BLOCK_OFF"]()
 #: the executor's device buffer pool; `-D MOJOLEARN_SEQ_POOL_OFF` allocates fresh
+# A/B round 2, 2026-11-19 (lane fx-verdicts4; NVIDIA L40S host bd9c355c19c0, wheel 0c68d6cd27 and its B set, base and
+# arm in one pod job, tag nvc-ab-20261119T154232Z-0642a5; digests and quality equal). Pool (default) -> no pool, ms:
+# sequential-fit 279.9 -> 274.5 (0.98), sequential-predict 2.893 -> 2.751 (0.95, medians of 20; no NUMA record and no
+# second base of either row in the job). NOT DECIDED: on these two rows fresh buffers are at least as fast, but they
+# hold small buffers; the pool was built for calls with 64 MB stages (the note at "the buffer pool" below: a pinned
+# allocation of that size costs tens of ms on CUDA, the layernorm cell 99.7 ms against a 1 ms kernel) and no such row
+# was in the pair. Neither side is deleted on two small-buffer cells: the switch stays, owed RUN on the layer rows
+# with large inputs beside these two (owed-pre0867.json seq-pool-off-envgate).
 comptime SEQ_POOL = not is_defined["MOJOLEARN_SEQ_POOL_OFF"]()
 
 

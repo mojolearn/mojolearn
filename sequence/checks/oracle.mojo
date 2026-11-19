@@ -69,10 +69,11 @@ from checks.fixture_rng import splitmix64_next
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from std.sys.compile import is_defined
 
-#: MOJOLEARN_SEQ_FAST_RNN_STEP_GEMM (autograd/rules_recurrent.mojo RNN_STEP_GEMM, lane fx-rnn-cnn-fit 2026-11-19):
-#: under the define the recurrent weight gradients fold in the sequence GEMM's order, restated below.
-comptime _O_RNN_STEP_GEMM = (
-    is_defined["MOJOLEARN_SEQ_FAST_RNN_STEP_GEMM"]() and GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+#: MOJOLEARN_SEQ_FAST_RNN_BPTT_GEMM (autograd/rules_recurrent.mojo RNN_BPTT_GEMM; lane fx-rnn-cnn-fit 2026-11-19,
+#: narrowed by lane fx-verdicts4): under the define a recurrent weight gradient the sequence GEMM's rule does not
+#: split is one fold, restated below; a split shape keeps the default's blocks.
+comptime _O_RNN_BPTT_GEMM = (
+    is_defined["MOJOLEARN_SEQ_FAST_RNN_BPTT_GEMM"]() and GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 )
 
 
@@ -236,15 +237,18 @@ def _o_bptt_block(M: Int, N: Int, K: Int) -> Int:
     """Rows per block of the M x N weight gradient over K = T B rows (K:
     one fold). Default: `_o_wgrad_block(K)` above 512 rows; at or below it
     the trainer launches the sequence GEMM, whose own rule splits some
-    shapes. Under MOJOLEARN_SEQ_FAST_RNN_STEP_GEMM the sequence GEMM's rule
-    at every K: blocks of `_o_split_block(K)` for a split shape, else one
-    fold. Either way: each block folded from +0.0, k ascending; the
+    shapes. Under MOJOLEARN_SEQ_FAST_RNN_BPTT_GEMM a shape the sequence
+    GEMM's rule does not split is one fold at every K; a split shape is the
+    default's. Either way: each block folded from +0.0, k ascending; the
     partials added ascending from +0.0."""
-    var kb = _o_split_block(K) if _o_split_shape(M, N, K) else K
-    comptime if not _O_RNN_STEP_GEMM:
-        var blocked = _o_wgrad_block(K)
-        if blocked < K:
-            kb = blocked
+    var split = _o_split_shape(M, N, K)
+    comptime if _O_RNN_BPTT_GEMM:
+        if not split:
+            return K
+    var kb = _o_split_block(K) if split else K
+    var blocked = _o_wgrad_block(K)
+    if blocked < K:
+        kb = blocked
     return kb
 
 

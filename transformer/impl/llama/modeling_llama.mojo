@@ -1718,17 +1718,28 @@ struct LlamaKVCache(Movable):
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_SOFTMAX-arm2.patch
 
 
-comptime LLAMA_FAST_STAGE_KEEP = is_defined["MOJOLEARN_LLAMA_FAST_STAGE_KEEP"]()
-"""lane/fx-transformer-forward (2026-11-19), EXPERIMENT ARM, default OFF
-(docs/apple-fast/EXPERIMENTS.md; A/B owed on transformer-forward and
-samba-forward, bench/results/paper_compare/owed-pre0867.json row
-llama-stage-keep). A forward-only attention step run of L > 1 tokens on kept
-stages of the same shape (`AttnPrefill.prepare(..., keep_bytes=True)`: the
-stateless `TransformerBlock.forward`, a forward with the caller's caches, an
-inference-only stack layer) restores the stages' host flags
+# MOJOLEARN_LLAMA_FAST_STAGE_KEEP: PROMOTED 2026-11-19 (lane fx-verdicts4) for the stateless block forward, DELETED for
+# the stack-layer run. `-D MOJOLEARN_LLAMA_FAST_STAGE_KEEP_OFF` restores the reset before every stateless forward (the
+# old opt-in name is refused, core/experiment_guards_neural.mojo). Evidence: A/B round 2, NVIDIA L40S (host
+# bd9c355c19c0), wheel 0c68d6cd27 and its B set, base and arm in ONE pod job (nvc1-0008, tag
+# nvc-ab-20261119T154232Z-0642a5), small rows the median of 20 calls; every output digest equal (9 cells).
+# The stateless forward (`attn_step_fresh_prefill`), base -> arm ms: transformer-forward 2.869 -> 2.734 (0.953; the
+# row's other base in the job 2.883); driver TransformerBlock.forward, median of 20: 1 x 4096 d384 6.007 -> 5.805
+# (0.97), 1 x 2048 d512 4.052 -> 3.506 (0.87), non-board 3 x 700 d320 2.390 -> 2.199 (0.92), 4 x 128 d384 1.570 ->
+# 1.398 (0.89). Five of five faster, no shape or dataset in the rule (a forward-only run on kept stages of its shape).
+# The stack-layer run (`_run_attn_on` with forward_only, the arm's second site): samba-forward 4.609 -> 4.751 (1.031;
+# the row's three bases in the job 4.609-4.635, min of 20 4.583 -> 4.706): slower, so that site passes no keep and
+# resets as before (TOMBSTONE in autograd/block_step_ops.mojo). Controls: lm-forward 0.98, lm-train-step 1.01,
+# transformer-decode 1.03 (L = 1 steps and trained stages are never reset in either arm).
+# Limits: NVIDIA only (AGENTS.md part 8). OWED (does not hold the flip): the _OFF arm on the same rows.
+comptime LLAMA_FAST_STAGE_KEEP = not is_defined["MOJOLEARN_LLAMA_FAST_STAGE_KEEP_OFF"]()
+"""A forward-only attention step run of L > 1 tokens on kept stages of the
+same shape that passes `AttnPrefill.prepare(..., keep_bytes=True)` (the
+stateless `TransformerBlock.forward`) restores the stages' host flags
 (`LlamaDeviceStages.reset_flags`) and does NOT zero-fill the stage buffers
-again, where the default runs `LlamaDeviceStages.reset`: thirty zero fills
-and a wait before every call.
+again, where `LlamaDeviceStages.reset` (every other reused run, and every
+run under `-D MOJOLEARN_LLAMA_FAST_STAGE_KEEP_OFF`) is thirty zero fills
+and a wait before the call.
 
 WHY THE OUTPUT IS THE SAME. A forward writes each stage it reads, whole,
 before reading it: the stages are built for exactly this call's (B, L)
@@ -2067,7 +2078,7 @@ struct LlamaDeviceStages(Movable):
         ctx.synchronize()
 
     def reset_flags(mut self) raises:
-        """MOJOLEARN_LLAMA_FAST_STAGE_KEEP: the host half of `reset`, every
+        """LLAMA_FAST_STAGE_KEEP (the default): the host half of `reset`, every
         route flag and per-call record back to the constructor's value, with
         no fill and no wait. For a forward-only run on kept stages of the
         same shape, which writes each stage whole before reading it

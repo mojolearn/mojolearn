@@ -191,7 +191,7 @@
    "define": "MOJOLEARN_IDN_MAMBA_BACKWARD_GENERIC",
    "status": "define in code (autograd/rules_mamba.mojo IDN_MAMBA_BACKWARD_GENERIC): B = the tape graph (mamba{1,2}_step_backward_tape, _m{1,2}_record_backward) as the block step op's Mamba-1/2 VJP (main 5005c07e74's shape); A = the restored 10-19 hand chain (mamba{1,2}_step_backward_hand, deleted by 47582a7fb) over the same kept stages. Same kernels in the same order: same bits",
    "owed": "RUN",
-   "evidence": "ab3 2026-11-18 staged and installed it but NOT RUN: its only row (restore-mamba-backward-glue) is a driver row and the targeted job (PC_PARTS=targeted) ended at tg-compare, before any drivers phase (tools/ops/paper_compare_job.sh); fixed by the tg-drivers phase (lane fx-verdicts2). Still owed"
+   "evidence": "A/B round 2 2026-11-19, NVIDIA L40S host bd9c355c19c0, wheel 0c68d6cd27 and its B set, base and arm in one pod job (nvc1-0008, tag nvc-ab-20261119T154232Z-0642a5; ~/mojolearn-evidence/measure-candidate/build-0c68d6cd27/ab2/x/, tables ~/mojolearn-evidence/briefs-20261118/fx-verdicts4/tab-<arm>.txt, driver rows x/logs/drivers.log), one scored run per arm, small rows the median of 20 calls. No board in the archive because the arm's only row (restore-mamba-backward-glue) is a driver row; the tg-drivers phase ran it: driver restore-mamba-backward-glue, 4 x 512 d256, one call an arm: Mamba1Block.backward hand 10.999 -> tape 10.463 ms (0.95), Mamba2Block.backward 14.935 -> 14.763 (0.99). NOT DECIDED: one timed call an arm with no spread, and the n = 20 record on file (mamba_tape_backward_time) reads the other way (1.05, 1.01). Still RUN: the mamba_backward driver now times the median of 20 calls (lane fx-verdicts4); the next job decides by the row's rule."
   },
   "gbdt-prebinned-infer-old": {
    "define": "MOJOLEARN_IDN_GBDT_PREBINNED_INFER_OLD",
@@ -387,7 +387,8 @@
   "seq-pool-off": {
    "define": "MOJOLEARN_SEQ_POOL_OFF",
    "status": "define in code (sequence/exec_device.mojo SEQ_POOL (seq_pool_on)): B = fresh buffers per executor (the former =0); A = the sequence executor's device buffer pool (the former default). A transport/route choice: digests must not move.",
-   "owed": "RUN"
+   "owed": "RUN",
+   "evidence": "A/B round 2 2026-11-19, NVIDIA L40S host bd9c355c19c0, wheel 0c68d6cd27 and its B set, base and arm in one pod job (nvc1-0008, tag nvc-ab-20261119T154232Z-0642a5; ~/mojolearn-evidence/measure-candidate/build-0c68d6cd27/ab2/x/, tables ~/mojolearn-evidence/briefs-20261118/fx-verdicts4/tab-<arm>.txt, driver rows x/logs/drivers.log), one scored run per arm, small rows the median of 20 calls: pool (default) -> no pool: sequential-fit 279.9 -> 274.5 ms (0.98), sequential-predict 2.893 -> 2.751 (0.95, medians of 20); digests and quality equal; no NUMA record, no second base of either row in the job. NOT DECIDED: fresh buffers are at least as fast on these two small-buffer rows, but the pool was built for calls with 64 MB stages (sequence/exec_device.mojo, the buffer pool note: a pinned allocation of that size costs tens of ms on CUDA) and no such row was in the pair; neither side is deleted on two cells. Stays RUN: time the off arm on layer rows with large inputs beside these two."
   },
   "clip-packed": {
    "define": "MOJOLEARN_CLIP_PACKED",
@@ -674,24 +675,27 @@
   },
   "samba-step-scratch-held": {
    "define": "MOJOLEARN_SAMBA_FAST_STEP_SCRATCH_HELD",
-   "status": "define in code (autograd/rules_mamba3.mojo M3_SCRATCH_HELD, read by training/samba_resident.mojo SAMBA_STEP_SCRATCH_HELD; IDENTICAL, no poison build): B = the Samba resident session holds, per Mamba-3 layer, one arena for the backward (4 node gradients + 82 scratch buffers + 2 suffix sums as views; ONE zero fill a step, no allocation, no free, no per-block wait) and one arena for the forward state and 33 stages (ONE fill a call instead of 43); A = the default: 88 create + 88 fill + 88 free and one wait per Mamba-3 block backward, 43 fills per Mamba-3 block forward. Same kernels, operands, order and zeros: digests must not move",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-19 (lane fx-verdicts4): NOISE; the define is refused (core/experiment_guards_neural.mojo); code recoverable at 8f3f639b13, experiments/removed/MOJOLEARN_SAMBA_FAST_STEP_SCRATCH_HELD.patch.",
+   "owed": "DECIDED",
+   "evidence": "A/B round 2 2026-11-19, NVIDIA L40S host bd9c355c19c0, wheel 0c68d6cd27 and its B set, base and arm in one pod job (nvc1-0008, tag nvc-ab-20261119T154232Z-0642a5; ~/mojolearn-evidence/measure-candidate/build-0c68d6cd27/ab2/x/, tables ~/mojolearn-evidence/briefs-20261118/fx-verdicts4/tab-<arm>.txt, driver rows x/logs/drivers.log), one scored run per arm, small rows the median of 20 calls: samba-train-step 48.73 -> 48.57 ms (1.00), lm-train-step 36.52 -> 36.45 (1.00), samba-forward 4.611 -> 4.705 (1.02, median of 20); driver SambaStack.train_step 41.60 -> 42.69 (1.03), 56.33 -> 56.24 (1.00), 22.38 -> 20.96 (0.94); digests and quality equal. NOISE: deleted."
   },
   "samba-step-registry-resident": {
    "define": "MOJOLEARN_SAMBA_FAST_STEP_REGISTRY_RESIDENT",
    "status": "define in code (core/weight_epoch.mojo SAMBA_STEP_REGISTRY_RESIDENT, read by training/samba_resident.mojo _step_registry_in / _step_registry_out and providers/python/samba_resident_pyapi_door.mojo: BOTH must be built with it, i.e. the whole wheel set): B = a Samba resident train step uploads and scans the registry only when the session's weight key is not current, scans the weights it wrote at its own closing wait, stamps the registry itself and keeps the key (the next step and the next forward skip the ~22 MB upload and the scan's wait); A = the default: registry host -> device and one scan with its own wait every step, the door stamps after the step. Same bytes in param, same kernels: digests must not move; read the stack's _samba_resident_uploads to prove which arm ran (B: it stops growing after the first step)",
-   "owed": "RUN"
+   "owed": "RUN",
+   "evidence": "A/B round 2 2026-11-19, NVIDIA L40S host bd9c355c19c0, wheel 0c68d6cd27 and its B set, base and arm in one pod job (nvc1-0008, tag nvc-ab-20261119T154232Z-0642a5; ~/mojolearn-evidence/measure-candidate/build-0c68d6cd27/ab2/x/, tables ~/mojolearn-evidence/briefs-20261118/fx-verdicts4/tab-<arm>.txt, driver rows x/logs/drivers.log), one scored run per arm, small rows the median of 20 calls: samba-train-step 49.61 -> 47.24 ms (0.952; the row's other base in the job 48.73), lm-train-step 1.00 (control), samba-forward 0.99; driver SambaStack.train_step 41.60 -> 40.74 (0.98), 56.33 -> 55.52 (0.99), 2 x 192 d128 m/m 22.38 -> 28.14 (1.26, one call); first forward after a step 6.29 -> 5.04 (0.80), 6.30 -> 5.26 (0.84), 2.55 -> 2.46 (0.96); digests and quality equal. NOT DECIDED: the board row is the predicted size, but the row's rule lets one slower driver case block the promotion and the 2 x 192 d128 m/m case was 1.26 on one call with no spread (the same case on the scratch-held wheel in the job: 20.96 ms). Stays RUN: re-time fx-samba-step-shapes with the median of 20 steps a case, then promote or delete."
   },
   "gemm-loadahead-2": {
    "define": "MOJOLEARN_GEMM_FAST_LOADAHEAD",
-   "status": "define in code (gemm/checks/gemm_identical.mojo GEMM_KPACK_LOADAHEAD, read by identical_gemm_kpack_kernel's accumulate; IDENTICAL, every vendor column compiles the same loop): B = the admitted and the exact window of the packed GEMM kernel read the operands of 2 consecutive steps with one shared load per operand, then run their FMAs, steps ascending per cell; A = the default: the two loads of each step issued immediately before its FMAs. Same words, same step function, same per-cell order: digests must not move. Build every binding that imports gemm/checks/gemm_identical.mojo with the define. Report ptxas registers and spill bytes of the kpack kernel for A and B",
+   "status": "DELETED 2026-11-19 (lane fx-verdicts4) with depth 4: NOISE at depth 2, LOSS at depth 4; both defines are refused (core/experiment_guards_neural.mojo); code recoverable at 8f3f639b13, experiments/removed/MOJOLEARN_GEMM_FAST_LOADAHEAD.patch.",
    "owed": "DECIDED",
    "evidence": "A/B round 1 2026-11-19, NVIDIA L40S host bd9c355c19c0 (14-core cgroup), wheel 0c68d6cd27 and its B set, base and arm back to back in one pod job (nvc1-0006, tag nvc-ab-20261119T125554Z-6f7afc; ~/mojolearn-evidence/measure-candidate/build-0c68d6cd27/ab1/x/, tables ~/mojolearn-evidence/briefs-20261118/fx-verdicts3/tab-<arm>.txt), one scored run per arm: digests equal; arm/base gemm 4096^3 0.97, lm-train-step 1.00, lm-forward 1.06: NOISE at depth 2, not promoted; the code is shared with gemm-loadahead-4 (not timed), which decides promote-at-4 or delete-whole (lane fx-verdicts3)"
   },
   "gemm-loadahead-4": {
    "define": "MOJOLEARN_GEMM_FAST_LOADAHEAD,MOJOLEARN_GEMM_FAST_LOADAHEAD_STEPS=4",
-   "status": "define in code (gemm/checks/gemm_identical.mojo GEMM_KPACK_LOADAHEAD, read by identical_gemm_kpack_kernel's accumulate; IDENTICAL, every vendor column compiles the same loop): B = the admitted and the exact window of the packed GEMM kernel read the operands of 4 consecutive steps with one shared load per operand, then run their FMAs, steps ascending per cell; A = the default: the two loads of each step issued immediately before its FMAs. Same words, same step function, same per-cell order: digests must not move. Build every binding that imports gemm/checks/gemm_identical.mojo with the define. Report ptxas registers and spill bytes of the kpack kernel for A and B",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-19 (lane fx-verdicts4): LOSS at depth 4 (depth 2 was NOISE); both defines are refused (core/experiment_guards_neural.mojo); code recoverable at 8f3f639b13, experiments/removed/MOJOLEARN_GEMM_FAST_LOADAHEAD.patch.",
+   "owed": "DECIDED",
+   "evidence": "A/B round 2 2026-11-19, NVIDIA L40S host bd9c355c19c0, wheel 0c68d6cd27 and its B set, base and arm in one pod job (nvc1-0008, tag nvc-ab-20261119T154232Z-0642a5; ~/mojolearn-evidence/measure-candidate/build-0c68d6cd27/ab2/x/, tables ~/mojolearn-evidence/briefs-20261118/fx-verdicts4/tab-<arm>.txt), one scored run per arm: depth 4: gemm 4096^3 62.30 -> 62.24 ms (1.00), lm-train-step 36.70 -> 37.66 (1.03), lm-forward 21.35 -> 29.85 (1.40; the row's three bases in the job 21.35-21.96), matmul 512 x 4096 x 4096 8.18 -> 9.69 (1.18), 3000 x 700 x 900 2.86 -> 3.46 (1.21); digests and quality equal. LOSS: deleted with depth 2."
   },
   "gemm-leaf512": {
    "define": "MOJOLEARN_GEMM_FAST_LEAF512",
@@ -723,13 +727,15 @@
   },
   "llama-stage-keep": {
    "define": "MOJOLEARN_LLAMA_FAST_STAGE_KEEP",
-   "status": "define in code (transformer/impl/llama/modeling_llama.mojo LLAMA_FAST_STAGE_KEEP, LlamaDeviceStages.reset_flags; autograd/block_step_ops.mojo AttnPrefill.prepare keep_bytes, attn_step_fresh_prefill, _run_attn_on): B = a forward-only attention step run of L > 1 tokens on kept stages of the same shape (the stateless TransformerBlock.forward, a forward with the caller's caches, an inference-only stack layer) restores the stages' host flags and does not zero-fill the stage buffers again; A = the default, LlamaDeviceStages.reset before every such call (thirty zero fills and a wait; on NVIDIA the fills include the kept exp stash, B x n_heads x L x S floats). A run a backward may read, the CausalLM layer run and every L = 1 step are A in both arms. No float is produced differently",
-   "owed": "RUN"
+   "status": "PROMOTED 2026-11-19 (lane fx-verdicts4) for the stateless block forward (transformer/impl/llama/modeling_llama.mojo LLAMA_FAST_STAGE_KEEP = not MOJOLEARN_LLAMA_FAST_STAGE_KEEP_OFF; the old name is refused); its stack-layer use (autograd/block_step_ops.mojo _run_attn_on) DELETED, experiments/removed/MOJOLEARN_LLAMA_FAST_STAGE_KEEP-stack-layer.patch.",
+   "owed": "DECIDED",
+   "evidence": "A/B round 2 2026-11-19, NVIDIA L40S host bd9c355c19c0, wheel 0c68d6cd27 and its B set, base and arm in one pod job (nvc1-0008, tag nvc-ab-20261119T154232Z-0642a5; ~/mojolearn-evidence/measure-candidate/build-0c68d6cd27/ab2/x/, tables ~/mojolearn-evidence/briefs-20261118/fx-verdicts4/tab-<arm>.txt, driver rows x/logs/drivers.log), one scored run per arm, small rows the median of 20 calls: transformer-forward 2.869 -> 2.734 ms (0.953, median of 20; the row's other base 2.883); driver TransformerBlock.forward median of 20: 1 x 4096 d384 6.007 -> 5.805 (0.97), 1 x 2048 d512 4.052 -> 3.506 (0.87), non-board 3 x 700 d320 2.390 -> 2.199 (0.92), 4 x 128 d384 1.570 -> 1.398 (0.89); samba-forward 4.609 -> 4.751 (1.031; the row's three bases 4.609-4.635); controls lm-forward 21.42 -> 21.02 (0.98), lm-train-step 1.01, transformer-decode 1123.2 -> 1153.5 (1.03); every digest equal. Split by call site: the stateless forward WIN (promoted), the stack-layer run LOSS (deleted)."
   },
   "byte-lm-logits-hugepage": {
    "define": "MOJOLEARN_BYTE_LM_FAST_LOGITS_HUGEPAGE",
-   "status": "define in code (bindings/byte_lm_trainer_native_door.mojo BYTE_LM_LOGITS_HUGEPAGE, _pooled_logits; bindings/native_array_storage_door.mojo native_scratch_advise_huge): B = a FRESH resident logits store (a pool miss) is advised for transparent huge pages (Linux madvise MADV_HUGEPAGE over the whole 2 MiB pages inside it) before the one download first-touches it; A = the default, the unfilled store on small pages (one page fault per 4 KiB of logits). A pooled store is untouched in both arms; nothing on Darwin; transport only, no output byte moves",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-19 (lane fx-verdicts4): LOSS; the define is refused (core/experiment_guards_neural.mojo); code recoverable at 8f3f639b13, experiments/removed/MOJOLEARN_BYTE_LM_FAST_LOGITS_HUGEPAGE.patch.",
+   "owed": "DECIDED",
+   "evidence": "A/B round 2 2026-11-19, NVIDIA L40S host bd9c355c19c0, wheel 0c68d6cd27 and its B set, base and arm in one pod job (nvc1-0008, tag nvc-ab-20261119T154232Z-0642a5; ~/mojolearn-evidence/measure-candidate/build-0c68d6cd27/ab2/x/, tables ~/mojolearn-evidence/briefs-20261118/fx-verdicts4/tab-<arm>.txt), one scored run per arm: lm-forward 21.96 -> 25.73 ms (1.17; the row's three bases in the job 21.35-21.96), lm-train-step 36.52 -> 36.60 (1.00), transformer-forward 2.883 -> 2.868 (0.99, median of 20); fresh-store driver shapes 32 MiB 13.73 -> 14.31 (1.04), 64 MiB 28.23 -> 29.03 (1.03), 2.3 MiB 4.77 -> 4.44 (0.93); digests and quality equal. LOSS: deleted."
   },
   "xprep-arena-hugepage": {
    "define": "MOJOLEARN_XPREP_FAST_ARENA_HUGEPAGE",
@@ -738,28 +744,33 @@
   },
   "rnn-step-gemm": {
    "define": "MOJOLEARN_SEQ_FAST_RNN_STEP_GEMM",
-   "status": "define in code (autograd/rules_recurrent.mojo RNN_STEP_GEMM, rule rnn_step_gemm, _wgrad; oracle sequence/checks/oracle.mojo _o_bptt_block; IDENTICAL, every column, the host column runs the same launches): B = every recurrent product is one launch of the lane's own GEMM on the launch rule's route and fold: on the per-step chain (GRU, LSTM) the forward's hidden projection (OP_GEMM_EPI, b_hh epilogue) and the backward's dh += dGH W_hh (OP_GEMM accumulate), each followed by the elementwise cell (OP_CELL_FWD / OP_CELL_BWD), where the product holds at least 2^20 multiply-adds, split-K shapes included; and for every cell (rnn too) dW_hh and dW_ih as ONE OP_GEMM over the T B stacked rows instead of the two-launch blocked order. A = one fused one-thread launch a step and wgrad_blocked. BIT VERSION under the define: bits change at split-K shapes of the per-step products (the board's backward, K = G H = 256) and for the weight gradients when T B > 512; same bits elsewhere; the formula is beside the define. Device and host agree under the arm (the seams check's 5504_bptt_step_gemm cases). A and B digests therefore DIFFER on these lanes: compare quality, not digests. Build every binding that imports autograd/rules_recurrent.mojo (the sequence device and host bindings) and the seams check.",
-   "owed": "RUN"
+   "status": "SPLIT 2026-11-19 (lane fx-verdicts4): the forward step's GEMM launch PROMOTED (autograd/rules_recurrent.mojo RNN_STEP_GEMM = not MOJOLEARN_SEQ_FAST_RNN_STEP_GEMM_OFF, IDENTICAL, every column; the old name is refused); the weight-gradient GEMM at split-K shapes DELETED (experiments/removed/MOJOLEARN_SEQ_FAST_RNN_STEP_GEMM.patch); the backward step and the tile-routed weight gradients are the arm rnn-bptt-gemm.",
+   "owed": "DECIDED",
+   "evidence": "A/B round 2 2026-11-19, NVIDIA L40S host bd9c355c19c0, wheel 0c68d6cd27 and its B set, base and arm in one pod job (nvc1-0008, tag nvc-ab-20261119T154232Z-0642a5; ~/mojolearn-evidence/measure-candidate/build-0c68d6cd27/ab2/x/, tables ~/mojolearn-evidence/briefs-20261118/fx-verdicts4/tab-<arm>.txt, driver rows x/logs/drivers.log), one scored run per arm, small rows the median of 20 calls: 27 cells; quality equal to 1e-8 on every cell (the arm is a bit version). Same-NUMA-node pairs (14; the gru-clf synthetic and all rnn pairs ran on different nodes and are not used): PREDICT gru-clf taxi 38.98 -> 14.81 ms (0.38), gru-reg 19.53 -> 6.89, 19.52 -> 6.83 (0.35), lstm-clf 50.97 -> 18.74, 50.69 -> 18.80 (0.37), lstm-reg 25.35 -> 9.10, 25.44 -> 9.14 (0.36); FIT gru-clf taxi 467.2 -> 1115.7 (2.39), gru-reg 463.7 -> 1111.1, 463.2 -> 1111.9 (2.40), lstm-clf 572.7 -> 1352.1, 572.4 -> 1351.5 (2.36), lstm-reg 566.7 -> 1340.4, 566.7 -> 1340.5 (2.37). No node record: gru-fit higgs 120.0 -> 384.6 (3.20), lstm-fit 146.1 -> 490.0 (3.35), rnn-fit 55.7 -> 154.3 (2.77). Different nodes: rnn fit 2.26-2.32, rnn predict 1.01-1.04. Driver fits (one call): lstm T 48 H 64 879 -> 2575 (2.93), rnn H 64 137 -> 318 (2.32), lstm H 128 1167 -> 720 (0.62), gru H 128 911 -> 594 (0.65), 2-layer gru H 96 on 12 features 1871 -> 1622 (0.87), lstm H 16 batch 64 254.5 -> 236.2 (0.93). Split by site."
   },
   "cnn-op-nowait": {
    "define": "MOJOLEARN_CNN_FAST_OP_NOWAIT",
    "status": "define in code (x_cnn/device.mojo CNN_OP_NOWAIT, entry_end; callers autograd/cnn_block_op.mojo pass may_defer): B = the CNN program's resident conv block and head entries (forward and backward) return after their last launch instead of ending in ctx.synchronize(), when every parameter block came from the cache; a full parameter-block cache waits before rewriting a victim; A = every entry waits (six waits a training step). Same launches in the same order on one in-order context: digests must not move. Build every binding that imports x_cnn/device.mojo or autograd/kernels/cnn.mojo (the x_cnn binding and the sequence device binding that runs the CNN program).",
-   "owed": "RUN"
+   "owed": "RUN",
+   "evidence": "A/B round 2 2026-11-19, NVIDIA L40S host bd9c355c19c0, wheel 0c68d6cd27 and its B set, base and arm in one pod job (nvc1-0008, tag nvc-ab-20261119T154232Z-0642a5; ~/mojolearn-evidence/measure-candidate/build-0c68d6cd27/ab2/x/, tables ~/mojolearn-evidence/briefs-20261118/fx-verdicts4/tab-<arm>.txt, driver rows x/logs/drivers.log), one scored run per arm, small rows the median of 20 calls: cnn-clf fit 208.9 -> 166.9 ms (0.80), infer 11.85 -> 11.96 (1.01); driver CNNClassifier.fit channels [16, 32] 365.4 -> 313.0 (0.86), [24] 240.4 -> 206.7 (0.86); digests and quality equal. Base on NUMA node 1, arm on node 0; the row's other base in the job (node 1) 187.1. NOT A VERDICT: the harness bound no worker to a NUMA node on this pod (fx-cagra-taxi-RESULT.md) and the board pair's two cells ran on different nodes. Every reading favours the arm and the size is the model's (six waits of a 0.56 ms step). Stays RUN: re-time with both workers bound to the GPU's node; promote on a same-node pair."
   },
   "cnn-flat-update": {
    "define": "MOJOLEARN_CNN_FAST_FLAT_UPDATE",
-   "status": "define in code (autograd/program_runtime.mojo PROGRAM_FLAT_UPDATE, replay_values_flat; caller sequence/cnn_classifier_program.mojo passes flat_update): B = Program.fit keeps the trained parameter tensors, their gradients and their moments in flat buffers for the fit and updates them with ONE optimizer launch a minibatch (Sequential's form, autograd/model.mojo model_fit_state); A = one OP_OPT launch per parameter tensor. Elementwise update with shared host scalars: digests must not move. Build every binding that imports autograd/program_runtime.mojo or sequence/cnn_classifier_program.mojo (the sequence device and host bindings).",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-19 (lane fx-verdicts4): NOISE; the define is refused (core/experiment_guards_neural.mojo); code recoverable at 8f3f639b13, experiments/removed/MOJOLEARN_CNN_FAST_FLAT_UPDATE.patch.",
+   "owed": "DECIDED",
+   "evidence": "A/B round 2 2026-11-19, NVIDIA L40S host bd9c355c19c0, wheel 0c68d6cd27 and its B set, base and arm in one pod job (nvc1-0008, tag nvc-ab-20261119T154232Z-0642a5; ~/mojolearn-evidence/measure-candidate/build-0c68d6cd27/ab2/x/, tables ~/mojolearn-evidence/briefs-20261118/fx-verdicts4/tab-<arm>.txt, driver rows x/logs/drivers.log), one scored run per arm, small rows the median of 20 calls: cnn-clf fit 187.1 -> 181.4 ms (0.97), infer 10.87 -> 10.31 (0.95; the arm does not reach predict), both cells on NUMA node 1; the row's other base in the job 208.9 (fit), 11.85 (infer); driver CNNClassifier.fit channels [16, 32] 353.0 -> 345.7 (0.98), [24] 234.1 -> 228.7 (0.98), where the two candidate runs of the same cases in the job are 3.5 % and 2.7 % apart; digests and quality equal. NOISE: deleted."
   },
   "gbdt-radix8": {
    "define": "MOJOLEARN_GBDT_FAST_RADIX8",
-   "status": "define in code (gbdt/gpu_util/kernel/radix_sort.mojo GBDT_FAST_RADIX8, launch_radix_sort_low_bins; callers gbdt/ctrs/ctr_bins_builder.mojo add_cat_feature_bins and add_cat_feature_bins_device, gbdt/ctrs/fast_prep.mojo build_bins, gbdt/methods/leaves_estimation/doc_parallel_leaves_estimator.mojo partition_device): B = the low-bit sorts (CTR bins by category code, leaf partition by leaf id) on core/stable_radix_sort (eight-bit digits, 2 passes of 5 launches up to 16 key bits, 4 above); A = the default, one pass of 4 launches per key bit. Same stable order by key (every key below 2^bits), integer work only: digests must not move",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-19 (lane fx-verdicts4): NOISE; the define is refused (core/experiment_guards_trees.mojo); code recoverable at 8f3f639b13, experiments/removed/MOJOLEARN_GBDT_FAST_RADIX8.patch.",
+   "owed": "DECIDED",
+   "evidence": "A/B round 2 2026-11-19, NVIDIA L40S host bd9c355c19c0, wheel 0c68d6cd27 and its B set, base and arm in one pod job (nvc1-0008, tag nvc-ab-20261119T154232Z-0642a5; ~/mojolearn-evidence/measure-candidate/build-0c68d6cd27/ab2/x/, tables ~/mojolearn-evidence/briefs-20261118/fx-verdicts4/tab-<arm>.txt, driver rows x/logs/drivers.log), one scored run per arm, small rows the median of 20 calls: fit, istella / taxi: lossguide 14089 -> 13735 ms (0.975) / 10245 -> 9891 (0.965), ordered 0.99 / 1.00, depthwise 1.00 / 1.01, multiclass 1.02 / 1.01, symmetric 9440 -> 9725 (1.03) / 1.02; 20 predict cells 0.98-1.07; digests and quality equal on 30 cells (no NUMA record on the trees cells). NOISE: deleted."
   },
   "xlinear-wb-resident": {
    "define": "MOJOLEARN_XLINEAR_FAST_WB_RESIDENT",
-   "status": "define in code (x_linear/device.mojo XL_FAST_WB_RESIDENT, _decision_wb; the four decision entries decision_device, decision_codes_device, decision_rows_device, decision_huber_out_device call it): B = the fitted weight block [coef | intercept] of the last decision call stays on the device with a host copy of its words; a call whose block has the same length and bits takes the resident buffer (one compare, no upload, no allocation), any other block uploads once (drained) and replaces it; A = the default, the block uploaded beside the queries on every predict / decision_function / predict_proba. Same words to decision_kernel: no bit moves. Default off; lane fx-missing-checks (2026-11-19)",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-19 (lane fx-verdicts4): NOISE; the define is refused (core/experiment_guards_linear.mojo); code recoverable at 8f3f639b13, experiments/removed/MOJOLEARN_XLINEAR_FAST_WB_RESIDENT.patch.",
+   "owed": "DECIDED",
+   "evidence": "A/B round 2 2026-11-19, NVIDIA L40S host bd9c355c19c0, wheel 0c68d6cd27 and its B set, base and arm in one pod job (nvc1-0008, tag nvc-ab-20261119T154232Z-0642a5; ~/mojolearn-evidence/measure-candidate/build-0c68d6cd27/ab2/x/, tables ~/mojolearn-evidence/briefs-20261118/fx-verdicts4/tab-<arm>.txt, driver rows x/logs/drivers.log), one scored run per arm, small rows the median of 20 calls: 28 cells, digests and quality equal; the 18 pairs whose two cells ran on one NUMA node: fits 0.98-1.01; predicts (medians of 20) huber istella 5.683 -> 6.792 ms (1.20), sgd-clf taxi 1.085 -> 1.239 (1.14), bayesian-ridge taxi 0.755 -> 0.788 (1.04), the other six 0.94-1.00; the 10 pairs on different nodes (lars, lasso-lars, sgd-clf istella) 0.93-1.07, not used. NOISE: deleted."
   },
   "fast-matrix-units-tf32": {
    "define": "MOJOLEARN_GEMM_FAST_MATRIX_UNITS=1 (with MOJOLEARN_MODE_FAST_ROWS)",
@@ -839,6 +850,21 @@
   "fast-fold-free": {
    "define": "MOJOLEARN_MODE_FAST_FOLD_FREE -D MOJOLEARN_MODE_FAST_TILE_FREE (with MOJOLEARN_MODE_FAST_ROWS)",
    "status": "defines in code (checks/mode_policy.mojo ROW_FOLD_FREE, ROW_TILE_FREE; core/pinned_reduce.mojo pinned_block_sum, checks/kernel_matrix.mojo lib_block_size_for): B takes the library fold at the hardware width and the column's own block size; A = the zero-row fast set",
+   "owed": "RUN"
+  },
+  "llama-stage-keep-off": {
+   "define": "MOJOLEARN_LLAMA_FAST_STAGE_KEEP_OFF",
+   "status": "define in code (transformer/impl/llama/modeling_llama.mojo LLAMA_FAST_STAGE_KEEP): B = LlamaDeviceStages.reset (thirty zero fills and a wait) before every stateless forward-only block run on kept stages (the default before 2026-11-19); A = the stage flags restored and the bytes kept, default since 2026-11-19 (lane fx-verdicts4). No float is produced differently on either arm. Owed to re-time the promotion (0.953 on the board row, 0.87-0.97 on four driver shapes) and to settle the deletion of the reset path for this caller",
+   "owed": "RUN"
+  },
+  "rnn-step-gemm-off": {
+   "define": "MOJOLEARN_SEQ_FAST_RNN_STEP_GEMM_OFF",
+   "status": "define in code (autograd/rules_recurrent.mojo RNN_STEP_GEMM, rule rnn_step_gemm): B = the fused per-step forward launch OP_CELL_FWD_H at every shape (the default before 2026-11-19); A = the forward step's hidden projection as its own OP_GEMM_EPI launch and then OP_CELL_FWD when the step is at least 2^20 multiply-adds, default since 2026-11-19 (lane fx-verdicts4). Bits differ between the arms only at split-K forward shapes (K = H > 64 with few cells or tiles); the board's hidden 64 is the same-bits class. Owed: the forward step was timed alone only in predict (0.35-0.39); inside a fit (batch 256) it was timed only together with the backward sites",
+   "owed": "RUN"
+  },
+  "rnn-bptt-gemm": {
+   "define": "MOJOLEARN_SEQ_FAST_RNN_BPTT_GEMM",
+   "status": "define in code (autograd/rules_recurrent.mojo RNN_BPTT_GEMM, rnn_bptt_gemm, _wgrad; oracle sequence/checks/oracle.mojo _o_bptt_block; IDENTICAL, every column, the host column runs the same launches): B = the backward step's dh += dGH W_hh as its own OP_GEMM launch (at least 2^20 multiply-adds a step) and dW_hh / dW_ih as one OP_GEMM over the T B stacked rows where the launch rule does not split the product; A = the default: the fused backward launch OP_CELL_BWD_H and the blocked order for both weight gradients. A bit version (split-K backward steps; non-split weight gradients over more than 512 rows). Narrowed 2026-11-19 from rnn-step-gemm, whose weight-gradient GEMM at split-K shapes made every hidden 64 fit 2.3-3.4x slower",
    "owed": "RUN"
   }
  },
@@ -2486,7 +2512,7 @@
    "b_arms": [
     "seq-pool-off"
    ],
-   "decides": "keep A (the sequence executor's device buffer pool (the former default)) unless B is at least as fast at equal quality; then B becomes the default with a _OFF define; digests must not move"
+   "decides": "keep A (the sequence executor's device buffer pool, the default) unless B (fresh buffers) is at least as fast at equal quality on these rows AND on layer rows whose stages are tens of MB (the pool's reason: pinned and device allocations per call); then B becomes the default with a _OFF define. Round 2 (2026-11-19): B 0.98 on sequential-fit and 0.95 on sequential-predict, small buffers only: not decided. B slower on the large-stage rows: delete the _OFF switch with the four tombstone parts, or bound the pool to large buffers if the small rows still favour fresh ones; digests must not move"
   },
   {
    "id": "clip-packed-envgate",
@@ -4144,11 +4170,9 @@
    },
    "arms": [
     "candidate",
-    "samba-step-scratch-held",
     "samba-step-registry-resident"
    ],
    "b_arms": [
-    "samba-step-scratch-held",
     "samba-step-registry-resident"
    ],
    "decides": "each B arm at least as fast as the candidate on SambaStack.train_step at every case (L = 300: a partial last chunk; a 6-layer stack; a small Mamba-3-only stack), and samba-step-registry-resident faster on the first forward after a step (no registry upload); a case that is slower blocks the promotion decided on the board rows"
@@ -4443,9 +4467,9 @@
    "rows": "full",
    "vendor": "nvidia",
    "b_arms": [
-    "llama-stage-keep"
+    "llama-stage-keep-off"
    ],
-   "decides": "keep A (the default: every stage zero-filled before the call) unless B is faster on transformer-forward on the NVIDIA L40S, base and arm back to back in one job, with every output digest and the host-reference check equal to A's (the arm produces no float differently: a moved digest is a defect in the arm, not a bits change) and samba-forward not slower; then B becomes the default with a _OFF define and LlamaDeviceStages.reset keeps only its other callers. lm-forward, lm-train-step and transformer-decode are controls (their stages are never reset in either arm, or are L = 1). Expected from the arithmetic: transformer-forward -0.5 to -1.0 ms of 2.5 (medium confidence: the fill rate of the L40S and the cost of a queued fill are assumed, not measured). Before a flip the native transformer checks run with the define on, including a forward of one shape after a forward of another and a forward after a backward on the same block; and the cases of llama-stage-keep-shapes are timed (no dimension targeting)"
+   "decides": "after the promotion of 2026-11-19 (lane fx-verdicts4; transformer-forward 0.953, four driver shapes 0.87-0.97, digests equal): keep the kept stages (the candidate) unless the reset before every stateless forward (B, MOJOLEARN_LLAMA_FAST_STAGE_KEEP_OFF) is faster on transformer-forward at equal digests on the NVIDIA L40S, base and arm in one job. samba-forward, lm-forward, lm-train-step and transformer-decode are controls now (the stack-layer use is deleted). B not faster: delete the _OFF switch"
   },
   {
    "id": "llama-stage-keep-shapes",
@@ -4495,10 +4519,10 @@
    },
    "arms": [
     "candidate",
-    "llama-stage-keep"
+    "llama-stage-keep-off"
    ],
    "b_arms": [
-    "llama-stage-keep"
+    "llama-stage-keep-off"
    ],
    "decides": "TransformerBlock.forward (stateless) at a longer sequence, at the block of a 12-layer d_model 512 model, at a non-board size and at a short sequence, candidate (A) against the B wheel set, median of 20 calls, each line with its output digest: B must not be slower at any case and every digest must equal A's. Expected: the gain grows with L (the kept exp stash is B x n_heads x L x S floats) and is about thirty queued fills at the short case"
   },
@@ -4593,16 +4617,18 @@
    "rows": "full",
    "vendor": "nvidia",
    "b_arms": [
-    "rnn-step-gemm"
+    "rnn-step-gemm-off",
+    "rnn-bptt-gemm"
    ],
-   "decides": "promote B only if the lstm and gru fits (algos synthetic and taxi-hourly, neural lstm-fit and gru-fit) are faster on the NVIDIA L40S (same box, same job) with quality equal (accuracy / logloss / r2 beside every time: the arm is a bit version on these rows, so digests differ between A and B and are not the test; device against host under the arm is the seams check's), and the predict rows are not slower. rnn rows take the scan and change only in their two weight gradients (one launch each instead of two): they must not be slower. Launches a step: lstm / gru 68 -> 113, rnn 22 -> 20; the bet is arithmetic rate (the fused one-thread folds and the blocked dW_hh hold about 300 M multiply-adds a step at about 0.9 TFLOP/s; the lane's GEMM tile runs 3.6-4.0), not launch count. Estimate 0.75-1.05x; the L40S launch floor is unmeasured, so a result inside the noise floor is a loser and the arm is deleted with the four tombstone parts"
+   "decides": "after the split of 2026-11-19 (lane fx-verdicts4). rnn-step-gemm-off (B = the fused forward launch): keep the forward step's GEMM (the candidate) unless B is faster on the gru / lstm fit or predict rows at equal quality on the NVIDIA L40S, base and arm in one job with both workers on one NUMA node; B not faster on any: delete the _OFF switch and OP_CELL_FWD_H's use above the rule. rnn-bptt-gemm (B = backward step and tile-routed weight gradients on the GEMM): promote only if no gru / lstm fit is slower and quality is equal (a bit version: digests differ between the arms and are not the test); the rnn rows are controls for it at hidden 64 (their weight gradients are split shapes and keep the blocked order)"
   },
   {
    "id": "rnn-step-gemm-shapes",
    "source": "lane fx-rnn-cnn-fit (2026-11-19; report ~/mojolearn-evidence/briefs-20261118/fx-rnn-cnn-fit-RESULT.md); the neighbouring shapes, the non-board model and two controls of the arm (no dimension targeting); driver rnn_shapes in tools/measure_owed_driver.py",
    "kind": "driver",
    "b_arms": [
-    "rnn-step-gemm"
+    "rnn-step-gemm-off",
+    "rnn-bptt-gemm"
    ],
    "shape": {
     "cases": [
@@ -4678,7 +4704,8 @@
    "driver": "rnn_shapes",
    "arms": [
     "candidate",
-    "rnn-step-gemm"
+    "rnn-step-gemm-off",
+    "rnn-bptt-gemm"
    ]
   },
   {

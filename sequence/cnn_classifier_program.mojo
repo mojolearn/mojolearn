@@ -361,9 +361,6 @@ def cnn_fit_program[E: Exec & Movable & Deinitable](
         _ = train_program_control(
             s, pid, srcs, shapes, target, _LOSS_CROSS_ENTROPY, Float32(1), opt, params, epochs, batch, shuffle,
             seed, FP(unsafe_from_address=addresses[2]), 0, 0, step_curve=addresses[3],
-            # under -D MOJOLEARN_CNN_FAST_FLAT_UPDATE: one optimizer launch for all parameter tensors
-            # (autograd/program_runtime.mojo PROGRAM_FLAT_UPDATE); ignored without the define
-            flat_update=True,
         )
         _download_params(s, params, addresses, CNN_FIT_ARRAYS)
     except err:

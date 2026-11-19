@@ -23,12 +23,11 @@ counted cases: it never reports them passed.
                          the define) stays, and moves by one after
                          registry_epoch_bump
   5 x_linear decision    xl_decision_device_run twice with one weight block.
-                         TODAY THE BLOCK IS UPLOADED ON EVERY CALL: the
-                         default build pins one fitted copy per call; under
-                         the arm `-D MOJOLEARN_XLINEAR_FAST_WB_RESIDENT`
-                         (default off, A/B owed) the second call must upload
-                         nothing, and a third call with a changed block must
-                         upload once and must not be served the old words
+                         THE BLOCK IS UPLOADED ON EVERY CALL (a resident
+                         copy was timed at noise and deleted, 2026-11-19):
+                         one fitted copy per call is pinned, and a third
+                         call with a changed block must upload once and
+                         must not be served the old words
   6 isotonic predict     the knots ride the one upload that carries the
                          call's zeroed status words (x_linear/device.mojo
                          `_iso_predict_grid`), so one fitted copy per call
@@ -78,7 +77,6 @@ from training.samba_resident import (
     samba_resident_forward,
 )
 from transformer.impl.llama.modeling_llama import LlamaDims
-from x_linear.device import XL_FAST_WB_RESIDENT
 from x_linear.dispatch import ALGO_ISOTONIC_PREDICT, LINK_IDENTITY
 from x_linear.ops_entry_device import xl_decision_device_run, xl_fit_device_run
 
@@ -304,13 +302,11 @@ def _x_linear() raises:
                                Int(second.unsafe_ptr()), 0)
     var c2 = resident_upload_copies(RUC_X_LINEAR)
     _same_f32(first, second, "x_linear decision")
-    comptime if XL_FAST_WB_RESIDENT:
-        require(c2 == c1, "x_linear (resident weight block arm): the second identical call uploaded the block again")
-    else:
-        # The known cost of the default (module docstring, case 5): the arm
-        # removes it. A third copy per call would be new.
-        require(c2 == c1 + 1, "x_linear: the default uploads its weight block once per call, counted "
-                + String(c2 - c1))
+    # The known cost (module docstring, case 5). A third copy per call would be new.
+    # TOMBSTONE: MOJOLEARN_XLINEAR_FAST_WB_RESIDENT (the arm's clause: the second identical call uploads nothing; NOISE) deleted 2026-11-19 by lane/fx-verdicts4; code recoverable at 8f3f639b13.
+    # Restore: git apply experiments/removed/MOJOLEARN_XLINEAR_FAST_WB_RESIDENT.patch; record in docs/TOMBSTONES.md.
+    require(c2 == c1 + 1, "x_linear: the block is uploaded once per call, counted "
+            + String(c2 - c1))
     # a changed block must go up, and its words must be the ones used
     var other = uniform(targets * (features + 1), 123, 0.5, 1.5)
     _ = xl_decision_device_run(xa, Int(other.unsafe_ptr()), rows, features, targets, LINK_IDENTITY,

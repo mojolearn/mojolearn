@@ -86,9 +86,7 @@ from gbdt.ctrs.kernel.ctr_calcers import (
     launch_update_borders_mask,
 )
 from gbdt.gpu_util.kernel.partitions import launch_update_partition_offsets
-from gbdt.gpu_util.kernel.radix_sort import (
-    launch_radix_sort_low_bins, radix_low_block_sums_len, radix_low_offsets_len,
-)
+from gbdt.gpu_util.kernel.radix_sort import launch_radix_sort_bins
 from gbdt.gpu_util.kernel.scan import SCAN_BLOCK, launch_scan_vector_u32
 from gbdt.gpu_util.kernel.segmented_reduce import launch_segmented_reduce_sum
 from gbdt.gpu_util.kernel.segmented_scan import (
@@ -779,11 +777,9 @@ struct CtrPrepFast(Movable):
             (n + SCAN_BLOCK - 1) // SCAN_BLOCK
         )
         # 512 is `REORDER_BLOCK`, the radix pass's block
-        self.sort_offsets = ctx.enqueue_create_buffer[DType.int32](
-            radix_low_offsets_len(n)
-        )
+        self.sort_offsets = ctx.enqueue_create_buffer[DType.int32](n)
         self.sort_block_sums = ctx.enqueue_create_buffer[DType.int32](
-            radix_low_block_sums_len(n)
+            (n + 512 - 1) // 512
         )
         self.gathered_weights = ctx.enqueue_create_buffer[DType.float32](n)
         self.scanned_weights = ctx.enqueue_create_buffer[DType.float32](n)
@@ -877,11 +873,10 @@ struct CtrPrepFast(Movable):
         launch_gather_with_mask_u32(
             ctx, self.bins, codes, self.indices, n, CTR_INDEX_MASK
         )
-        # every bin is a code below `unique_values` (the resident codes are
-        # validated dense on the device), so below `2^int_log2(unique_values)`
-        launch_radix_sort_low_bins(
+        launch_radix_sort_bins(
             ctx,
             n,
+            0,
             int_log2(unique_values),
             self.bins,
             self.indices,

@@ -383,41 +383,47 @@ def main() raises:
     _check("5504_bptt_fold_blocked", o_bptt_dw(bhb[1], xb5, Tb, B5, GH, 3, False),
            o_bptt_dw(bhb[1], xb5, Tb, B5, GH, 3, True), bdb[0], bhb[0], tr, fails)
     _same("5504_bptt_fold_blocked dgx", "device vs host", _diff(bdb[1], bhb[1]), fails)
-    comptime if RNN_STEP_GEMM:
-        # MOJOLEARN_SEQ_FAST_RNN_STEP_GEMM (lane fx-rnn-cnn-fit, 2026-11-19): the recurrent products on the lane's
-        # GEMM, at shapes over the arm's floor (B G H H >= 2^20 multiply-adds a step), T 9, B 64, K = T B = 576:
-        #   lstm H 72 and gru H 96: forward (64, G H 288, K = H) and backward (64, H, K 288) are split-K shapes (the
-        #     bits-change class); dW_hh (288, H, 576) is one chain, dW_ih (288, 3, 576) is split in blocks of 64;
-        #   lstm H 64: forward (64, 256, K 64) keeps the one chain (the same-bits class), backward (64, 64, 256) splits.
-        # dW_ih of layer 0 against the oracle's fold on the device and the host; dgx of layer 0 (the whole backward
-        # chain's words, behind every per-step product) device against host.
-        var Tg = 9; var Bg = 64
-        var xg = _mixed(Tg * Bg * 3, 56)
-        var dyg = _signed(Bg * 2, 57, 1.0)
-        var net_l = Net(CELL_LSTM, 3, 72, 1, 2)
-        var p_l = _signed(net_l.n_params(), 55, 0.05)
-        var gd_l = _bptt(dx, net_l, p_l, xg, dyg, Tg, Bg)
-        var gh_l = _bptt(hx, net_l, p_l, xg, dyg, Tg, Bg)
-        var ghn_l = net_l.G() * net_l.H
-        _check("5504_bptt_step_gemm_lstm", o_bptt_dw(gh_l[1], xg, Tg, Bg, ghn_l, 3, False),
-               o_bptt_dw(gh_l[1], xg, Tg, Bg, ghn_l, 3, True), gd_l[0], gh_l[0], tr, fails)
-        _same("5504_bptt_step_gemm_lstm dgx", "device vs host", _diff(gd_l[1], gh_l[1]), fails)
-        var net_g = Net(CELL_GRU, 3, 96, 1, 2)
-        var p_g = _signed(net_g.n_params(), 58, 0.05)
-        var gd_g = _bptt(dx, net_g, p_g, xg, dyg, Tg, Bg)
-        var gh_g = _bptt(hx, net_g, p_g, xg, dyg, Tg, Bg)
-        var ghn_g = net_g.G() * net_g.H
-        _check("5504_bptt_step_gemm_gru", o_bptt_dw(gh_g[1], xg, Tg, Bg, ghn_g, 3, False),
-               o_bptt_dw(gh_g[1], xg, Tg, Bg, ghn_g, 3, True), gd_g[0], gh_g[0], tr, fails)
-        _same("5504_bptt_step_gemm_gru dgx", "device vs host", _diff(gd_g[1], gh_g[1]), fails)
-        var net_c = Net(CELL_LSTM, 3, 64, 1, 2)
-        var p_c = _signed(net_c.n_params(), 59, 0.05)
-        var gd_c = _bptt(dx, net_c, p_c, xg, dyg, Tg, Bg)
-        var gh_c = _bptt(hx, net_c, p_c, xg, dyg, Tg, Bg)
-        var ghn_c = net_c.G() * net_c.H
-        _check("5504_bptt_step_gemm_chain", o_bptt_dw(gh_c[1], xg, Tg, Bg, ghn_c, 3, False),
-               o_bptt_dw(gh_c[1], xg, Tg, Bg, ghn_c, 3, True), gd_c[0], gh_c[0], tr, fails)
-        _same("5504_bptt_step_gemm_chain dgx", "device vs host", _diff(gd_c[1], gh_c[1]), fails)
+    # The recurrent products on the lane's GEMM (autograd/rules_recurrent.mojo: the forward step by default,
+    # RNN_STEP_GEMM; the backward step and the tile-routed weight gradients under
+    # -D MOJOLEARN_SEQ_FAST_RNN_BPTT_GEMM), at shapes over the step rule's floor (B G H H >= 2^20 multiply-adds a
+    # step), T 9, B 64, K = T B = 576:
+    #   lstm H 72 and gru H 96: forward (64, G H 288, K = H) is a split-K shape (the bits-change class against the
+    #     fused launch), and so is the arm's backward (64, H, K 288); dW_hh (288, H, 576) is not a split shape (one
+    #     chain under the arm, the blocked order without it), dW_ih (288, 3, 576) is (the blocked order on both);
+    #   lstm H 64: forward (64, 256, K 64) keeps the one chain (the same-bits class), the arm's backward (64, 64, 256)
+    #     splits.
+    # dW_ih of layer 0 against the oracle's fold on the device and the host; dgx of layer 0 (the whole backward
+    # chain's words, behind every per-step product) device against host. Run on every build since 2026-11-19
+    # (lane fx-verdicts4: the forward step is the default); RNN_STEP_GEMM is named so a _OFF build says so.
+    comptime if not RNN_STEP_GEMM:
+        print("5504 step_gemm cases: forward step on the fused launch (MOJOLEARN_SEQ_FAST_RNN_STEP_GEMM_OFF)")
+    var Tg = 9; var Bg = 64
+    var xg = _mixed(Tg * Bg * 3, 56)
+    var dyg = _signed(Bg * 2, 57, 1.0)
+    var net_l = Net(CELL_LSTM, 3, 72, 1, 2)
+    var p_l = _signed(net_l.n_params(), 55, 0.05)
+    var gd_l = _bptt(dx, net_l, p_l, xg, dyg, Tg, Bg)
+    var gh_l = _bptt(hx, net_l, p_l, xg, dyg, Tg, Bg)
+    var ghn_l = net_l.G() * net_l.H
+    _check("5504_bptt_step_gemm_lstm", o_bptt_dw(gh_l[1], xg, Tg, Bg, ghn_l, 3, False),
+           o_bptt_dw(gh_l[1], xg, Tg, Bg, ghn_l, 3, True), gd_l[0], gh_l[0], tr, fails)
+    _same("5504_bptt_step_gemm_lstm dgx", "device vs host", _diff(gd_l[1], gh_l[1]), fails)
+    var net_g = Net(CELL_GRU, 3, 96, 1, 2)
+    var p_g = _signed(net_g.n_params(), 58, 0.05)
+    var gd_g = _bptt(dx, net_g, p_g, xg, dyg, Tg, Bg)
+    var gh_g = _bptt(hx, net_g, p_g, xg, dyg, Tg, Bg)
+    var ghn_g = net_g.G() * net_g.H
+    _check("5504_bptt_step_gemm_gru", o_bptt_dw(gh_g[1], xg, Tg, Bg, ghn_g, 3, False),
+           o_bptt_dw(gh_g[1], xg, Tg, Bg, ghn_g, 3, True), gd_g[0], gh_g[0], tr, fails)
+    _same("5504_bptt_step_gemm_gru dgx", "device vs host", _diff(gd_g[1], gh_g[1]), fails)
+    var net_c = Net(CELL_LSTM, 3, 64, 1, 2)
+    var p_c = _signed(net_c.n_params(), 59, 0.05)
+    var gd_c = _bptt(dx, net_c, p_c, xg, dyg, Tg, Bg)
+    var gh_c = _bptt(hx, net_c, p_c, xg, dyg, Tg, Bg)
+    var ghn_c = net_c.G() * net_c.H
+    _check("5504_bptt_step_gemm_chain", o_bptt_dw(gh_c[1], xg, Tg, Bg, ghn_c, 3, False),
+           o_bptt_dw(gh_c[1], xg, Tg, Bg, ghn_c, 3, True), gd_c[0], gh_c[0], tr, fails)
+    _same("5504_bptt_step_gemm_chain dgx", "device vs host", _diff(gd_c[1], gh_c[1]), fails)
 
     # ---- 5505 softmax cross entropy, B 3, C 40.
     var B6 = 3; var C6 = 40

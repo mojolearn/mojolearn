@@ -663,6 +663,11 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_RF_DEVICE_LOOP.patch; record in docs/TOMBSTONES.md.
     comptime assert not is_defined["MOJOLEARN_IDN_RF_DEVICE_LOOP"](), "removed 2026-11-19 (lane/fx-old-arms-triage, A/B ab4 NVIDIA L40S, wheel d652a4b0a1, job nvc-ab-20261118T201200Z-d21ba0, one run per arm): the RandomForest device level loop as the fit route was slower, fit istella 4407 -> 30417 ms (6.90), taxi 5352 -> 8918 (1.67); the host queue stays, the device loop body serves -D MOJOLEARN_IDN_RF_DEVICE_LOOP_EARLY_EXIT; code at a7c89e7558; restore: experiments/removed/MOJOLEARN_IDN_RF_DEVICE_LOOP.patch"
     # ---- end lane fx-old-arms-triage
+    # ---- lane fx-verdicts4 (2026-11-19): verdicts of A/B round 2 (NVIDIA L40S, wheel 0c68d6cd27, job nvc-ab-20261119T154232Z-0642a5)
+    # TOMBSTONE: MOJOLEARN_GBDT_FAST_RADIX8 (NOISE, A/B round 2 NVIDIA L40S, wheel 0c68d6cd27, job nvc-ab-20261119T154232Z-0642a5, one run per arm, digests equal) deleted 2026-11-19 by lane/fx-verdicts4; code recoverable at 8f3f639b13.
+    # Restore: git apply experiments/removed/MOJOLEARN_GBDT_FAST_RADIX8.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_GBDT_FAST_RADIX8"](), "removed 2026-11-19 (lane/fx-verdicts4, A/B round 2 NVIDIA L40S, wheel 0c68d6cd27, job nvc-ab-20261119T154232Z-0642a5, one run per arm, digests equal): the GBDT low-bit sorts on eight-bit digits were arm/base 0.965-1.03 over ten fits (lossguide faster, symmetric and multiclass slower; noise); code at 8f3f639b13, experiments/removed/MOJOLEARN_GBDT_FAST_RADIX8.patch"
+    # ---- end lane fx-verdicts4
     return True
 
 

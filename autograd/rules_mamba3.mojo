@@ -126,9 +126,7 @@ from autograd.kernels.mamba3 import (
     mamba3_backward_pack_in_proj_into,
     mamba3_backward_block_norm_into,
 )
-from mamba.impl.modeling.modeling_mamba import MAMBA_GUARD, mamba_download, mamba_upload, mamba_zeros
-from mamba.impl.modules.afn_arena import MambaArena
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from mamba.impl.modeling.modeling_mamba import mamba_download, mamba_upload, mamba_zeros
 from autograd.kernels.mamba3_prefill import (
     IDN_M3_BWD_SKIP_DEAD,
     Mamba3DeviceGradients,
@@ -209,88 +207,12 @@ def _m3_same(p: FP, buf: DeviceBuffer[DType.float32], what: String) raises:
         raise Error(String("mamba3 backward (autograd): ") + what + " is not the block's buffer")
 
 
-# ------------------------------------------------------------------ held scratch (EXPERIMENT)
-# lane fx-samba-step-resident (2026-11-18), default off:
-# -D MOJOLEARN_SAMBA_FAST_STEP_SCRATCH_HELD. The Samba resident train step
-# (training/samba_resident.mojo) built, per Mamba-3 layer and per step, the
-# four node gradients of a Mamba3TapeBlock, the 83 buffers of its
-# Mamba3TapeScratch and a suffix-sum scratch: 88 device allocations, 88 zero
-# fills and 88 frees a layer a step, and the block's closing wait before the
-# frees. Under the define the SESSION holds one Mamba3TapeBlock per layer
-# whose buffers are views of ONE arena (`mamba3_held_block`); a step queues
-# ONE zero fill of that arena (`Mamba3TapeBlock.rezero_held`) and nothing is
-# allocated, freed or waited on per block. Same kernels on the same operands
-# in the same order, reading the same zeros: no bit moves.
-#   * Stale values: nothing relies on a kernel writing a buffer whole. Every
-#     float the default path zero-filled per step (node gradients, scratch,
-#     GEMM workspace, suffix sums) is inside the arena and is zeroed by the
-#     step's one fill, queued before the block's first rule on the same
-#     in-order context. The one buffer outside the arena is `ones`: it holds
-#     1.0, is filled once when the block is built, and is only ever a GEMM
-#     INPUT operand (mamba3_backward_reduce_into ->
-#     identical_gemm_backward_bias_into, gemm/neural_backward.mojo), as the
-#     session's own `ones` vector already is.
-#   * Lifetimes: the arena and every view are fields of the held block, which
-#     the session owns across steps and replaces only after a synchronize
-#     (`_ensure_shape`), so no queued launch can outlive them and the per-block
-#     wait that existed only to fence the frees is not needed.
-#   * Not for a poison build (MAMBA_GUARD > 0: its fills cover a body view and
-#     its bands hold NaN), nor outside IDENTICAL (the Apple fast arena arms
-#     own their scratch): the constant is False there and the default path runs.
-comptime M3_SCRATCH_HELD = (
-    is_defined["MOJOLEARN_SAMBA_FAST_STEP_SCRATCH_HELD"]()
-    and GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and MAMBA_GUARD == 0
-)
-
-comptime M3ArenaRef = MutPointer[MambaArena, MutUntrackedOrigin]
-
-
-struct _M3Source(Movable):
-    """Where a Mamba3TapeScratch takes its buffers. Default (the only form
-    without the held-scratch define): fresh zeroed buffers, `_m3_scratch` /
-    `mamba_zeros` exactly as before. Under M3_SCRATCH_HELD it also counts the
-    arena floats those buffers would take (`cells`, the sizing pass of
-    `mamba3_held_block`), or, when `arena` is set, hands out views of that
-    held arena instead of allocating."""
-    #: the Apple fast arena flag `_m3_scratch` takes
-    var own: Bool
-    #: arena floats of the zeroed buffers taken so far (M3_SCRATCH_HELD only)
-    var cells: Int
-    #: address of the held MambaArena to take views of; 0: allocate
-    var arena: Int
-
-    def __init__(out self):
-        self.own = False
-        self.cells = 0
-        self.arena = 0
-
-
-@always_inline
-def _m3_src_zeros(mut src: _M3Source, ctx: DeviceContext, n: Int) raises -> DeviceBuffer[DType.float32]:
-    """A zeroed scratch of `n` floats from `src` (default: `_m3_scratch`)."""
-    comptime if M3_SCRATCH_HELD:
-        if src.arena != 0:
-            var held_at = M3ArenaRef(unsafe_from_address=src.arena)
-            ref held = held_at[]
-            return held.take(ctx, n)
-        src.cells += MambaArena.slot(n, MAMBA_GUARD)
-    return _m3_scratch(src.own, ctx, n)
-
-
-@always_inline
-def _m3_src_workspace(mut src: _M3Source, ctx: DeviceContext, n: Int) raises -> DeviceBuffer[DType.float32]:
-    """The block's GEMM workspace from `src` (default: `mamba_zeros`, as before)."""
-    comptime if M3_SCRATCH_HELD:
-        if src.arena != 0:
-            var held_at = M3ArenaRef(unsafe_from_address=src.arena)
-            ref held = held_at[]
-            return held.take(ctx, n)
-        src.cells += MambaArena.slot(n, MAMBA_GUARD)
-    return mamba_zeros(ctx, n)
-
-
 # ------------------------------------------------------------------ per block state
+# TOMBSTONE: MOJOLEARN_SAMBA_FAST_STEP_SCRATCH_HELD (M3_SCRATCH_HELD: one arena a Mamba-3 block backward, one zero fill a step, no per-block wait; NOISE, A/B round 2 NVIDIA L40S, wheel 0c68d6cd27, job
+# nvc-ab-20261119T154232Z-0642a5, base and arm in one job, digests and quality equal: samba-train-step 48.73 -> 48.57
+# ms, 1.00; lm-train-step 1.00; samba-forward 1.02; driver steps 41.60 -> 42.69, 56.33 -> 56.24, 22.38 -> 20.96)
+# deleted 2026-11-19 by lane/fx-verdicts4; code recoverable at 8f3f639b13. This file's text is the pre-arm text again.
+# Restore: git apply experiments/removed/MOJOLEARN_SAMBA_FAST_STEP_SCRATCH_HELD.patch; record in docs/TOMBSTONES.md.
 struct Mamba3TapeScratch(Movable):
     """Every intermediate the hand walk allocates for one block backward
     (other than the four node gradients of Mamba3TapeBlock and the ten
@@ -385,10 +307,9 @@ struct Mamba3TapeScratch(Movable):
     # D5
     var d_norm_w_rows: DeviceBuffer[DType.float32]
 
-    def __init__(out self, ctx: DeviceContext, b: Int, l: Int, dims: Mamba3Dims, nc: Int, mut src: _M3Source) raises:
+    def __init__(out self, ctx: DeviceContext, b: Int, l: Int, dims: Mamba3Dims, nc: Int) raises:
         var arena = _AfnM3Arena()
         var own = arena.own()
-        src.own = own
         var m = b * l
         var nh = dims.nheads
         var tail_cells = m * dims.d_inner
@@ -398,93 +319,91 @@ struct Mamba3TapeScratch(Movable):
         var seg_cells = b * nc * nh * M3_CHUNK_SIZE * M3_CHUNK_SIZE
         var chunk_state_cells = b * nc * nh * M3_HEADDIM * M3_D_STATE
         var initial_state_cells = b * nh * M3_HEADDIM * M3_D_STATE
-        self.workspace = _m3_src_workspace(src, ctx, mamba3_backward_workspace_max_floats(dims, m))
-        # `ones` is never a view of a held arena (whose per-step fill is
-        # zeros): its own buffer, 1.0, a GEMM input only.
+        self.workspace = mamba_zeros(ctx, mamba3_backward_workspace_max_floats(dims, m))
         var ones = _m3_scratch(own, ctx, mamba3_backward_ones_floats(m))
         ones.enqueue_fill(Float32(1.0))
         self.ones = ones^
-        self.d_z = _m3_src_zeros(src, ctx, tail_cells)
-        self.d_v = _m3_src_zeros(src, ctx, tail_cells)
-        self.d_qkdot = _m3_src_zeros(src, ctx, head_cells)
-        self.d_d_product = _m3_src_zeros(src, ctx, head_cells)
-        self.d_b_qk = _m3_src_zeros(src, ctx, state_cells)
-        self.d_c_qk = _m3_src_zeros(src, ctx, state_cells)
-        self.d_b_bias_qk = _m3_src_zeros(src, ctx, state_cells)
-        self.d_c_bias_qk = _m3_src_zeros(src, ctx, state_cells)
-        self.d_gamma_qk = _m3_src_zeros(src, ctx, head_cells)
-        self.d_dt_qk = _m3_src_zeros(src, ctx, head_cells)
-        self.d_trap_qk = _m3_src_zeros(src, ctx, head_cells)
-        self.d_q_s16 = _m3_src_zeros(src, ctx, state_cells)
-        self.d_ks_s16 = _m3_src_zeros(src, ctx, state_cells)
-        self.d_v_s16 = _m3_src_zeros(src, ctx, tail_cells)
-        self.d_krot_s15 = _m3_src_zeros(src, ctx, state_cells)
-        self.d_scale_s15 = _m3_src_zeros(src, ctx, head_cells)
-        self.d_value_total = _m3_src_zeros(src, ctx, tail_cells)
-        self.d_gamma_scale = _m3_src_zeros(src, ctx, head_cells)
-        self.d_beta_scale = _m3_src_zeros(src, ctx, head_cells)
-        self.d_qraw_rot = _m3_src_zeros(src, ctx, state_cells)
-        self.d_kraw_rot = _m3_src_zeros(src, ctx, state_cells)
-        self.d_theta_rot = _m3_src_zeros(src, ctx, theta_cells)
-        self.d_b_total = _m3_src_zeros(src, ctx, state_cells)
-        self.d_c_total = _m3_src_zeros(src, ctx, state_cells)
-        self.d_gamma_total = _m3_src_zeros(src, ctx, head_cells)
-        self.d_dt_total = _m3_src_zeros(src, ctx, head_cells)
-        self.d_trap_total = _m3_src_zeros(src, ctx, head_cells)
-        self.d_angle_rate = _m3_src_zeros(src, ctx, theta_cells)
-        self.d_angle_raw = _m3_src_zeros(src, ctx, m * M3_NUM_ROPE_ANGLES)
-        self.d_dt_angle = _m3_src_zeros(src, ctx, head_cells)
-        self.d_dt_available = _m3_src_zeros(src, ctx, head_cells)
-        self.d_dt_raw = _m3_src_zeros(src, ctx, head_cells)
-        self.d_dt_bias_rows = _m3_src_zeros(src, ctx, head_cells)
-        self.d_dt_bias = _m3_src_zeros(src, ctx, nh)
-        self.d_seg = _m3_src_zeros(src, ctx, seg_cells)
-        self.d_adt_seg = _m3_src_zeros(src, ctx, head_cells)
-        self.d_a_seg = _m3_src_zeros(src, ctx, head_cells)
-        self.d_dt_seg = _m3_src_zeros(src, ctx, head_cells)
-        self.d_dt_with_seg = _m3_src_zeros(src, ctx, head_cells)
-        self.d_state_direct = _m3_src_zeros(src, ctx, chunk_state_cells)
-        self.d_state_total = _m3_src_zeros(src, ctx, chunk_state_cells)
-        self.d_initial_state = _m3_src_zeros(src, ctx, initial_state_cells)
-        self.d_q17 = _m3_src_zeros(src, ctx, state_cells)
-        self.d_dacs_read17 = _m3_src_zeros(src, ctx, head_cells)
-        self.d_k17 = _m3_src_zeros(src, ctx, state_cells)
-        self.d_v17 = _m3_src_zeros(src, ctx, tail_cells)
-        self.d_dacs_rec17 = _m3_src_zeros(src, ctx, head_cells)
-        self.d_q_join = _m3_src_zeros(src, ctx, state_cells)
-        self.d_k_join = _m3_src_zeros(src, ctx, state_cells)
-        self.d_v_join = _m3_src_zeros(src, ctx, tail_cells)
-        self.d_dacs_join = _m3_src_zeros(src, ctx, head_cells)
-        self.d_krot_join = _m3_src_zeros(src, ctx, state_cells)
-        self.d_scale_join = _m3_src_zeros(src, ctx, head_cells)
-        self.d_qraw_join = _m3_src_zeros(src, ctx, state_cells)
-        self.d_kraw_join = _m3_src_zeros(src, ctx, state_cells)
-        self.d_theta_join = _m3_src_zeros(src, ctx, theta_cells)
-        self.d_adt_from_dacs = _m3_src_zeros(src, ctx, head_cells)
-        self.d_adt_join = _m3_src_zeros(src, ctx, head_cells)
-        self.d_a_join = _m3_src_zeros(src, ctx, head_cells)
-        self.d_dt_join_adt = _m3_src_zeros(src, ctx, head_cells)
-        self.d_dt_join_scratch = _m3_src_zeros(src, ctx, head_cells)
-        self.zero_dt = _m3_src_zeros(src, ctx, head_cells)
-        self.d_a_raw_join = _m3_src_zeros(src, ctx, head_cells)
-        self.d_b_join = _m3_src_zeros(src, ctx, state_cells)
-        self.d_c_join = _m3_src_zeros(src, ctx, state_cells)
-        self.d_gamma_join = _m3_src_zeros(src, ctx, head_cells)
-        self.d_dt_join_current = _m3_src_zeros(src, ctx, head_cells)
-        self.d_trap_join = _m3_src_zeros(src, ctx, head_cells)
-        self.d_beta_join = _m3_src_zeros(src, ctx, head_cells)
-        self.d_angle_rate_join = _m3_src_zeros(src, ctx, theta_cells)
-        self.d_angle_raw_join = _m3_src_zeros(src, ctx, m * M3_NUM_ROPE_ANGLES)
-        self.d_dt_angle_join = _m3_src_zeros(src, ctx, head_cells)
-        self.d_dt_join_base = _m3_src_zeros(src, ctx, head_cells)
-        self.d_dt_join_available = _m3_src_zeros(src, ctx, head_cells)
-        self.d_dt_raw_join = _m3_src_zeros(src, ctx, head_cells)
-        self.d_dt_bias_rows_join = _m3_src_zeros(src, ctx, head_cells)
-        self.d_b_raw = _m3_src_zeros(src, ctx, m * M3_D_STATE)
-        self.d_c_raw = _m3_src_zeros(src, ctx, m * M3_D_STATE)
-        self.d_bw_rows = _m3_src_zeros(src, ctx, m * M3_D_STATE)
-        self.d_cw_rows = _m3_src_zeros(src, ctx, m * M3_D_STATE)
-        self.d_norm_w_rows = _m3_src_zeros(src, ctx, m * dims.d_model)
+        self.d_z = _m3_scratch(own, ctx, tail_cells)
+        self.d_v = _m3_scratch(own, ctx, tail_cells)
+        self.d_qkdot = _m3_scratch(own, ctx, head_cells)
+        self.d_d_product = _m3_scratch(own, ctx, head_cells)
+        self.d_b_qk = _m3_scratch(own, ctx, state_cells)
+        self.d_c_qk = _m3_scratch(own, ctx, state_cells)
+        self.d_b_bias_qk = _m3_scratch(own, ctx, state_cells)
+        self.d_c_bias_qk = _m3_scratch(own, ctx, state_cells)
+        self.d_gamma_qk = _m3_scratch(own, ctx, head_cells)
+        self.d_dt_qk = _m3_scratch(own, ctx, head_cells)
+        self.d_trap_qk = _m3_scratch(own, ctx, head_cells)
+        self.d_q_s16 = _m3_scratch(own, ctx, state_cells)
+        self.d_ks_s16 = _m3_scratch(own, ctx, state_cells)
+        self.d_v_s16 = _m3_scratch(own, ctx, tail_cells)
+        self.d_krot_s15 = _m3_scratch(own, ctx, state_cells)
+        self.d_scale_s15 = _m3_scratch(own, ctx, head_cells)
+        self.d_value_total = _m3_scratch(own, ctx, tail_cells)
+        self.d_gamma_scale = _m3_scratch(own, ctx, head_cells)
+        self.d_beta_scale = _m3_scratch(own, ctx, head_cells)
+        self.d_qraw_rot = _m3_scratch(own, ctx, state_cells)
+        self.d_kraw_rot = _m3_scratch(own, ctx, state_cells)
+        self.d_theta_rot = _m3_scratch(own, ctx, theta_cells)
+        self.d_b_total = _m3_scratch(own, ctx, state_cells)
+        self.d_c_total = _m3_scratch(own, ctx, state_cells)
+        self.d_gamma_total = _m3_scratch(own, ctx, head_cells)
+        self.d_dt_total = _m3_scratch(own, ctx, head_cells)
+        self.d_trap_total = _m3_scratch(own, ctx, head_cells)
+        self.d_angle_rate = _m3_scratch(own, ctx, theta_cells)
+        self.d_angle_raw = _m3_scratch(own, ctx, m * M3_NUM_ROPE_ANGLES)
+        self.d_dt_angle = _m3_scratch(own, ctx, head_cells)
+        self.d_dt_available = _m3_scratch(own, ctx, head_cells)
+        self.d_dt_raw = _m3_scratch(own, ctx, head_cells)
+        self.d_dt_bias_rows = _m3_scratch(own, ctx, head_cells)
+        self.d_dt_bias = _m3_scratch(own, ctx, nh)
+        self.d_seg = _m3_scratch(own, ctx, seg_cells)
+        self.d_adt_seg = _m3_scratch(own, ctx, head_cells)
+        self.d_a_seg = _m3_scratch(own, ctx, head_cells)
+        self.d_dt_seg = _m3_scratch(own, ctx, head_cells)
+        self.d_dt_with_seg = _m3_scratch(own, ctx, head_cells)
+        self.d_state_direct = _m3_scratch(own, ctx, chunk_state_cells)
+        self.d_state_total = _m3_scratch(own, ctx, chunk_state_cells)
+        self.d_initial_state = _m3_scratch(own, ctx, initial_state_cells)
+        self.d_q17 = _m3_scratch(own, ctx, state_cells)
+        self.d_dacs_read17 = _m3_scratch(own, ctx, head_cells)
+        self.d_k17 = _m3_scratch(own, ctx, state_cells)
+        self.d_v17 = _m3_scratch(own, ctx, tail_cells)
+        self.d_dacs_rec17 = _m3_scratch(own, ctx, head_cells)
+        self.d_q_join = _m3_scratch(own, ctx, state_cells)
+        self.d_k_join = _m3_scratch(own, ctx, state_cells)
+        self.d_v_join = _m3_scratch(own, ctx, tail_cells)
+        self.d_dacs_join = _m3_scratch(own, ctx, head_cells)
+        self.d_krot_join = _m3_scratch(own, ctx, state_cells)
+        self.d_scale_join = _m3_scratch(own, ctx, head_cells)
+        self.d_qraw_join = _m3_scratch(own, ctx, state_cells)
+        self.d_kraw_join = _m3_scratch(own, ctx, state_cells)
+        self.d_theta_join = _m3_scratch(own, ctx, theta_cells)
+        self.d_adt_from_dacs = _m3_scratch(own, ctx, head_cells)
+        self.d_adt_join = _m3_scratch(own, ctx, head_cells)
+        self.d_a_join = _m3_scratch(own, ctx, head_cells)
+        self.d_dt_join_adt = _m3_scratch(own, ctx, head_cells)
+        self.d_dt_join_scratch = _m3_scratch(own, ctx, head_cells)
+        self.zero_dt = _m3_scratch(own, ctx, head_cells)
+        self.d_a_raw_join = _m3_scratch(own, ctx, head_cells)
+        self.d_b_join = _m3_scratch(own, ctx, state_cells)
+        self.d_c_join = _m3_scratch(own, ctx, state_cells)
+        self.d_gamma_join = _m3_scratch(own, ctx, head_cells)
+        self.d_dt_join_current = _m3_scratch(own, ctx, head_cells)
+        self.d_trap_join = _m3_scratch(own, ctx, head_cells)
+        self.d_beta_join = _m3_scratch(own, ctx, head_cells)
+        self.d_angle_rate_join = _m3_scratch(own, ctx, theta_cells)
+        self.d_angle_raw_join = _m3_scratch(own, ctx, m * M3_NUM_ROPE_ANGLES)
+        self.d_dt_angle_join = _m3_scratch(own, ctx, head_cells)
+        self.d_dt_join_base = _m3_scratch(own, ctx, head_cells)
+        self.d_dt_join_available = _m3_scratch(own, ctx, head_cells)
+        self.d_dt_raw_join = _m3_scratch(own, ctx, head_cells)
+        self.d_dt_bias_rows_join = _m3_scratch(own, ctx, head_cells)
+        self.d_b_raw = _m3_scratch(own, ctx, m * M3_D_STATE)
+        self.d_c_raw = _m3_scratch(own, ctx, m * M3_D_STATE)
+        self.d_bw_rows = _m3_scratch(own, ctx, m * M3_D_STATE)
+        self.d_cw_rows = _m3_scratch(own, ctx, m * M3_D_STATE)
+        self.d_norm_w_rows = _m3_scratch(own, ctx, m * dims.d_model)
         self.arena = arena^
 
 
@@ -500,16 +419,6 @@ struct Mamba3TapeBlock(Movable):
     var d_gate: DeviceBuffer[DType.float32]
     var scratch: Optional[Mamba3TapeScratch]
     var tk: Int
-    # ---- the held form (M3_SCRATCH_HELD, `mamba3_held_block`); False, empty
-    # and None in every block built per call
-    #: the block is held across steps: its scratch is present from its build
-    #: on, the rules neither allocate nor free it and add no closing wait
-    var held: Bool
-    #: the suffix-sum scratches of the SSD rule's two angle stages (the
-    #: pre-join pass, run only with the dead stages, then the join's)
-    var held_sums: List[DeviceBuffer[DType.float32]]
-    #: the one allocation every buffer above (but the scratch's `ones`) is a view of
-    var held_arena: Optional[MambaArena]
 
     def __init__(out self, ctx: DeviceContext, b: Int, l: Int, dims: Mamba3Dims) raises:
         var m = b * l
@@ -519,69 +428,6 @@ struct Mamba3TapeBlock(Movable):
         self.d_gate = mamba_zeros[False](ctx, m * dims.d_inner)
         self.scratch = None
         self.tk = 0
-        self.held = False
-        self.held_sums = List[DeviceBuffer[DType.float32]]()
-        self.held_arena = None
-
-    def __init__(
-        out self, *, var arena: MambaArena, ctx: DeviceContext, b: Int, l: Int, dims: Mamba3Dims, nc: Int,
-    ) raises:
-        """The held form: every buffer a view of `arena` (sized by
-        `mamba3_held_block`, already zero-filled by its constructor), the
-        scratch present. Take order: the four node gradients, the two
-        suffix-sum scratches, then the scratch's own order."""
-        var m = b * l
-        self.d_norm = arena.take(ctx, m * dims.d_model)
-        self.d_in_proj = arena.take(ctx, m * dims.d_in_proj())
-        self.d_skip = arena.take(ctx, m * dims.d_inner)
-        self.d_gate = arena.take(ctx, m * dims.d_inner)
-        var n_sums = mamba3_angle_suffix_sums_cells(b, l, dims.nheads)
-        self.held_sums = List[DeviceBuffer[DType.float32]]()
-        self.held_sums.append(arena.take(ctx, n_sums))
-        self.held_sums.append(arena.take(ctx, n_sums))
-        var src = _M3Source()
-        src.arena = Int(MutPointer(to=arena))
-        self.scratch = Optional[Mamba3TapeScratch](Mamba3TapeScratch(ctx, b, l, dims, nc, src))
-        self.tk = 0
-        self.held = True
-        # moved last: the takes above went through `arena` and its address
-        self.held_arena = Optional[MambaArena](arena^)
-
-    def rezero_held(mut self) raises:
-        """The held block's zeros for one backward: ONE fill of the arena
-        (every node gradient, scratch buffer, the workspace and the suffix
-        sums at once), queued ahead of the block's first rule on the
-        in-order context. The default path's 88 fills, the same zeros."""
-        ref arena = self.held_arena.value()
-        arena.base.enqueue_fill(Float32(0.0))
-
-
-def mamba3_held_block(
-    ctx: DeviceContext, b: Int, l: Int, dims: Mamba3Dims, nc: Int
-) raises -> Mamba3TapeBlock:
-    """One Mamba-3 layer's backward state held across steps (M3_SCRATCH_HELD):
-    a Mamba3TapeBlock whose node gradients, scratch and suffix sums are views
-    of one arena. Built once per `(b, l)` by the session; waits once (the
-    sizing pass). The arena is sized by building the scratch once the default
-    way with a counting source, so the size list is the constructor itself
-    and the two cannot disagree."""
-    comptime if M3_SCRATCH_HELD:
-        var count = _M3Source()
-        var probe = Mamba3TapeScratch(ctx, b, l, dims, nc, count)
-        # the probe's queued fills ran before its buffers go
-        ctx.synchronize()
-        _ = probe^
-        var m = b * l
-        var cells = count.cells
-        cells += MambaArena.slot(m * dims.d_model, MAMBA_GUARD)
-        cells += MambaArena.slot(m * dims.d_in_proj(), MAMBA_GUARD)
-        cells += 2 * MambaArena.slot(m * dims.d_inner, MAMBA_GUARD)
-        cells += 2 * MambaArena.slot(mamba3_angle_suffix_sums_cells(b, l, dims.nheads), MAMBA_GUARD)
-        # one allocation and one zero fill (the arena's constructor)
-        var arena = MambaArena(ctx, cells, MAMBA_GUARD)
-        return Mamba3TapeBlock(arena=arena^, ctx=ctx, b=b, l=l, dims=dims, nc=nc)
-    else:
-        raise Error("mamba3 backward (autograd): the held scratch needs -D MOJOLEARN_SAMBA_FAST_STEP_SCRATCH_HELD")
 
 
 comptime M3WeightsRef = MutPointer[Mamba3DeviceWeights, MutUntrackedOrigin]
@@ -716,17 +562,10 @@ struct Mamba3Rules(BackwardRules):
         var dims = w.dims.copy()
         var m = self.b * self.l
         _m3_same(gradients[0], blk.d_gate, "the gate output gradient")
-        # M3_SCRATCH_HELD: a held block's scratch is already there (zeroed by
-        # the step's one fill); nothing is allocated here.
-        var held = False
-        comptime if M3_SCRATCH_HELD:
-            held = blk.held
-        if blk.scratch and not held:
+        if blk.scratch:
             raise Error("mamba3 backward (autograd): the block's scratch is still held")
         blk.tk = Int(perf_counter_ns())
-        if not held:
-            var src = _M3Source()
-            blk.scratch = Mamba3TapeScratch(ctx, self.b, self.l, dims, st.nc, src)
+        blk.scratch = Mamba3TapeScratch(ctx, self.b, self.l, dims, st.nc)
         ref S = blk.scratch.value()
         var d_output = _m3_view(ctx, upstream, m * dims.d_model)
         var d_weight = _m3_view(ctx, gradients[1], rows[1] * cols[1])
@@ -822,22 +661,12 @@ struct Mamba3Rules(BackwardRules):
                 )
                 S.arena.keep.append(afn_sums^)
             else:
-                var held_rot = False
-                comptime if M3_SCRATCH_HELD:
-                    if blk.held:
-                        # the held block's own suffix sums (zeroed by the step's one fill)
-                        held_rot = True
-                        mamba3_backward_angle_into(
-                            ctx, S.d_angle_rate, S.d_angle_raw, S.d_dt_angle, S.d_theta_rot,
-                            st.dt_work, st.in_proj, b, l, dims, blk.held_sums[0],
-                        )
-                if not held_rot:
-                    var sums_rot = _m3_scratch(own, ctx, mamba3_angle_suffix_sums_cells(b, l, nh))
-                    mamba3_backward_angle_into(
-                        ctx, S.d_angle_rate, S.d_angle_raw, S.d_dt_angle, S.d_theta_rot,
-                        st.dt_work, st.in_proj, b, l, dims, sums_rot,
-                    )
-                    S.arena.keep.append(sums_rot^)
+                var sums_rot = _m3_scratch(own, ctx, mamba3_angle_suffix_sums_cells(b, l, nh))
+                mamba3_backward_angle_into(
+                    ctx, S.d_angle_rate, S.d_angle_raw, S.d_dt_angle, S.d_theta_rot,
+                    st.dt_work, st.in_proj, b, l, dims, sums_rot,
+                )
+                S.arena.keep.append(sums_rot^)
             _mtick(ctx, self.ton, blk.tk, "angle")
             mamba3_backward_dt_partial_into(
                 ctx, S.d_dt_available, S.d_dt_raw, S.d_dt_bias_rows, S.d_dt_total, S.d_dt_angle,
@@ -910,23 +739,12 @@ struct Mamba3Rules(BackwardRules):
             )
             S.arena.keep.append(afn_sums^)
         else:
-            var held_join = False
-            comptime if M3_SCRATCH_HELD:
-                if blk.held:
-                    # the held block's own suffix sums (zeroed by the step's
-                    # one fill); nothing is appended to the scratch's keep list
-                    held_join = True
-                    mamba3_backward_angle_into(
-                        ctx, S.d_angle_rate_join, S.d_angle_raw_join, S.d_dt_angle_join, S.d_theta_join,
-                        st.dt_work, st.in_proj, b, l, dims, blk.held_sums[1],
-                    )
-            if not held_join:
-                var sums_join = _m3_scratch(own, ctx, mamba3_angle_suffix_sums_cells(b, l, nh))
-                mamba3_backward_angle_into(
-                    ctx, S.d_angle_rate_join, S.d_angle_raw_join, S.d_dt_angle_join, S.d_theta_join,
-                    st.dt_work, st.in_proj, b, l, dims, sums_join,
-                )
-                S.arena.keep.append(sums_join^)
+            var sums_join = _m3_scratch(own, ctx, mamba3_angle_suffix_sums_cells(b, l, nh))
+            mamba3_backward_angle_into(
+                ctx, S.d_angle_rate_join, S.d_angle_raw_join, S.d_dt_angle_join, S.d_theta_join,
+                st.dt_work, st.in_proj, b, l, dims, sums_join,
+            )
+            S.arena.keep.append(sums_join^)
         _mtick(ctx, self.ton, blk.tk, "angle")
         mamba3_backward_join_two_into(ctx, S.d_dt_join_base, S.d_dt_join_current, S.d_dt_join_adt, head_cells)
         _mtick(ctx, self.ton, blk.tk, "join_two")
@@ -999,17 +817,10 @@ struct Mamba3Rules(BackwardRules):
         _mtick(ctx, self.ton, blk.tk, "block_norm")
         mamba3_backward_reduce_into(ctx, d_norm_w, S.d_norm_w_rows, S.ones, S.workspace, RED3_NORM_W, dims, m)
         _mtick(ctx, self.ton, blk.tk, "reduce")
-        # the walk's closing synchronize: every launch above read the scratch.
-        # M3_SCRATCH_HELD: a held block frees nothing here, so there is nothing
-        # for a wait to fence; the scratch stays for the next step and the
-        # caller's own end wait (the tape's) is the only one.
-        var held = False
-        comptime if M3_SCRATCH_HELD:
-            held = blk.held
-        if not held:
-            ctx.synchronize()
-            S.arena.close()
-            blk.scratch = None
+        # the walk's closing synchronize: every launch above read the scratch
+        ctx.synchronize()
+        S.arena.close()
+        blk.scratch = None
 
 
 # ------------------------------------------------------------------ drivers

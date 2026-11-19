@@ -362,6 +362,11 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_GEMM_POOL_OFF-STAGE_DOWN_OFF.patch; record in docs/TOMBSTONES.md.
     comptime assert not is_defined["MOJOLEARN_GEMM_STAGE_DOWN_OFF"](), "removed 2026-11-18 (lane/fx-verdicts2, A/B ab3 NVIDIA L40S, wheel d652a4b0a1, job nvc-ab-20261118T182558Z-cb6e02, one run per arm, digests equal): the raw GEMM download was arm/base 1.125 geomean over the 3 gemm cells; the staged download is the route; recoverable at 85c36e324f"
     # ---- end lane fx-verdicts2
+    # ---- lane fx-verdicts4 (2026-11-19): verdicts of A/B round 2 (NVIDIA L40S, wheel 0c68d6cd27, job nvc-ab-20261119T154232Z-0642a5)
+    # TOMBSTONE: MOJOLEARN_XLINEAR_FAST_WB_RESIDENT (NOISE, A/B round 2 NVIDIA L40S, wheel 0c68d6cd27, job nvc-ab-20261119T154232Z-0642a5, one run per arm, digests equal) deleted 2026-11-19 by lane/fx-verdicts4; code recoverable at 8f3f639b13.
+    # Restore: git apply experiments/removed/MOJOLEARN_XLINEAR_FAST_WB_RESIDENT.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_XLINEAR_FAST_WB_RESIDENT"](), "removed 2026-11-19 (lane/fx-verdicts4, A/B round 2 NVIDIA L40S, wheel 0c68d6cd27, job nvc-ab-20261119T154232Z-0642a5, one run per arm, digests equal): the resident weight block of the linear decision entries was arm/base 0.94-1.20 on predict with three rows slower and fits flat (noise); code at 8f3f639b13, experiments/removed/MOJOLEARN_XLINEAR_FAST_WB_RESIDENT.patch"
+    # ---- end lane fx-verdicts4
     return True
 
 
