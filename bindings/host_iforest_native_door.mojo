@@ -19,16 +19,19 @@ from bindings.trees_lifetime_door import trees_resident_new
 from bindings.trees_side_records_unpack import trees_side_get, trees_side_put
 from bindings.p3nc_fitted_freeze_unpack import fitted_is_freezable_any
 from bindings.py_optional import py_present
+from bindings.host_tree_archive_keys_unpack import host_tree_archive_keys
+from bindings.py_balanced import py_item
 
 comptime _HOST_TOKEN_SLOT = "trees_iforest_host_resident_v1"
 
 
 def host_iforest_admit_option(value: PythonObject, context: PythonObject) raises:
+    var nk = host_tree_archive_keys()
     # Fit retains the original options by identity, including native NumPy
     # Unicode and numeric aliases that have distinct types from int64/float64.
     # Scoring uses the separately admitted resolved controls; do not reject a
     # successful fit merely because its unused original option is an alias.
-    if py_get(context, "ndarray") is not None:
+    if py_get(context, nk[].k_ndarray) is not None:
         var kind = py_type(value)
         var types = host_iforest_alias_types(context)
         for i in range(1, len(types)):  # driver-loop: exact original native option aliases
@@ -41,8 +44,9 @@ def host_iforest_alias_types(context: PythonObject) raises -> PythonObject:
     """`(dtype constructor, type of 'q', 'Q', 'g', 'U', 'S')`, built once per
     connected NumPy dtype constructor and kept in the context (p3-trees: the
     five np.dtype() calls ran for each option on every scoring call)."""
+    var nk = host_tree_archive_keys()
     var constructor = native_numpy_dtype(context)
-    var held = py_get(context, "_host_iforest_alias_types")
+    var held = py_get(context, nk[].k__host_iforest_alias_types)
     if held is not None and held[0] is constructor:
         return held
     var aliases = Python.tuple("q", "Q", "g", "U", "S")
@@ -50,11 +54,12 @@ def host_iforest_alias_types(context: PythonObject) raises -> PythonObject:
     for i in range(len(aliases)):  # driver-loop: exact original native option aliases
         _ = py_call(types.append, py_call(constructor, aliases[i]).type)
     var record = py_call(native_loaded_module("builtins").tuple, types)
-    py_setitem(context, "_host_iforest_alias_types", record)
+    py_setitem(context, nk[].k__host_iforest_alias_types, record)
     return record
 
 
 def _iforest_resolve(fields: PythonObject, context: PythonObject) raises:
+    var nk = host_tree_archive_keys()
     # A fitted instance assembled without a resolved seed historically resolves
     # its constructor knobs on first score. Resolve exactly those stored options.
     var b = native_loaded_module("builtins")
@@ -63,82 +68,83 @@ def _iforest_resolve(fields: PythonObject, context: PythonObject) raises:
     var names = Python.tuple("n_estimators", "max_samples", "max_depth", "max_features", "bootstrap", "contamination", "random_state", "warm_start", "verbose")
     for i in range(len(names)):  # driver-loop: fixed constructor scalar fields
         host_inference_scalar(fields[names[i]], context, String(names[i]) == "bootstrap" or String(names[i]) == "warm_start" or String(names[i]) == "verbose")
-    var trees = Int(py=py_call(native_int, fields["n_estimators"]))
+    var trees = Int(py=py_call(native_int, py_item(fields, nk[].k_n_estimators)))
     if trees < 1:
         raise Error("IsolationForest n_estimators must be at least one")
-    var samples = fields["max_samples"]
+    var samples = py_item(fields, nk[].k_max_samples)
     if py_type(samples) is b.str:
         if String(py_call(samples.lower)) != "auto":
             raise Error("IsolationForest max_samples must be auto, a positive integer or a fraction")
-        py_setitem(fields, "_max_samples_mode", 0)
-        py_setitem(fields, "_max_samples_int", 256)
-        py_setitem(fields, "_max_samples_frac", 1.0)
-    elif _one_of(py_type(samples), py_get(context, "bool_types", Python.tuple(b.bool))):
+        py_setitem(fields, nk[].k__max_samples_mode, 0)
+        py_setitem(fields, nk[].k__max_samples_int, 256)
+        py_setitem(fields, nk[].k__max_samples_frac, 1.0)
+    elif _one_of(py_type(samples), py_get(context, nk[].k_bool_types, Python.tuple(b.bool))):
         raise Error("IsolationForest max_samples cannot be a bool")
-    elif _one_of(py_type(samples), context["integer_types"]):
+    elif _one_of(py_type(samples), py_item(context, nk[].k_integer_types)):
         var count = Int(py=py_call(native_int, samples))
         if count < 1:
             raise Error("IsolationForest max_samples must be positive")
-        py_setitem(fields, "_max_samples_mode", 1)
-        py_setitem(fields, "_max_samples_int", count)
-        py_setitem(fields, "_max_samples_frac", 1.0)
+        py_setitem(fields, nk[].k__max_samples_mode, 1)
+        py_setitem(fields, nk[].k__max_samples_int, count)
+        py_setitem(fields, nk[].k__max_samples_frac, 1.0)
     else:
         var fraction = Float64(py=py_call(native_float, samples))
         if not (fraction > 0.0 and fraction <= 1.0):
             raise Error("IsolationForest fractional max_samples must be in (0, 1]")
-        py_setitem(fields, "_max_samples_mode", 2)
-        py_setitem(fields, "_max_samples_int", 256)
-        py_setitem(fields, "_max_samples_frac", fraction)
-    var depth = -1 if fields["max_depth"] is None else Int(py=py_call(native_int, fields["max_depth"]))
-    py_setitem(fields, "_max_depth", depth)
-    if fields["max_depth"] is not None and depth < 1:
+        py_setitem(fields, nk[].k__max_samples_mode, 2)
+        py_setitem(fields, nk[].k__max_samples_int, 256)
+        py_setitem(fields, nk[].k__max_samples_frac, fraction)
+    var depth = -1 if py_item(fields, nk[].k_max_depth) is None else Int(py=py_call(native_int, py_item(fields, nk[].k_max_depth)))
+    py_setitem(fields, nk[].k__max_depth, depth)
+    if py_item(fields, nk[].k_max_depth) is not None and depth < 1:
         raise Error("IsolationForest max_depth must be None or positive")
-    var features = fields["max_features"]
-    if _one_of(py_type(features), py_get(context, "bool_types", Python.tuple(b.bool))):
+    var features = py_item(fields, nk[].k_max_features)
+    if _one_of(py_type(features), py_get(context, nk[].k_bool_types, Python.tuple(b.bool))):
         raise Error("IsolationForest max_features cannot be a bool")
-    if _one_of(py_type(features), context["integer_types"]):
+    if _one_of(py_type(features), py_item(context, nk[].k_integer_types)):
         var count = Int(py=py_call(native_int, features))
         if count < 1:
             raise Error("IsolationForest integer max_features must be positive")
-        py_setitem(fields, "_max_features_mode", 1)
-        py_setitem(fields, "_max_features_int", count)
-        py_setitem(fields, "_max_features_frac", 1.0)
+        py_setitem(fields, nk[].k__max_features_mode, 1)
+        py_setitem(fields, nk[].k__max_features_int, count)
+        py_setitem(fields, nk[].k__max_features_frac, 1.0)
     else:
         var fraction = Float64(py=py_call(native_float, features))
         if not (fraction > 0.0 and fraction <= 1.0):
             raise Error("IsolationForest fractional max_features must be in (0, 1]")
-        py_setitem(fields, "_max_features_mode", 0)
-        py_setitem(fields, "_max_features_int", 0)
-        py_setitem(fields, "_max_features_frac", fraction)
-    var contamination = fields["contamination"]
+        py_setitem(fields, nk[].k__max_features_mode, 0)
+        py_setitem(fields, nk[].k__max_features_int, 0)
+        py_setitem(fields, nk[].k__max_features_frac, fraction)
+    var contamination = py_item(fields, nk[].k_contamination)
     if py_type(contamination) is b.str:
         if String(py_call(contamination.lower)) != "auto":
             raise Error("IsolationForest contamination must be auto or in (0, .5]")
-        py_setitem(fields, "_contamination_auto", True)
-        py_setitem(fields, "_contamination", 0.0)
+        py_setitem(fields, nk[].k__contamination_auto, True)
+        py_setitem(fields, nk[].k__contamination, 0.0)
     else:
         var fraction = Float64(py=py_call(native_float, contamination))
         if not (fraction > 0.0 and fraction <= 0.5):
             raise Error("IsolationForest contamination must be auto or in (0, .5]")
-        py_setitem(fields, "_contamination_auto", False)
-        py_setitem(fields, "_contamination", fraction)
-    var seed = 0 if fields["random_state"] is None else Int(py=py_call(native_int, fields["random_state"]))
+        py_setitem(fields, nk[].k__contamination_auto, False)
+        py_setitem(fields, nk[].k__contamination, fraction)
+    var seed = 0 if py_item(fields, nk[].k_random_state) is None else Int(py=py_call(native_int, py_item(fields, nk[].k_random_state)))
     if seed < 0 or seed > 4294967295:
         raise Error("IsolationForest random_state must fit uint32")
-    if Bool(py=fields["warm_start"]):
+    if Bool(py=py_item(fields, nk[].k_warm_start)):
         raise Error("NotImplementedError: IsolationForest warm_start is not supported")
-    if fields["n_jobs"] is not None:
+    if py_item(fields, nk[].k_n_jobs) is not None:
         raise Error("NotImplementedError: IsolationForest n_jobs is not supported")
-    if Bool(py=fields["verbose"]):
+    if Bool(py=py_item(fields, nk[].k_verbose)):
         raise Error("NotImplementedError: IsolationForest verbose is not supported")
-    if fields["output_type"] is not None:
+    if py_item(fields, nk[].k_output_type) is not None:
         raise Error("NotImplementedError: IsolationForest output_type is not supported")
-    py_setitem(fields, "_n_estimators", trees)
-    py_setitem(fields, "_bootstrap", Bool(py=fields["bootstrap"]))
-    py_setitem(fields, "_seed", seed)
+    py_setitem(fields, nk[].k__n_estimators, trees)
+    py_setitem(fields, nk[].k__bootstrap, Bool(py=py_item(fields, nk[].k_bootstrap)))
+    py_setitem(fields, nk[].k__seed, seed)
 
 
 def host_iforest_admit_state(fields: PythonObject, context: PythonObject) raises:
+    var nk = host_tree_archive_keys()
     var names = Python.tuple("_n_estimators", "_max_samples_mode", "_max_samples_int", "_max_samples_frac", "_max_depth", "_max_features_mode", "_max_features_int", "_max_features_frac", "_seed", "_contamination")
     for i in range(len(names)):  # driver-loop: fixed resolved native ABI controls
         if py_contains(fields, names[i]):
@@ -147,8 +153,8 @@ def host_iforest_admit_state(fields: PythonObject, context: PythonObject) raises
     for i in range(len(flags)):  # driver-loop: fixed native truth controls
         if py_contains(fields, flags[i]):
             host_inference_scalar(fields[flags[i]], context, True)
-    var train = py_get(fields, "_x")
-    if py_type(train) is py_get(context, "ndarray") and classical_kind(train, context) == "O":
+    var train = py_get(fields, nk[].k__x)
+    if py_type(train) is py_get(context, nk[].k_ndarray) and classical_kind(train, context) == "O":
         raise Error("TypeError: IsolationForest training state requires native numeric storage")
 
 
@@ -156,10 +162,11 @@ def host_iforest_owned_x(fields: PythonObject) raises -> Bool:
     """The fitted `_x` is the fit's own read-only float32 copy
     (`input_copied_` True and its read-only flag set by the fit): the only
     training storage a resident forest may mirror (lesson 10)."""
-    var copied = py_get(fields, "input_copied_")
+    var nk = host_tree_archive_keys()
+    var copied = py_get(fields, nk[].k_input_copied_)
     if copied is None or not Bool(py=copied):
         return False
-    var x = py_get(fields, "_x")
+    var x = py_get(fields, nk[].k__x)
     if x is None or not fitted_is_freezable_any(x):
         return False
     return Bool(py=x._readonly)
@@ -171,15 +178,16 @@ def _host_resident_entries(entry: PythonObject, context: PythonObject) raises ->
     (`iforest_resident()` is 1, `IDN_IF_RESIDENT`); None otherwise. Read from
     the minting module's dictionary (no module __getattr__), and refused
     unless each is a fixed native entry, like `iforest_run` itself."""
+    var nk = host_tree_archive_keys()
     var owner = entry.__self__
-    if owner is None or py_type(owner) is not context["host_iforest_module_type"]:
+    if owner is None or py_type(owner) is not py_item(context, nk[].k_host_iforest_module_type):
         return PythonObject(None)
     var table = py_fields(owner)
-    var probe = py_get(table, "iforest_resident")
-    var release = py_get(table, "iforest_resident_release")
+    var probe = py_get(table, nk[].k_iforest_resident)
+    var release = py_get(table, nk[].k_iforest_resident_release)
     if probe is None or release is None:
         return PythonObject(None)
-    if py_type(probe) is not context["host_tree_entry_type"] or py_type(release) is not context["host_tree_entry_type"]:
+    if py_type(probe) is not py_item(context, nk[].k_host_tree_entry_type) or py_type(release) is not py_item(context, nk[].k_host_tree_entry_type):
         raise Error("TypeError: explicit CPU inference requires a fixed native entry")
     if Int(py=py_call(probe)) != 1:
         return PythonObject(None)
@@ -224,13 +232,14 @@ def _host_forest_inference(model: PythonObject, fields: PythonObject, query: Pyt
     writes, so the scores are those of the fit that saved them, on every
     column. A resident binary keeps the imported forest under a token, the
     record anchored on the held forest tuple."""
-    var forest = fields["_if_forest"]
+    var nk = host_tree_archive_keys()
+    var forest = py_item(fields, nk[].k__if_forest)
     var unpacked = _host_forest_words(forest, context)
     var entry = _kernel_entry("iforest_forest_run", context)
-    if not py_contains(fields, "max_samples_") or not py_contains(fields, "offset_"):
+    if not py_contains(fields, nk[].k_max_samples_) or not py_contains(fields, nk[].k_offset_):
         raise Error("IsolationForest saved forest lacks its fitted offset_ or max_samples_")
-    var out = host_archive_typed(Python.tuple(rows), "<i4" if want == 2 else "<f4", context["output_context"])
-    var info = host_archive_typed(Python.tuple(4), "<f8", context["output_context"])
+    var out = host_archive_typed(Python.tuple(rows), "<i4" if want == 2 else "<f4", py_item(context, nk[].k_output_context))
+    var info = host_archive_typed(Python.tuple(4), "<f8", py_item(context, nk[].k_output_context))
     var resident = _host_resident_entries(entry, context)
     var record = Optional[PythonObject]()
     var held = 0
@@ -241,8 +250,8 @@ def _host_forest_inference(model: PythonObject, fields: PythonObject, query: Pyt
         if same:
             held = Int(py=record.value()[0])
     var b = native_loaded_module("builtins")
-    var params = Python.list(PythonObject(features), PythonObject(rows), py_call(b.int, fields["max_samples_"]),
-                             py_call(b.float, fields["offset_"]), PythonObject(want), PythonObject(held))
+    var params = Python.list(PythonObject(features), PythonObject(rows), py_call(b.int, py_item(fields, nk[].k_max_samples_)),
+                             py_call(b.float, py_item(fields, nk[].k_offset_)), PythonObject(want), PythonObject(held))
     try:
         _ = py_call(entry, unpacked[0], classical_address(query), classical_address(out) if want != 2 else PythonObject(0),
                     classical_address(out) if want == 2 else PythonObject(0), classical_address(info), params)
@@ -263,28 +272,29 @@ def _host_forest_inference(model: PythonObject, fields: PythonObject, query: Pyt
     _ = info^
     if want != 2 and public:
         out = host_tree_wide(out, context)
-    return classical_input(out, context, "isolation forest result") if public and py_get(context, "ndarray") is not None else out
+    return classical_input(out, context, "isolation forest result") if public and py_get(context, nk[].k_ndarray) is not None else out
 
 
 def host_iforest_inference(model: PythonObject, fields: PythonObject, source: PythonObject, want: Int,
                            context: PythonObject, public: Bool) raises -> PythonObject:
+    var nk = host_tree_archive_keys()
     var b = native_loaded_module("builtins")
-    var name = py_call(b.type.__dict__["__name__"].__get__, py_type(model))
+    var name = py_call(py_item(b.type.__dict__, nk[].k___name__).__get__, py_type(model))
     if host_sparse_format(source).byte_length() > 0:
         raise Error("TypeError: Sparse data was passed for X, but dense data is required. Use '.toarray()' to convert to a dense numpy array. (" + String(name) + " takes dense X only.)")
-    var forest_only = not py_contains(fields, "_x") and py_contains(fields, "_if_forest")
-    if not py_contains(fields, "_x") and not forest_only:
+    var forest_only = not py_contains(fields, nk[].k__x) and py_contains(fields, nk[].k__if_forest)
+    if not py_contains(fields, nk[].k__x) and not forest_only:
         raise Error("IsolationForest requires fit before scoring")
     var query = _svc_input(source, context)
     var rows = Int(py=query.shape[0])
-    var features = Int(py=fields["n_features_in_"])
+    var features = Int(py=py_item(fields, nk[].k_n_features_in_))
     if Int(py=query.shape[1]) != features:
         raise Error("IsolationForest query width differs from fitted dimensions")
-    if not Bool(py=py_get(fields, "_mojolearn_fitting", False)):
+    if not Bool(py=py_get(fields, nk[].k__mojolearn_fitting, False)):
         host_inference_feature_names(model, fields, context)
     if forest_only:
         return _host_forest_inference(model, fields, query, rows, features, want, name, context, public)
-    var train = classical_input(fields["_x"], context, "IsolationForest fitted samples")
+    var train = classical_input(py_item(fields, nk[].k__x), context, "IsolationForest fitted samples")
     if Int(py=train.ndim) != 2 or Int(py=train.shape[1]) != features:
         raise Error("IsolationForest fitted sample shape differs from fitted dimensions")
     if not classical_is_f32(train, context) or (not classical_is_array(train, context) and not Bool(py=train.dtype.isnative)):
@@ -295,10 +305,10 @@ def host_iforest_inference(model: PythonObject, fields: PythonObject, source: Py
     var count = Int(py=train.shape[0])
     if features < 1 or count < 1 or count > 2147483647 // features:
         raise Error("IsolationForest fitted dimensions exceed native indexing")
-    var out = host_archive_typed(Python.tuple(rows), "<i4" if want == 2 else "<f4", context["output_context"])
-    if not py_contains(fields, "_seed"):
+    var out = host_archive_typed(Python.tuple(rows), "<i4" if want == 2 else "<f4", py_item(context, nk[].k_output_context))
+    if not py_contains(fields, nk[].k__seed):
         _iforest_resolve(fields, context)
-    var params = Python.list(count, features, rows, fields["_n_estimators"], fields["_max_samples_mode"], fields["_max_samples_int"], fields["_max_samples_frac"], fields["_max_depth"], fields["_max_features_mode"], fields["_max_features_int"], fields["_max_features_frac"], Int(Bool(py=fields["_bootstrap"])), fields["_seed"], Int(Bool(py=fields["_contamination_auto"])), fields["_contamination"], want)
+    var params = Python.list(count, features, rows, py_item(fields, nk[].k__n_estimators), py_item(fields, nk[].k__max_samples_mode), py_item(fields, nk[].k__max_samples_int), py_item(fields, nk[].k__max_samples_frac), py_item(fields, nk[].k__max_depth), py_item(fields, nk[].k__max_features_mode), py_item(fields, nk[].k__max_features_int), py_item(fields, nk[].k__max_features_frac), Int(Bool(py=py_item(fields, nk[].k__bootstrap))), py_item(fields, nk[].k__seed), Int(Bool(py=py_item(fields, nk[].k__contamination_auto))), py_item(fields, nk[].k__contamination), want)
     var entry = _kernel_entry("iforest_run", context)
     # Lane perf-sweep-trees (2026-11-05): the resident form of the GPU owner
     # (bindings/trees_public_iforest.mojo::_run) on the explicit CPU entry.
@@ -330,11 +340,11 @@ def host_iforest_inference(model: PythonObject, fields: PythonObject, source: Py
     var same_train = False
     if resident is not None:
         record = py_present(trees_side_get(_HOST_TOKEN_SLOT, model))
-        same_train = Bool(record) and record.value()[1] is fields["_x"]
+        same_train = Bool(record) and record.value()[1] is py_item(fields, nk[].k__x)
         if same_train:
             held = Int(py=record.value()[0])
         _ = py_call(params.append, PythonObject(held))
-    var info = host_archive_typed(Python.tuple(3 if resident is None else 4), "<f8", context["output_context"])
+    var info = host_archive_typed(Python.tuple(3 if resident is None else 4), "<f8", py_item(context, nk[].k_output_context))
     try:
         _ = py_call(entry, classical_address(train), classical_address(query), classical_address(out) if want != 2 else PythonObject(0), classical_address(out) if want == 2 else PythonObject(0), classical_address(info), params)
     except error:
@@ -346,8 +356,8 @@ def host_iforest_inference(model: PythonObject, fields: PythonObject, source: Py
         raise Error("HostIForestKernelError: " + text)
     _ = train^
     _ = query^
-    py_setitem(fields, "offset_", Float64(Float32(classical_f64(info, 0))))
-    py_setitem(fields, "max_samples_", Int(classical_f64(info, 1)))
+    py_setitem(fields, nk[].k_offset_, Float64(Float32(classical_f64(info, 0))))
+    py_setitem(fields, nk[].k_max_samples_, Int(classical_f64(info, 1)))
     if resident is not None:
         var token = Int(MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(info)))[3])
         if token != held or not same_train:
@@ -357,8 +367,8 @@ def host_iforest_inference(model: PythonObject, fields: PythonObject, source: Py
             # lifetime. A model without weak references keeps no record, so
             # its token is released at once.
             var lifetime = record.value()[2] if Bool(record) and token == Int(py=record.value()[0]) else trees_resident_new(resident[0], token)
-            _ = trees_side_put(_HOST_TOKEN_SLOT, model, Python.list(PythonObject(token), fields["_x"], lifetime))
+            _ = trees_side_put(_HOST_TOKEN_SLOT, model, Python.list(PythonObject(token), py_item(fields, nk[].k__x), lifetime))
     _ = info^
     if want != 2 and public:
         out = host_tree_wide(out, context)
-    return classical_input(out, context, "isolation forest result") if public and py_get(context, "ndarray") is not None else out
+    return classical_input(out, context, "isolation forest result") if public and py_get(context, nk[].k_ndarray) is not None else out
