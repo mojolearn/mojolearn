@@ -35,6 +35,7 @@ resident transform `kmeans_transform_device` (cluster/estimator.mojo),
 the bodies `kmeans_predict` and `kmeans_transform` run after their own
 upload, over the same centroid bytes: the bits are the same.
 """
+from core.resident_upload_count import RUC_KMEANS_CENTERS, resident_upload_note
 from std.atomic import Atomic, Ordering
 
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -71,6 +72,7 @@ struct ResidentKMeansCenters(Movable):
         var ctx = process_ctx[_DEVCTX_SLOT](dplan)
         var centers = ctx.enqueue_create_buffer[DType.float32](n_clusters * n_features)
         ctx.enqueue_copy(dst_buf=centers, src_ptr=centers_ptr)
+        resident_upload_note(RUC_KMEANS_CENTERS, n_clusters * n_features)  # check-only count (compiles to nothing by default)
         ctx.synchronize()
         self.n_clusters = n_clusters
         self.n_features = n_features

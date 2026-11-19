@@ -29,6 +29,7 @@ one-shot entry's (`tools/identity_break.py`, the kde lanes, cuda against the
 cpu host route). The context and the buffers are destroyed in DEVIATION
 1946's order, buffers before the context.
 """
+from core.resident_upload_count import RUC_KDE, resident_upload_note
 from std.sys.compile import is_defined
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import NUMERIC_FAST
@@ -137,6 +138,7 @@ struct ResidentKdeFit(Movable):
         else:
             copy_f32(train_ptr, host.unsafe_ptr(), n)
             ctx.enqueue_copy(dst_buf=train, src_ptr=host.unsafe_ptr())
+        resident_upload_note(RUC_KDE, n)  # check-only count (compiles to nothing by default)
         var sum_w = Float32(n_train)
         var wbuf: DeviceBuffer[DType.float32]
         if has_weights:
@@ -144,6 +146,7 @@ struct ResidentKdeFit(Movable):
             var whost = ctx.enqueue_create_host_buffer[DType.float32](n_train)
             copy_f32(weights.unsafe_ptr(), whost.unsafe_ptr(), n_train)
             ctx.enqueue_copy(dst_buf=wbuf, src_ptr=whost.unsafe_ptr())
+            resident_upload_note(RUC_KDE, n_train)
             ctx.synchronize()
             _ = whost^
             sum_w = host_sum_weights(weights)

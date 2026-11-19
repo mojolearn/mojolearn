@@ -9,6 +9,7 @@
 # The RUN half, python/mojolearn/_expansion_decomp.py's `_Kit` / `_M` with no
 # Python, is bindings/decomp_kit_run.mojo (DKit).
 from std.python import Python, PythonObject
+from core.resident_upload_count import RUC_DECOMP_KIT, resident_upload_note
 from bindings.py_cpython_table import cpython_table
 from bindings.native_loaded_module_door import native_loaded_module, NativeModules
 from bindings.native_prepared_owner_unpack import prepared_get, prepared_put, prepared_drop
@@ -592,6 +593,7 @@ def decomp_door_resident_input(mut door: DecompDoor, mut kit: DKit, source: Pyth
             var py = Python()
             with GILReleased(py):
                 kit.dev_upload(handle, address, n)
+            resident_upload_note(RUC_DECOMP_KIT, n)  # check-only count (compiles to nothing by default)
         except error:
             kit.dev_free(handle)
             raise error^

@@ -108,6 +108,7 @@ from checks.native_tests.linalg_numerical import register as register_linalg_num
 from checks.native_tests.linear_owner import register as register_linear_owner
 from checks.native_tests.linear_svc_native import register as register_linear_svc_native
 from checks.native_tests.linear_svr_native import register as register_linear_svr_native
+from checks.native_tests.llama_refuse_row_scan import register as register_llama_refuse_row_scan
 from checks.native_tests.lof_native import register as register_lof_native
 from checks.native_tests.logistic_label_weights import register as register_logistic_label_weights
 from checks.native_tests.logistic_numeric import register as register_logistic_numeric
@@ -134,7 +135,9 @@ from checks.native_tests.neighbors_weighted_largek import register as register_n
 from checks.native_tests.nmf_native import register as register_nmf_native
 from checks.native_tests.ocsvm_native import register as register_ocsvm_native
 from checks.native_tests.oob_exact_sum import register as register_oob_exact_sum
+from checks.native_tests.ops_grad_identity import register as register_ops_grad_identity
 from checks.native_tests.ops_higher import register as register_ops_higher
+from checks.native_tests.ops_lm_head_v2 import register as register_ops_lm_head_v2
 from checks.native_tests.ops_optimizer import register as register_ops_optimizer
 from checks.native_tests.ops_optimizer_requests import register as register_ops_optimizer_requests
 from checks.native_tests.ops_session import register as register_ops_session
@@ -157,6 +160,7 @@ from checks.native_tests.rankn_math import register as register_rankn_math
 from checks.native_tests.rankn_views import register as register_rankn_views
 from checks.native_tests.resample_cross_vendor_fold import register as register_resample_cross_vendor_fold
 from checks.native_tests.resample_cv_row_order import register as register_resample_cv_row_order
+from checks.native_tests.resident_second_call import register as register_resident_second_call
 from checks.native_tests.runner import Check
 from checks.native_tests.sequence_croston import register as register_sequence_croston
 from checks.native_tests.sequence_garch import register as register_sequence_garch
@@ -193,6 +197,7 @@ from checks.native_tests.training_neural_rng_slices import register as register_
 from checks.native_tests.training_primitives import register as register_training_primitives
 from checks.native_tests.training_residual_dropout_mask import register as register_training_residual_dropout_mask
 from checks.native_tests.training_small_mlp import register as register_training_small_mlp
+from checks.native_tests.transformer_backward_packed import register as register_transformer_backward_packed
 from checks.native_tests.transformer_block_session import register as register_transformer_block_session
 from checks.native_tests.transformer_decode_door import register as register_transformer_decode_door
 from checks.native_tests.transformer_host_block import register as register_transformer_host_block
@@ -543,6 +548,7 @@ def all_checks() -> List[Check]:
     checks.append(register_linear_owner())
     checks.append(register_linear_svc_native())
     checks.append(register_linear_svr_native())
+    checks.append(register_llama_refuse_row_scan())
     checks.append(register_lof_native())
     checks.append(register_logistic_label_weights())
     checks.append(register_logistic_numeric())
@@ -569,7 +575,9 @@ def all_checks() -> List[Check]:
     checks.append(register_nmf_native())
     checks.append(register_ocsvm_native())
     checks.append(register_oob_exact_sum())
+    checks.append(register_ops_grad_identity())
     checks.append(register_ops_higher())
+    checks.append(register_ops_lm_head_v2())
     checks.append(register_ops_optimizer())
     checks.append(register_ops_optimizer_requests())
     checks.append(register_ops_session())
@@ -592,6 +600,7 @@ def all_checks() -> List[Check]:
     checks.append(register_rankn_views())
     checks.append(register_resample_cross_vendor_fold())
     checks.append(register_resample_cv_row_order())
+    checks.append(register_resident_second_call())
     checks.append(register_sequence_croston())
     checks.append(register_sequence_garch())
     checks.append(register_sequence_moe())
@@ -627,6 +636,7 @@ def all_checks() -> List[Check]:
     checks.append(register_training_primitives())
     checks.append(register_training_residual_dropout_mask())
     checks.append(register_training_small_mlp())
+    checks.append(register_transformer_backward_packed())
     checks.append(register_transformer_block_session())
     checks.append(register_transformer_decode_door())
     checks.append(register_transformer_host_block())
