@@ -2739,7 +2739,7 @@ def _xl_method_name(method: Int) -> String:
 
 
 def _xl_dispatch(model: PythonObject, operation: Int, name: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    var nk = x_linear_keys()
+        var nk = x_linear_keys()
         var result = PythonObject(None)
         if operation == X_LINEAR_OPN_REGRESSOR_PREDICT or operation == X_LINEAR_OPN_REGRESSOR_PREDICT_SCORE:
             result = xl_regressor_predict(model, args, context)
