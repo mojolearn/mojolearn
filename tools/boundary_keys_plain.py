@@ -21,7 +21,8 @@ notion of a door's text. It is a reading aid for analysis only: nothing compiles
 Rules it relies on (the codemod and the recipe keep them):
   * a held key is always spelled `nk[].k_<name>`, and `<name>` is the Python key itself;
   * an operation code constant is `<FAMILY>_OPN_<NAME>` with `<NAME>` the operation name in upper case
-    (operation names are lower-case identifiers), and the variable holding a code is named `operation`;
+    (operation names are lower-case identifiers), and the variable holding a code keeps the name the
+    door's chain compared (`operation`, or `op`);
   * a family's table file is `bindings/<family>_keys_unpack.mojo`; it is returned unchanged (its fill lists
     every name of the family, so readers treat it as a manifest, never as a caller).
 Import statements are left as written.
@@ -35,7 +36,7 @@ _KEY = re.compile(r"\bnk\[\]\.k_(\w+)")
 _ITEM = re.compile(r"\bpy_item\(")
 _OPN = re.compile(r"\b[A-Z][A-Z0-9_]*?_OPN_([A-Z0-9_]+)\b")
 _OP_CODE = re.compile(r"\bpy_op_code\(")
-_OP_PARAM = re.compile(r"\boperation\s*:\s*Int\b")
+_OP_PARAM = re.compile(r"\b(operation|op)\s*:\s*Int\b")
 
 
 def is_keys_file(path):
@@ -128,7 +129,7 @@ def _line(line):
             break
         line = line[:m.start()] + "String(py=" + args[1].strip() + ")" + line[end + 1:]
     line = _OPN.sub(lambda m: '"' + m.group(1).lower() + '"', line)
-    return _OP_PARAM.sub("operation: String", line)
+    return _OP_PARAM.sub(lambda m: m.group(1) + ": String", line)
 
 
 def plain(path, text):
@@ -151,7 +152,7 @@ def plain(path, text):
             out.append(line)
             importing = "(" in line and ")" not in line
             continue
-        if "nk[].k_" in line or (coded and ("_OPN_" in line or "py_op_code(" in line or "operation" in line)):
+        if "nk[].k_" in line or (coded and ("_OPN_" in line or "py_op_code(" in line or ": Int" in line)):
             line = _line(line)
         out.append(line)
     return "\n".join(out)
