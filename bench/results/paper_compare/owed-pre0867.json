@@ -4989,6 +4989,25 @@
     "sqrt-comptime-step-off"
    ],
    "decides": "whether the promoted comptime sqrt step is what slowed trust_rank_kernel: if B (the run-time loop) is faster on metric-trustworthiness, the promotion is revisited for kernels that inline one sqrt per pair; if A and B agree the 4.3x is the box and the row is closed. cagra and ann-refine ride along as the other distance rows of this lane"
+  },
+  {
+   "id": "xprep-arena-hugepage-rows",
+   "source": "lane fx-board-preprocess (2026-11-19): the arm was added without its row; row added by the orchestrator (~/mojolearn-evidence/briefs-20261118/fx-board-preprocess-RESULT.md)",
+   "kind": "ab",
+   "lane": [
+    "normalizer",
+    "poly-features",
+    "label-binarizer",
+    "multilabel-binarizer",
+    "binarizer"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "xprep-arena-hugepage"
+   ],
+   "decides": "B becomes the default if it is faster at equal quality on the NVIDIA L40S, base and arm timed in the SAME pod job; digests must not move; time also a 500,000 x 100 neighbour and a 1,000,000 x 220 random non-board set before a flip (no dimension targeting)"
   }
  ]
 }
