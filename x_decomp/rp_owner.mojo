@@ -13,6 +13,7 @@ The LAZY switch's deferred download is the same words downloaded at fit
 (the state between calls is the published matrix)."""
 from std.math import sqrt
 
+from core.host_finite_scan import host_all_finite_f32
 from x_decomp.api import rand_run
 from x_decomp.cells import F32Ptr
 from x_decomp.exec_trait import Exec
@@ -111,6 +112,7 @@ def rp_fit_run[E: Exec, D: RDev, RES: Bool, X: DecompDev](
 
 def rp_project_run[E: Exec, D: RDev, RES: Bool, X: DecompDev](
     x: F32Ptr, m: Int, d: Int, matrix: F32Ptr, rows: Int, tiled: Bool, out_buf: F32Ptr, matrix_dev: Int = -1,
+    unchecked: Bool = False,
 ) raises -> Int:
     """X (m x d) times matrix^T (matrix rows x d) into out (m x rows):
     with `tiled` (transform on a dense X) the tiled projection on a GPU
@@ -120,7 +122,11 @@ def rp_project_run[E: Exec, D: RDev, RES: Bool, X: DecompDev](
     ne1-a-decomp-resident, N350; the caller owns it, so it is not in this
     kit's ledger), or -1 to upload it here. Every step above is on the
     device on a GPU binding either way, so the route and the bits are the
-    same; the host words stay attached and equal."""
+    same; the host words stay attached and equal. `unchecked` (with
+    `tiled`): no one has tested X finite yet. The tiled projection's flag
+    is that test; where the tile does not run, X's host words are scanned
+    here once (across the host's cores, core/host_finite_scan.mojo) before
+    the product, and 1 is returned for a non-finite X as the flag would."""
     var kit = RKit[E, D, RES]()
     try:
         var a = kit.add(Int(x), -1, m, d)
@@ -139,6 +145,10 @@ def rp_project_run[E: Exec, D: RDev, RES: Bool, X: DecompDev](
                     var bad = kit.word(flag)
                     kit.close()
                     return 1 if bad != 0 else 0
+        if unchecked:
+            if not host_all_finite_f32(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(x)), m * d):
+                kit.close()
+                return 1
         var y = kit.mm(a, b, tb=True)
         kit.copy_out(y, out_buf, m * rows)
         kit.close()
