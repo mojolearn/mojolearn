@@ -30,10 +30,15 @@ host and device evaluate differently (a product's words differ wherever the
 two orders round differently); a backward that reads a stale or reused
 buffer on one column.
 
-Not covered (their arguments are id descriptors or seeds this file does not
-build): embedding, take, index, gather_rows, permutation, dropout, rotary,
-any/all, the 2-D-only `sum(axis)` / `mean(axis)` spellings and the private
-transformer ops. OPS_LM_HEAD_V2 has its own check (ops_lm_head_v2).
+Also: rotary, the transformer's own linear and softmax, and a seeded
+permutation with the rows gathered through it (forward only: a gather
+carries no gradient).
+
+Not covered (their arguments are integer id descriptors or a mode word this
+file does not build): embedding, take, index, dropout, any/all and the
+2-D-only `sum(axis)` / `mean(axis)` spellings. OPS_LM_HEAD_V2 has its own
+check (ops_lm_head_v2); the block-step and generation ops are not public
+session ops.
 
 One device queue (DeviceExec shares the sequence context), so the cases run
 one after another; a case's host work is a few milliseconds and uses the host
@@ -49,7 +54,8 @@ from autograd.ops_api import (
     OPS_MAXPOOL2D, OPS_MEAN_N, OPS_MINIMUM, OPS_MSE, OPS_MUL, OPS_NARROW, OPS_PAD, OPS_PERMUTE, OPS_POW,
     OPS_RECIPROCAL, OPS_RELU, OPS_RESHAPE, OPS_RESHAPE_N, OPS_RMS_NORM, OPS_ROUND, OPS_SCALE, OPS_SIGMOID, OPS_SIGN,
     OPS_SILU, OPS_SIN, OPS_SOFTMAX, OPS_SOFTMAX_N, OPS_SOFTPLUS, OPS_SQRT, OPS_SUB, OPS_SUM_N, OPS_TANH,
-    OPS_TRANSPOSE, OPS_WHERE,
+    OPS_TRANSPOSE, OPS_WHERE, OPS_GATHER_ROWS, OPS_PERMUTATION, OPS_ROTARY, OPS_TRANSFORMER_LINEAR,
+    OPS_TRANSFORMER_SOFTMAX,
 )
 from core.hostptr import f32_ptr
 from sequence.exec_trait import Exec
@@ -70,8 +76,9 @@ comptime OGI_LOSS = 5
 comptime OGI_NORM = 2
 comptime OGI_CONV = 4
 comptime OGI_SHAPE = 8
+comptime OGI_EXTRA = 4
 comptime OGI_CASES = (OGI_MATMUL + OGI_LINEAR + OGI_UNARY + OGI_BINARY + OGI_SELECT + OGI_REDUCE + OGI_LOSS
-                      + OGI_NORM + OGI_CONV + OGI_SHAPE)
+                      + OGI_NORM + OGI_CONV + OGI_SHAPE + OGI_EXTRA)
 
 # the element-wise shape: 4,690 elements
 comptime _ER = 70
@@ -556,6 +563,33 @@ def _expand[E: Exec & Movable & Deinitable](mut s: OpsSession[E], mut refusal: S
     return _finish(s, s.op(OPS_EXPAND, hs, ints, List[Float32]()), hs, _one(_d2(1, _EC)), refusal)
 
 
+def _extra[E: Exec & Movable & Deinitable](mut s: OpsSession[E], k: Int, mut refusal: String) raises -> List[List[Float32]]:
+    if k == 0:
+        # rotary position embedding: head_dim 16 over a width of 64, positions from 3, theta 10000
+        var x = _leaf(s, _d2(_ER, 64), 9000, -2.0, 2.0)
+        var hs: List[Int] = [x]
+        var ints: List[Int] = [16, 3]
+        var theta: List[Float32] = [Float32(10000.0)]
+        return _finish(s, s.op(OPS_ROTARY, hs, ints, theta), hs, _one(_d2(_ER, 64)), refusal)
+    if k == 1:
+        # the transformer's own projection (its GEMM fold): a square weight, so either orientation fits
+        var x = _leaf(s, _d2(130, 70), 9001, -1.0, 1.0)
+        var w = _leaf(s, _d2(70, 70), 9101, -0.3, 0.3)
+        var hs: List[Int] = [x, w]
+        return _finish(s, _op2(s, OPS_TRANSFORMER_LINEAR, x, w), hs, _two(_d2(130, 70), _d2(70, 70)), refusal)
+    if k == 2:
+        var x = _leaf(s, _d2(_ER, _EC), 9002, -2.0, 2.0)
+        var hs: List[Int] = [x]
+        return _finish(s, _op1(s, OPS_TRANSFORMER_SOFTMAX, x), hs, _one(_d2(_ER, _EC)), refusal)
+    # a seeded permutation of the rows and the rows gathered through it (no gradient through a gather)
+    var x = _leaf(s, _d2(_ER, _EC), 9003, -2.0, 2.0, False)
+    var order: List[Int] = [_ER, 7, 0, 0]              # rows, seed low, seed high, epoch
+    var perm = s.op(OPS_PERMUTATION, List[Int](), order, List[Float32]())
+    var hs: List[Int] = [x, perm]
+    var span: List[Int] = [0, 0]                        # from the first index, every index
+    return _forward(s, s.op(OPS_GATHER_ROWS, hs, span, List[Float32]()))
+
+
 # ---------------------------------------------------------------- the table
 
 def _case_name(which: Int) -> String:
@@ -587,7 +621,10 @@ def _case_name(which: Int) -> String:
     if k < OGI_CONV:
         return "conv / pool " + String(k)
     k -= OGI_CONV
-    return "shape op " + String(k)
+    if k < OGI_SHAPE:
+        return "shape op " + String(k)
+    k -= OGI_SHAPE
+    return "rotary / transformer linear / transformer softmax / permutation + gather_rows " + String(k)
 
 
 def _case[E: Exec & Movable & Deinitable](mut s: OpsSession[E], which: Int, mut refusal: String) raises -> List[List[Float32]]:
@@ -621,9 +658,11 @@ def _case[E: Exec & Movable & Deinitable](mut s: OpsSession[E], which: Int, mut 
     if k < OGI_CONV:
         return _conv(s, k, refusal)
     k -= OGI_CONV
-    if k == OGI_SHAPE - 1:
-        return _expand(s, refusal)
-    return _shape(s, k, refusal)
+    if k < OGI_SHAPE:
+        if k == OGI_SHAPE - 1:
+            return _expand(s, refusal)
+        return _shape(s, k, refusal)
+    return _extra(s, k - OGI_SHAPE, refusal)
 
 
 def _host_words(which: Int, mut refusal: String) raises -> List[List[Float32]]:
