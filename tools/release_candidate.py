@@ -77,6 +77,15 @@ At the end it asserts that origin/main and the tag lists (origin and local) are 
 (`git ls-remote`, three tries with a pause between them; refs that stay unreadable after a finished build are
 recorded as unknown, never a failed build).
 
+THE PACK ON GITHUB (--pack github, the default for a new build; lane fx-pack-offload, 2026-11-19): the legs' trees
+stay on GitHub (their collectors take only the release-<set>-gha records: `release_github_build.py run
+--records-only`), and linux-wait's tree checks, linux-assemble and linux-pack run on a free runner beside them
+(.github/workflows/candidate-pack.yml running this same command with --pack-here; tools/release_remote_pack.py). The
+Mac uploads the build's records and downloads linux/final (130-170 MB a set) instead of 3.9 GB of leg trees, and runs
+no Docker. candidate.json records the run as `pack`, and a B arm's pack job takes its base's wheels from it. --pack
+local packs on the Mac as before (and is what a build whose legs are taken from an earlier freeze needs). A resumed
+build keeps the mode it was started with.
+
 DISK (2026-11-16: seven of eight arms died with ENOSPC at linux-assemble, 5.6 GB free). SEVERAL ARMS start only
 when the work root's disk has arms x the measured need of one wheel set (arm_need: the source worktree plus
 PER_LINUX_SET_BYTES per Linux set) plus a reserve; linux-assemble (tools/release.py) refuses, with the numbers,
@@ -120,6 +129,9 @@ SOURCE_TREE_BYTES = 2 * GIB
 PER_LINUX_SET_BYTES = int(1.7 * GIB)        # legs + host composition + assembled sets + packed wheels
 ASSEMBLE_PER_LINUX_SET_BYTES = int(0.7 * GIB)   # what linux-assemble and linux-pack still write per set
 RESERVE_BYTES = 1 * GIB                     # never fill the disk to the last byte
+#: what one Linux set still lands on the Mac when it packs on GitHub (--pack github): its share of linux/final
+#: (130-170 MB a set of wheels, measured 2026-11-19) and the records; the leg trees stay on GitHub
+GITHUB_PACK_PER_LINUX_SET_BYTES = int(0.25 * GIB)
 #: what a finished set keeps of the trees prune_set thins: records, never payload
 KEEP_SUFFIXES = (".json", ".log", ".txt", ".md", ".exit", ".pid", ".sha256", ".tsv", ".csv")
 #: the intermediate trees of a set (<work>/<commit12>/) that the final wheels and the records do not need: the
@@ -152,9 +164,12 @@ def space_refusal(path, need, what, free=None):
             "sets of ~/mojolearn-evidence/release-candidates/ hold their pruned records only) and rerun")
 
 
-def arm_need(n_linux_sets):
-    """The measured peak bytes of one wheel set (one candidate run) over N_LINUX_SETS Linux sets."""
-    return SOURCE_TREE_BYTES + n_linux_sets * PER_LINUX_SET_BYTES
+def arm_need(n_linux_sets, pack="local"):
+    """The measured peak bytes of one wheel set (one candidate run) over N_LINUX_SETS Linux sets: packed on this Mac
+    (PER_LINUX_SET_BYTES a set: legs, host composition, assembled sets, wheels) or on GitHub (--pack github:
+    GITHUB_PACK_PER_LINUX_SET_BYTES, the final wheels and records only)."""
+    per = GITHUB_PACK_PER_LINUX_SET_BYTES if pack == "github" else PER_LINUX_SET_BYTES
+    return SOURCE_TREE_BYTES + n_linux_sets * per
 
 
 def prune_plan(set_dir):
@@ -374,8 +389,10 @@ def run_arms(a, argv):
     if not a.dry_run:
         import release_reuse
         n_sets = len(release_reuse.scope_linux_sets(a.targets))
-        refusal = space_refusal(a.work_root, len(arms) * arm_need(n_sets),
-                                f"ARMS: {len(arms)} arms x {arm_need(n_sets) / GIB:.1f} GB ({n_sets} Linux sets each)")
+        pack = a.pack or "github"   # a new arm's default; an arm resumed with --pack local passes it
+        need = arm_need(n_sets, pack)
+        refusal = space_refusal(a.work_root, len(arms) * need,
+                                f"ARMS: {len(arms)} arms x {need / GIB:.1f} GB ({n_sets} Linux sets each, pack {pack})")
         if refusal:
             raise SystemExit(refusal)
     logs = Path(a.work_root).expanduser().resolve() / f"arms-{dt.datetime.now().strftime('%Y%m%d-%H%M%S')}"
@@ -524,6 +541,49 @@ def untimed_record(plan, targets):
     return dict(timed_on=list(timed), untimed_from_base={k: sorted(v) for k, v in sorted(untimed.items())})
 
 
+def write_candidate(a, r, release, C, work, cand, vendors, version, defines, label, tooling_sha, targets, built, plan,
+                    before, after, moved):
+    """candidate.json beside the final wheels (the record tools/ops/measure_candidate.py stage reads), after the
+    wheels' manifests prove this build's version and defines. `pack` says where the wheels were packed: the GitHub
+    pack run (a B arm's pack job takes its base's wheels from that run's artifact), its runner, or this Mac.
+    Returns 0."""
+    final = work / a.commit[:12] / "linux" / "final"
+    finals = r.split_finals()
+    if not finals.get("linux") or release.wheel_commit(finals["linux"]) != a.commit:
+        raise SystemExit(f"measurement build: no core wheel of {a.commit[:12]} in {final}")
+    manifests = {}
+    for vendor in vendors:
+        wheels = [finals["linux"], finals[vendor]]
+        manifests[vendor] = C.build_manifest(version, vendor, wheels, a.commit)   # RECORD, metadata, tags, payload
+        for f in manifests[vendor]["files"]:
+            payload = f.get("candidate") or {}
+            if payload.get("local_version") != version or (payload.get("defines") or "") != defines:
+                raise SystemExit(f"measurement build: {f['file']} does not record this build's version and defines")
+    doc = dict(schema="mojolearn.release-candidate.v1", version=version, source_commit=a.commit, defines=defines,
+               label=label, owed_arm=cand.get("owed_arm"), tooling_sha=tooling_sha, refs_moved=moved,
+               wheel_dir=str(final), vendors=vendors, targets=targets, wheels_built=built, steps=list(STEPS),
+               wheels={k: dict(file=w.name, sha256=release.sha256(w)) for k, w in finals.items() if w},
+               manifests=manifests, refs_before=before, refs_after=after, made=release.now(),
+               pack=pack_record(r.state.get("remote_pack"), a.pack_here),
+               **({"base": reused_from_base(plan)} if plan and (plan.get("previous") or {}).get("base") else {}),
+               **(untimed_record(plan, targets) if plan else {}))
+    release.write_json(final / "candidate.json", doc)
+    print(f"measurement build: {final}/candidate.json")
+    return 0
+
+
+def pack_record(remote, here=False):
+    """candidate.json `pack`: where the wheels were packed. The GitHub pack run (run_id, url, packed_at: the base
+    wheels of a later B arm are taken from its candidate-final artifact), the runner itself (here), or the Mac."""
+    if here:
+        return dict(where="github-runner")
+    remote = remote or {}
+    if remote.get("conclusion") == "success" and remote.get("run_id"):
+        return dict(where="github", run_id=remote["run_id"], url=remote.get("url"), tag=remote.get("tag"),
+                    packed_at=remote.get("packed_at"), tooling_sha=remote.get("tooling_sha"))
+    return dict(where="local")
+
+
 def parse(argv):
     ap = argparse.ArgumentParser(prog="release.py candidate", description=__doc__.split("\n\n")[0],
                                  formatter_class=argparse.RawDescriptionHelpFormatter, epilog=__doc__)
@@ -558,6 +618,11 @@ def parse(argv):
                     "candidate.json is written; see prune_set)")
     ap.add_argument("--no-verify-smoke", action="store_true", help="do not start .github/workflows/verify-smoke.yml "
                     "on the packed core wheel (an A set starts it by default; it reports and gates nothing)")
+    ap.add_argument("--pack", choices=("github", "local"), default=None, help="where linux-wait's tree checks, "
+                    "linux-assemble and linux-pack run: github (default for a new build: "
+                    ".github/workflows/candidate-pack.yml beside the trees; the Mac downloads linux/final) or local "
+                    "(this Mac, Docker for audit.sh). A resumed build keeps the mode it started with")
+    ap.add_argument("--pack-here", action="store_true", help=argparse.SUPPRESS)   # candidate-pack.yml's runner
     g = ap.add_mutually_exclusive_group()
     g.add_argument("--census", dest="census", action="store_true", default=None, help="the verify smoke takes "
                    "the frames census even when nothing it reads changed (tools/ops/verify_smoke_dispatch.py)")
@@ -580,7 +645,8 @@ def main(argv=None, release=None):
         raise SystemExit("candidate: --commit must be the full 40-hex sha")
     if sh("git", "cat-file", "-t", a.commit, check=False) != "commit":
         raise SystemExit(f"candidate: {a.commit} is not a commit here; git fetch origin first")
-    if not sh("git", "branch", "-r", "--contains", a.commit, check=False):
+    # (the pack runner's checkout need not list every origin branch; the Mac that dispatched it checked)
+    if not a.pack_here and not sh("git", "branch", "-r", "--contains", a.commit, check=False):
         raise SystemExit(f"candidate: {a.commit[:12]} is on no origin branch; the runners check out a pushed commit")
     targets = [s for _, s in release_reuse.scope_linux_sets(a.targets)]    # every set unless --targets
     built = release_reuse.scoped_wheels()
@@ -635,7 +701,8 @@ def main(argv=None, release=None):
     if inside(src, main_tree) or src.resolve() == ROOT.resolve():
         raise SystemExit(f"candidate: the source tree {src} is the main checkout or this tooling checkout; refused")
 
-    before = remote_refs()
+    # the pack runner pushes and tags nothing either; the Mac that dispatched it reads the refs around the whole build
+    before = None if a.pack_here else remote_refs()
     state_path = work / "state.json"
     # THE PIN, written for a dry run too (the candidate's own file): Release.commit reads state["commit"], so no
     # freeze step is needed or run
@@ -656,7 +723,8 @@ def main(argv=None, release=None):
                      candidate=dict(version=version, commit=a.commit, defines=defines, label=label, targets=targets,
                                     **({"timed_on": timed} if timed else {}),
                                     base_version=base, committed_version=committed[1] if committed else None,
-                                    owed_arm=owed_arm, made=release.now(), prune=True))
+                                    owed_arm=owed_arm, made=release.now(), prune=True,
+                                    pack=a.pack or "github"))
     # THE TOOLING SHA, recorded at the first launch: a resume dispatches from the same pushed ref while it still
     # holds this sha with the same route files, even after the ref moved on (release_github_build.tooling_ref;
     # 2026-11-13: origin/main moved under the tooling checkout and every resume refused with "push it")
@@ -667,6 +735,12 @@ def main(argv=None, release=None):
         cand["tooling_ref"] = "" if branch == "HEAD" else branch
     if owed_arm and not cand.get("owed_arm"):
         cand["owed_arm"] = owed_arm
+    # THE PACK MODE: given, else the one the build started with (a state from before the GitHub pack packed locally)
+    pack = a.pack or cand.get("pack") or "local"
+    if not a.pack_here:
+        if a.pack and cand.get("pack", "local") != a.pack:
+            print(f"measurement build: --pack {a.pack} (the build started with --pack {cand.get('pack', 'local')})")
+        cand["pack"] = pack
     release.write_json(state_path, state)
     tooling_sha = cand["tooling_sha"]
     argv = [version, "--only", ",".join(STEPS), "--state-dir", str(work), "--source-checkout", str(src),
@@ -678,13 +752,15 @@ def main(argv=None, release=None):
     args.candidate_base = base_build
     args.candidate_timed = ",".join(timed)
     args.candidate_tooling_sha = tooling_sha
+    # release.candidate_pack: "here" on candidate-pack.yml's runner, "github" on the Mac that dispatches it
+    args.candidate_pack = "here" if a.pack_here else ("github" if pack == "github" else "")
     r = release.Release(args)
     if r.commit != a.commit:
         raise SystemExit(f"measurement build: the Release resolved {r.commit}, not {a.commit}")
     print(f"measurement build {version} of {a.commit[:12]}" + (f" defines {defines}" if defines else "")
           + f"; targets {','.join(targets)}; wheels core,{','.join(built)}"
           + f"; work dir {work}; steps {', '.join(STEPS)} (every other release step is skipped)")
-    if not a.dry_run and not a.no_prebuild_check:
+    if not a.dry_run and not a.no_prebuild_check and not a.pack_here:
         import prebuild_check
         pre = ["--commit", a.commit, "--ref", args.candidate_ref, "--work", str(work / "prebuild"), "--reuse-pass"]
         base_pass = Path(base_build["build_dir"]).parent / "prebuild" / "PASS.json" if base_build else None
@@ -701,6 +777,13 @@ def main(argv=None, release=None):
     if plan:
         print(arm_summary(owed_arm or label, plan))
 
+    if a.pack_here:
+        # candidate-pack.yml's runner: linux/final and its candidate.json are what the artifact carries; the Mac writes
+        # the build's own candidate.json, starts the verify smoke and prints the STAGE / B-ARM lines
+        if rc or a.dry_run:
+            return rc
+        return write_candidate(a, r, release, C, work, cand, vendors, version, defines, label, tooling_sha, targets,
+                               built, plan, before=None, after=None, moved=[])
     try:
         after = remote_refs()
     except SystemExit as exc:
@@ -721,27 +804,9 @@ def main(argv=None, release=None):
               f"{after['local_tags']} local tags unchanged")
     if rc or a.dry_run:
         return rc
+    write_candidate(a, r, release, C, work, cand, vendors, version, defines, label, tooling_sha, targets, built, plan,
+                    before, after, moved)
     final = work / a.commit[:12] / "linux" / "final"
-    finals = r.split_finals()
-    if not finals.get("linux") or release.wheel_commit(finals["linux"]) != a.commit:
-        raise SystemExit(f"measurement build: no core wheel of {a.commit[:12]} in {final}")
-    manifests = {}
-    for vendor in vendors:
-        wheels = [finals["linux"], finals[vendor]]
-        manifests[vendor] = C.build_manifest(version, vendor, wheels, a.commit)   # RECORD, metadata, tags, payload
-        for f in manifests[vendor]["files"]:
-            payload = f.get("candidate") or {}
-            if payload.get("local_version") != version or (payload.get("defines") or "") != defines:
-                raise SystemExit(f"measurement build: {f['file']} does not record this build's version and defines")
-    doc = dict(schema="mojolearn.release-candidate.v1", version=version, source_commit=a.commit, defines=defines,
-               label=label, owed_arm=cand.get("owed_arm"), tooling_sha=tooling_sha, refs_moved=moved,
-               wheel_dir=str(final), vendors=vendors, targets=targets, wheels_built=built, steps=list(STEPS),
-               wheels={k: dict(file=w.name, sha256=release.sha256(w)) for k, w in finals.items() if w},
-               manifests=manifests, refs_before=before, refs_after=after, made=release.now(),
-               **({"base": reused_from_base(plan)} if plan and (plan.get("previous") or {}).get("base") else {}),
-               **(untimed_record(plan, targets) if plan else {}))
-    release.write_json(final / "candidate.json", doc)
-    print(f"measurement build: {final}/candidate.json")
     if not defines and not a.no_verify_smoke:
         # THE VERIFY SMOKE (.github/workflows/verify-smoke.yml): does verify still run and do the Python boundaries
         # still work, from this build's core wheel, on a free GitHub runner. Started here because this is where the
