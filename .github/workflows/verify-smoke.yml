@@ -91,7 +91,36 @@ jobs:
         run: |
           sudo apt-get update -q >/dev/null && sudo apt-get install -y -q --no-install-recommends gdb >/dev/null \
             && gdb --version | head -n 1 || echo "gdb not installed: crash traces carry faulthandler output only"
+      # DEFAULT-SCORER PROBE (fx-user-crash-scorer, 2026-11-19): every public estimator's fit + score, one process
+      # per class, from the fetched wheel; for a PUBLISHED version (no local part) also from `pip install
+      # mojolearn==<version>` exactly as a downstream user installs it. Crashes (signals) are rerun under gdb with
+      # the faulting instruction. Reports only (continue-on-error). A token starting `scorer-probe` runs the probe
+      # alone and skips the smoke, so one probe per Python version costs minutes, not the full smoke.
+      - name: Default-scorer probe (every public score, one process per class)
+        continue-on-error: true
+        env:
+          WHEEL_NAME: ${{ inputs.wheel_name }}
+        run: |
+          probe_root="$RUNNER_TEMP/smoke-out/scorer-probe"; mkdir -p "$probe_root"
+          python -m venv "$RUNNER_TEMP/probe-wheel" && "$RUNNER_TEMP/probe-wheel/bin/python" -m pip install \
+            --disable-pip-version-check -q --no-cache-dir "$RUNNER_TEMP/wheels/$WHEEL_NAME" numpy \
+            > "$probe_root/install-wheel.log" 2>&1; echo "install wheel rc=$?"
+          python3 tooling/tools/ops/default_scorer_probe.py --python "$RUNNER_TEMP/probe-wheel/bin/python" \
+            --out "$probe_root/wheel" > "$probe_root/wheel.log" 2>&1; echo "probe wheel rc=$?"
+          tail -n 30 "$probe_root/wheel/SUMMARY.txt" 2>/dev/null
+          ver=$(echo "$WHEEL_NAME" | cut -d- -f2)
+          case "$ver" in *+*|*dev*) echo "unpublished version $ver: no PyPI install probe" ;; *)
+            python -m venv "$RUNNER_TEMP/probe-pypi" && "$RUNNER_TEMP/probe-pypi/bin/python" -m pip install \
+              --disable-pip-version-check -q --no-cache-dir "mojolearn==$ver" numpy > "$probe_root/install-pypi.log" 2>&1
+            echo "install pypi mojolearn==$ver rc=$?"
+            "$RUNNER_TEMP/probe-pypi/bin/python" -m pip list --format=freeze 2>/dev/null | grep -i mojolearn
+            python3 tooling/tools/ops/default_scorer_probe.py --python "$RUNNER_TEMP/probe-pypi/bin/python" \
+              --out "$probe_root/pypi" > "$probe_root/pypi.log" 2>&1; echo "probe pypi rc=$?"
+            tail -n 30 "$probe_root/pypi/SUMMARY.txt" 2>/dev/null ;;
+          esac
+          { echo '### default-scorer probe'; echo '```'; cat "$probe_root"/*/SUMMARY.txt 2>/dev/null; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
       - name: The smoke (every step runs; SUMMARY.txt has each rc)
+        if: ${{ !startsWith(inputs.token, 'scorer-probe') }}
         env:
           SOURCE_COMMIT: ${{ inputs.ref }}
           SOURCE_ROOT: ${{ github.workspace }}/source
