@@ -53,7 +53,6 @@ from sequence.recurrent_scan import OP_CELL_BWD_SCAN, OP_CELL_FWD_SCAN, SEQ_LSTM
 from sequence.recurrent import Net, Work, RnnStep, SEQ_WGRAD_BLOCKED, TASK_CE, bias_rows, fill, gather_seq, gemm
 from autograd.kernels.recurrent import colsum, wgrad_block, wgrad_blocked
 from sequence.mlp import EPI_BIAS_ACT
-from sequence.gemm_split import gemm_split_shape
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 # The recurrent trainer's backward runs on the tape (promoted 2026-10-19). One run per arm, HIGGS
@@ -89,26 +88,52 @@ comptime RNN_INPUT_BIAS_IN_GX = True
 comptime RNN_BIAS_EPI = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 # Experiment MOJOLEARN_SEQ_FAST_RNN_STEP_GEMM (lane fx-rnn-cnn-fit, 2026-11-19; default OFF, A/B owed on the NVIDIA
-# L40S: owed-pre0867.json "rnn-step-gemm"). The per-step chain (cells of more gates than the scan takes) runs each
-# time step as ONE launch of one thread per (row, unit): the thread folds its own G gate dots of K = H terms straight
-# from device memory, then the cell (OP_CELL_FWD_H; the backward one dot of K = G H, OP_CELL_BWD_H). That fusion was
-# made for Apple's launch cost (2026-09-28). From the board rows (L40S, 564 steps, T 24, B 256, H 64): gru 0.80 and
-# lstm 0.97 ms a step on the same 74 launches, so one more gate costs 3.5 us a cell launch: the one-thread fold runs
-# about 0.6 TFLOP/s where the sequence tile runs 3.6-4.0 (sequence/gemm_tiled.mojo), and the 2 T cell launches hold
-# about two thirds of a step. Under the define a step is two launches: the hidden projection as the lane's own GEMM
-# (forward: GH = h_prev W_hh^T + b_hh, OP_GEMM_EPI; backward: dh += dGH_{s+1} W_hh, OP_GEMM accumulate) on the tile
-# route, then the elementwise cell (OP_CELL_FWD / OP_CELL_BWD): the three launches HostExec already runs for the
-# fused opcode (sequence/exec.mojo), argument for argument, so THE SAME BITS (each cell's chain is gemm_dot's, k
-# ascending from +0.0 or from dh; the bias add and the cell are the fused body's).
-# The rule (rnn_step_gemm): only where the launch rule keeps that chain (not a split-K shape, not the cooperative
-# shape: there the fused launch stays, see below), and only where the fold is worth a launch: at least
-# RNN_STEP_GEMM_MIN_FMA multiply-adds a step. Cost reasoning, not a shape: the second launch costs one launch floor
-# (3-8 us on the L40S, from the same rows), which the fused fold spends on about 1 M multiply-adds; below that the
-# fused launch is the cheaper form on any hardware with a launch floor. Neighbouring shapes to time: T 48, H 128;
-# non-board model: a 2-layer GRU regressor on a 12-feature series. Estimate 0.80-1.00x on lstm/gru fits (forward
-# only at H 64: the backward's K = G H there is a split-K shape).
-# NOT DONE, would change bits (every column together): the backward on split-K shapes, where the standalone GEMM
-# takes the split order; the fused kernel keeps the one chain there.
+# L40S: owed-pre0867.json "rnn-step-gemm"). THE RECURRENT PRODUCTS ON THE LANE'S OWN GEMM. BIT VERSION under the
+# define, every column together (host, Metal, NVIDIA, AMD run the same launches; nothing changes without it).
+#
+# Default: the per-step chain (cells of more gates than the scan takes) runs each time step as ONE launch of one
+# thread per (row, unit): the thread folds its own G gate dots of K = H terms straight from device memory, then the
+# cell (OP_CELL_FWD_H; the backward one dot of K = G H, OP_CELL_BWD_H), a fusion made for Apple's launch cost
+# (2026-09-28); and the two weight gradients of a layer are the blocked order of nr-small D3 (wgrad_blocked: two
+# launches each, sqrt(K) blocks, one thread a partial). Arithmetic a step at the board shape (T 24, B 256, H 64, G 4):
+# forward and backward cells 48 x 4.2 M multiply-adds, dW_hh 100 M (one third of the step's arithmetic), all folded
+# by one thread a cell or partial with no operand reuse; gru 0.80 and lstm 0.97 ms a step on the same launches is
+# 0.17 ms a gate, about 0.9 TFLOP/s over the whole step, where the sequence GEMM's tile runs 3.6-4.0.
+#
+# Under the define every recurrent product is one launch of OP_GEMM / OP_GEMM_EPI, on the route and in the fold the
+# lane's launch rule gives its shape (sequence/gemm_split.mojo, sequence/gemm_tiled.mojo), as every other GEMM of
+# the lane:
+#   forward step s    GH_s = h_{s-1} W_hh^T + b_hh   [B, G H] over K = H      (OP_GEMM_EPI, bias epilogue), then
+#                     the elementwise cell OP_CELL_FWD
+#   backward step s   dh += dGH_{s+1} W_hh           [B, H]   over K = G H    (OP_GEMM, accumulate), then the
+#                     elementwise cell derivative OP_CELL_BWD (step T - 1 has no product: the fused launch)
+#   dW_hh             dGH^T H_prev                   [G H, H] over K = T B    (ONE OP_GEMM over the stacked steps)
+#   dW_ih             dGX^T X                        [G H, D_in] over K = T B (ONE OP_GEMM over the stacked steps)
+# The weight gradients were already one product over the T B stacked rows each (never T products): what changes
+# for them is two launches -> one and the fold. The per-step products cannot be stacked: step s reads step s + 1's
+# cell derivative.
+# THE FOLD, per output cell (m, n) of an M x N x K product, as a formula:
+#   gemm_split_shape(M, N, K) false:  acc = c0; acc = fma(A(m, k), B(k, n), acc), k = 0 .. K - 1
+#   gemm_split_shape(M, N, K) true:   R = gemm_split_block(K); p_s = +0.0; p_s = fma(A(m, k), B(k, n), p_s) over
+#                                     k = s R .. min(K, (s + 1) R) - 1; acc = c0; acc = acc + p_s, s ascending
+#   c0 = the stored dh for the backward step (accumulate), +0.0 otherwise; the forward then adds b_hh[n].
+# BITS against the default, per shape class:
+#   per-step forward, not a split-K shape (the board's H 64: K = 64): SAME (gemm_dot's chain, the fused body's)
+#   per-step forward, split-K shape (K = H > 64 with few cells or tiles): CHANGE
+#   per-step backward, not a split-K shape: SAME;  split-K shape (the board's: K = G H = 256, 4 tiles): CHANGE
+#   dW_hh, dW_ih with T B <= 512 rows: SAME (the default is already this GEMM)
+#   dW_hh, dW_ih with T B > 512 rows: CHANGE (blocks of wgrad_block(T B) rows -> the formula above)
+#   the bias gradients, the head, the input projection, the scan route's own steps (one-gate cells): SAME
+# The host column follows because HostExec.launch takes the same rule for the same opcodes; the oracle follows under
+# the same define (sequence/checks/oracle.mojo o_bptt_dw) and the seams check adds device-against-host cases at an
+# arm shape (sequence/checks/seams_check.mojo 5504 step_gemm). Fit and predict share the forward, so they agree.
+# The rule for the per-step products (rnn_step_gemm): at least RNN_STEP_GEMM_MIN_FMA multiply-adds a step. Cost
+# reasoning, not a shape: the second launch costs one launch floor (3-8 us on the L40S, solved from the board rows),
+# which the fused fold spends on about 1 M multiply-adds; below that the fused launch is the cheaper form on any
+# hardware with a launch floor. The weight gradients take the GEMM at every size (one launch instead of two).
+# Launches a step on a GPU column (L 1, T 24): lstm / gru 68 -> 113 (48 cell launches become 95, the two weight
+# gradients 4 -> 2); rnn (scan) 22 -> 20. The count goes UP on the chain: the bet is arithmetic rate, not launches.
+# Neighbouring shapes to time: T 48, H 128; non-board model: a 2-layer GRU regressor on a 12-feature series.
 comptime RNN_STEP_GEMM = (
     is_defined["MOJOLEARN_SEQ_FAST_RNN_STEP_GEMM"]() and GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 )
@@ -128,9 +153,21 @@ def rnn_step_gemm(M: Int, N: Int, K: Int) -> Bool:
     GEMM launch under MOJOLEARN_SEQ_FAST_RNN_STEP_GEMM (the rule above)."""
     comptime if not RNN_STEP_GEMM:
         return False
-    if gemm_split_shape(M, N, K) or _coop_shape(M, N, K):
-        return False
     return M * N * K >= RNN_STEP_GEMM_MIN_FMA
+
+
+def _wgrad[E: Exec](
+    mut ex: E, A: FP, B: FP, C: FP, M: Int, N: Int, K: Int,
+    sam: Int, sak: Int, sbk: Int, sbn: Int, ldc: Int, scratch: FP,
+) raises:
+    """A recurrent weight gradient C [M, N] = A B over the K = T B stacked
+    rows: the blocked order (wgrad_blocked), or under
+    MOJOLEARN_SEQ_FAST_RNN_STEP_GEMM one OP_GEMM on the launch rule's route
+    and fold (the formula above; `scratch` unused)."""
+    comptime if RNN_STEP_GEMM:
+        gemm(ex, A, B, C, M, N, K, sam, sak, sbk, sbn, False, ldc)
+    else:
+        wgrad_blocked(ex, A, B, C, M, N, K, sam, sak, sbk, sbn, ldc, scratch)
 
 
 def _gemm_bias[E: Exec](
@@ -353,7 +390,7 @@ def _linear_bwd[E: Exec](
     var done = False
     comptime if SEQ_WGRAD_BLOCKED:
         if saved.i1 != 0:
-            wgrad_blocked(ex, up, xin, gradients[1], dout, din, R, 1, dout, din, 1, din, saved.p0)
+            _wgrad(ex, up, xin, gradients[1], dout, din, R, 1, dout, din, 1, din, saved.p0)
             if wgrad_block(R) < R:
                 wgrad_blocked(ex, saved.p1, up, gradients[2], 1, dout, R, 0, 0, dout, 1, dout, saved.p0)
             else:
@@ -466,7 +503,7 @@ def _layer_bwd[E: Exec](
         s -= 1
     var done = False
     comptime if SEQ_WGRAD_BLOCKED:
-        wgrad_blocked(ex, dgh, hall, gradients[1], GH, H, T * B, 1, GH, H, 1, H, saved.p8)
+        _wgrad(ex, dgh, hall, gradients[1], GH, H, T * B, 1, GH, H, 1, H, saved.p8)
         if wgrad_block(T * B) < T * B:
             wgrad_blocked(ex, saved.p9, dgh, gradients[2], 1, GH, T * B, 0, 0, GH, 1, GH, saved.p8)
         else:
