@@ -123,6 +123,8 @@ def test_family_status():
     assert ft.family_status([{"status": "answered"}, {"status": "unavailable"}]) == "answered"
     assert ft.family_status([{"status": "answered"}, {"status": "refused"}]) == "mixed"
     assert ft.family_status([{"status": "unavailable"}]) == "unavailable"
+    assert ft.family_status([{"status": "answered"}, {"status": "no_parameter"}]) == "answered"
+    assert ft.family_status([{"status": "no_parameter"}, {"status": "unavailable"}]) == "no_parameter"
     assert ft.family_status([{"status": "refused"}, {"status": "crashed"}]) == "crashed"
 
 
