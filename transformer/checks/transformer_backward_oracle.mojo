@@ -138,6 +138,7 @@ RISK: WHAT IS LEAST LIKELY TO COMPILE
 from transformer.experiments.norm_fixed_lanes import IDN_NORM_FIXED_LANES, nfl_dot
 from std.math import min
 from std.memory import bitcast
+from std.sys.compile import is_defined
 
 from core.host_lanes import F32V, HOST_FW, ftz_lanes, host_row_tasks, lanes_are_identical
 from std.time import perf_counter_ns
@@ -261,6 +262,98 @@ def _gemm_bwd_b(
     if call[4] == BWD_DC_LEFT:
         return gemm_host_rows(dc, other, call[0], call[1], call[2], call[3])
     return gemm_host_rows(other, dc, call[0], call[1], call[2], call[3])
+
+
+# lane fx-gemm-dx-concat (2026-11-19, `-D MOJOLEARN_GEMM_FAST_DX_CONCAT=1`,
+# default OFF, OPEN: no A/B yet). BITS CHANGE under the define, here and in
+# the device rules together (autograd/kernels/transformer.mojo
+# BWD_GEMM_DX_CONCAT, autograd/rules_transformer.mojo _dx_fanin_cat): the
+# three-term fan-in at `d(norm1.out)` is ONE gemm v1 product over the
+# concatenated contraction axis, and stage 29-32 below calls
+# `qkv_fanin_concat_host` in place of three products and `(q + k) + v`.
+comptime BWD_HOST_DX_CONCAT = is_defined["MOJOLEARN_GEMM_FAST_DX_CONCAT"]()
+
+
+def qkv_fanin_concat_host(
+    dq: List[Float32],
+    dk: List[Float32],
+    dv: List[Float32],
+    wq: List[Float32],
+    wk: List[Float32],
+    wv: List[Float32],
+    m: Int,
+    nq: Int,
+    nk: Int,
+    nv: Int,
+    dm: Int,
+) raises -> List[Float32]:
+    """`d(norm1.out) [m, dm]` as ONE routed product (the arm's order):
+
+        K  = nq + nk + nv
+        dP = [dq | dk | dv]   [m, K]    (member gradients `[m, n]`, by column)
+        Wc = [wq; wk; wv]     [K, dm]   (member weights `[n, dm]`, by row)
+        out[i, j] = gemm v1 (dP, Wc)[i, j] at contraction length K:
+            (L, P) = contract_partition(K)
+            s_t  = chain over p in [t L, min((t + 1) L, K)) ascending,
+                   seeded +0.0: acc = ftz(fma(ftz(dP[i, p]), ftz(Wc[p, j]), acc))
+            cell = ftz(T(s_0 .. s_{P-1})), the contract's balanced tree
+
+    in the forward-use order q, k, v. The call row is
+    `gemm_backward_a_call(OP_NT, m, K, dm)`, the row each member takes alone.
+    The two concatenations are bit copies (no flush: the product flushes at
+    its loads). It replaces `ftz(ftz(ftz(t_q + t_k)) + ftz(t_v))`; there is
+    no join, so no seed and no three-term association left to pin.
+
+    Compiled in every build (the device check calls it on device words);
+    the oracle reaches it only under the define. Parallel: the copies run
+    rows over host tasks, the product is `gemm_host_rows`' own tiling."""
+    var nt = nq + nk + nv
+    if m <= 0 or dm <= 0 or nq <= 0 or nk <= 0 or nv <= 0:
+        raise Error("transformer backward: the concatenated fan-in needs positive sizes")
+    if (
+        len(dq) != m * nq or len(dk) != m * nk or len(dv) != m * nv
+        or len(wq) != nq * dm or len(wk) != nk * dm or len(wv) != nv * dm
+    ):
+        raise Error("transformer backward: a member of the concatenated fan-in has the wrong length")
+    var dcat = host_f32_uninit(m * nt)
+    var dtasks = host_row_tasks(m, nt)
+    var dchunk = (m + dtasks - 1) // dtasks
+    def _drows(task: Int) {imm dq, imm dk, imm dv, mut dcat, imm m, imm nq, imm nk, imm nv, imm nt, imm dchunk}:
+        for r in range(task * dchunk, min((task + 1) * dchunk, m)):
+            var base = r * nt
+            for c in range(nq):
+                dcat[base + c] = dq[r * nq + c]
+            for c in range(nk):
+                dcat[base + nq + c] = dk[r * nk + c]
+            for c in range(nv):
+                dcat[base + nq + nk + c] = dv[r * nv + c]
+    if dtasks <= 1:
+        _drows(0)
+    else:
+        host_parallelize(_drows, dtasks)
+    var wcat = host_f32_uninit(nt * dm)
+    var wtasks = host_row_tasks(nt, dm)
+    var wchunk = (nt + wtasks - 1) // wtasks
+    def _wrows(task: Int) {imm wq, imm wk, imm wv, mut wcat, imm nq, imm nk, imm nt, imm dm, imm wchunk}:
+        for p in range(task * wchunk, min((task + 1) * wchunk, nt)):
+            var base = p * dm
+            if p < nq:
+                for j in range(dm):
+                    wcat[base + j] = wq[p * dm + j]
+            elif p < nq + nk:
+                for j in range(dm):
+                    wcat[base + j] = wk[(p - nq) * dm + j]
+            else:
+                for j in range(dm):
+                    wcat[base + j] = wv[(p - nq - nk) * dm + j]
+    if wtasks <= 1:
+        _wrows(0)
+    else:
+        host_parallelize(_wrows, wtasks)
+    var out = _gemm_bwd_a(dcat, wcat, OP_NT, m, nt, dm)
+    _ = dcat^
+    _ = wcat^
+    return out^
 
 
 def _ones(n: Int) -> List[Float32]:
@@ -1858,16 +1951,24 @@ def transformer_block_backward_oracle(
     st.dw_q = _gemm_bwd_b(st.d_q_proj_out, fwd.norm1_out, OP_NT, m, qw, dm)
     st.dw_k = _gemm_bwd_b(st.d_k_proj_out, fwd.norm1_out, OP_NT, m, kw, dm)
     st.dw_v = _gemm_bwd_b(st.d_v_proj_out, fwd.norm1_out, OP_NT, m, kw, dm)
-    var t_q = _gemm_bwd_a(st.d_q_proj_out, w.w_q, OP_NT, m, qw, dm)
-    var t_k = _gemm_bwd_a(st.d_k_proj_out, w.w_k, OP_NT, m, kw, dm)
-    var t_v = _gemm_bwd_a(st.d_v_proj_out, w.w_v, OP_NT, m, kw, dm)
-    st.d_norm1_out = host_f32_uninit(m * dm)
-    for i in range(m * dm):
-        var acc = ftz(ftz(t_q[i]) + ftz(t_k[i]))
-        st.d_norm1_out[i] = ftz(ftz(acc) + ftz(t_v[i]))
-    _ = t_q^
-    _ = t_k^
-    _ = t_v^
+    comptime if BWD_HOST_DX_CONCAT:
+        # lane fx-gemm-dx-concat (arm, default off; BITS CHANGE): ONE product
+        # over [dQ | dK | dV] . [Wq; Wk; Wv], as the device rules run it.
+        st.d_norm1_out = qkv_fanin_concat_host(
+            st.d_q_proj_out, st.d_k_proj_out, st.d_v_proj_out,
+            w.w_q, w.w_k, w.w_v, m, qw, kw, kw, dm,
+        )
+    else:
+        var t_q = _gemm_bwd_a(st.d_q_proj_out, w.w_q, OP_NT, m, qw, dm)
+        var t_k = _gemm_bwd_a(st.d_k_proj_out, w.w_k, OP_NT, m, kw, dm)
+        var t_v = _gemm_bwd_a(st.d_v_proj_out, w.w_v, OP_NT, m, kw, dm)
+        st.d_norm1_out = host_f32_uninit(m * dm)
+        for i in range(m * dm):
+            var acc = ftz(ftz(t_q[i]) + ftz(t_k[i]))
+            st.d_norm1_out[i] = ftz(ftz(acc) + ftz(t_v[i]))
+        _ = t_q^
+        _ = t_k^
+        _ = t_v^
     host_tick(hton, htk, "bwd.qkv_proj")
 
     # =====================================================================
