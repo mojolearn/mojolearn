@@ -742,6 +742,16 @@
    "define": "MOJOLEARN_GEMM_FAST_MATRIX_UNITS=3 (with MOJOLEARN_MODE_FAST_ROWS)",
    "status": "define in code (gemm/fast_matrix_units.mojo GEMM_FAST_MATRIX_UNITS_ALL): B1 plus the neural-dispatch callers that closed the vendor route (Llama stage projections, CNN linear, MoE grouped)",
    "owed": "RUN"
+  },
+  "fx-perm-select-early": {
+   "define": "MOJOLEARN_RESAMPLE_FAST_PERM_SELECT_EARLY",
+   "status": "define in code (resample/checks/statistics.mojo PERM_SELECT_EARLY): B stops perm_select_stat_kernel's key passes at the first pass whose selected bucket goes to the first group whole; A = all 8 passes. Same membership mask: the digest must equal A's",
+   "owed": "RUN"
+  },
+  "fx-lc-test-reuse": {
+   "define": "MOJOLEARN_MSEL_FAST_LC_TEST_REUSE",
+   "status": "define in code (bindings/msel_cv_door.mojo MSEL_LC_TEST_REUSE): B gathers each fold's host test rows once per learning_curve call; A = once per (size, fold) unit. Scores must equal A's",
+   "owed": "RUN"
   }
  },
  "rows": [
@@ -4910,6 +4920,34 @@
     "loss per step for all 200 steps (divergence check), held-out loss"
    ],
    "decides": "training with TF32 products does not diverge where FP32 does not: the B loss curve stays within 0.05 relative of A at every recorded step and the held-out loss within 0.05 relative"
+  },
+  {
+   "id": "fx-perm-select-early",
+   "source": "lane fx-board-modelsel-metrics (2026-11-19): algos/permutation-test 1,294 ms on d3549c756b (host bd9c355c19c0) against 608 ms stored 0.8.55",
+   "kind": "ab",
+   "lane": [
+    "permutation-test"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "b_arms": [
+    "fx-perm-select-early"
+   ],
+   "decides": "promote B when it is faster with the digest and the p-value equal to A's on taxi and istella, on the neighbouring shape (2 x 100,000 values, 9,999 resamples) and on the non-board input (2 x 30,000 standard normal draws, 4,999 resamples); else delete the arm with its tombstone"
+  },
+  {
+   "id": "fx-lc-test-reuse",
+   "source": "lane fx-board-modelsel-metrics (2026-11-19): algos/learning-curve taxi 781 ms on d3549c756b against 419 ms stored 0.8.55 (516 ms for d95f805cce on the 0.8.55 box); RUN OWED named in bindings/msel_search_door.mojo since lane p3-msel-parallel-and-process-pool",
+   "kind": "ab",
+   "lane": [
+    "learning-curve"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "b_arms": [
+    "fx-lc-test-reuse"
+   ],
+   "decides": "promote B when it is faster with every score equal to A's on taxi and istella, on taxi at 300,000 rows and on covtype (non-board); review the in-place-transform note beside MSEL_LC_TEST_REUSE before promoting; else delete the arm with its tombstone"
   }
  ]
 }
