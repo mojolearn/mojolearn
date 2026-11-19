@@ -3,6 +3,8 @@
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type
 from providers.python.estimator_binding_pyapi_door import estimator_binding_mode
+from bindings.resample_keys_unpack import resample_keys
+from bindings.py_balanced import py_item
 
 
 def resample_arguments(operation: String, args: PythonObject,
@@ -20,12 +22,13 @@ def resample_arguments(operation: String, args: PythonObject,
 
 
 def resample_result_layout(index: Int, context: PythonObject) raises -> PythonObject:
+    var nk = resample_keys()
     from bindings.mode_metadata_native_door import _class_fields
     from bindings.py_balanced import py_get
     from bindings.native_loaded_module_door import native_loaded_module, NativeModules
     from bindings.native_class_admission_door import class_record, class_admit
     var b = native_loaded_module("builtins")
-    var cls = context["family_rs_result_classes"][index]
+    var cls = py_item(context, nk[].k_family_rs_result_classes)[index]
     if py_type(cls) is not b.type:
         raise Error("TypeError: resampling result metadata requires the connected ordinary type")
     # perf3-nbr-msel-trees: the ancestry and finalizer checks read class
@@ -36,17 +39,18 @@ def resample_result_layout(index: Int, context: PythonObject) raises -> PythonOb
     var held = class_record(mods, "resample_result_layout_v1", cls)
     if held is not None and Int(py=held) == index:
         return cls
-    var bases = py_call(b.type.__dict__["__bases__"].__get__, cls)
+    var bases = py_call(py_item(b.type.__dict__, nk[].k___bases__).__get__, cls)
     if len(bases) != 1 or bases[0] is not (b.tuple if index == 3 else b.object):
         raise Error("TypeError: resampling result class ancestry changed")
     var fields = _class_fields(cls)
-    if py_get(fields, "__del__") is not None:
+    if py_get(fields, nk[].k___del__) is not None:
         raise Error("TypeError: resampling result storage cannot invoke Python finalizers")
     class_admit(mods, "resample_result_layout_v1", cls, PythonObject(index))
     return cls
 
 
 def resample_result_initialize(args: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = resample_keys()
     from bindings.mode_metadata_native_door import _fields, _class_fields
     from bindings.py_balanced import py_contains, py_setitem, py_get
     from bindings.native_owner_lifetime_door import native_release_admit, native_release_weakrefs
@@ -59,7 +63,7 @@ def resample_result_initialize(args: PythonObject, context: PythonObject) raises
     if py_type(args[1]) is not b.str:
         raise Error("TypeError: resampling result kind must be a native string")
     var kind = String(args[1])
-    var classes = context["family_rs_result_classes"]
+    var classes = py_item(context, nk[].k_family_rs_result_classes)
     var index = 0 if kind == "bootstrap" else 1 if kind == "permutation" else 2
     if kind != "bootstrap" and kind != "permutation" and kind != "monte_carlo":
         raise Error("ValueError: unknown resampling result kind")
@@ -99,7 +103,7 @@ def resample_result_initialize(args: PythonObject, context: PythonObject) raises
             # native tuple storage and class finalizer rather than invoking
             # its Python namedtuple accessors or broadening owner admission.
             var interval_fields = _class_fields(classes[3])
-            if py_get(interval_fields, "__del__") is not None:
+            if py_get(interval_fields, nk[].k___del__) is not None:
                 raise Error("TypeError: resampling result replacement cannot release interval finalizers")
             native_release_weakrefs(previous, context)
             var count = Int(py=py_call(py_attr(b.tuple, "__len__"), previous))

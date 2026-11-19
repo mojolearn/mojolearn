@@ -30,6 +30,8 @@ from core.sequence_array_cast import sequence_store_word
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
 from bindings.py_optional import py_present
+from bindings.resample_keys_unpack import resample_keys
+from bindings.py_balanced import py_item
 
 
 comptime _RPScalarBox = def(MutPointer[UInt8, MutUntrackedOrigin], PyObjectPtr, PyObjectPtr) thin abi("C") -> PyObjectPtr
@@ -37,6 +39,7 @@ comptime _RPScalarBytes = def(PyObjectPtr, MutPointer[UInt8, MutUntrackedOrigin]
 
 
 def _rp_api(dtype: PythonObject) raises -> PythonObject:
+    var nk = resample_keys()
     var sys = native_loaded_module("sys")
     var module = py_get(sys.modules, "numpy._core._multiarray_umath")
     if module is None:
@@ -45,7 +48,7 @@ def _rp_api(dtype: PythonObject) raises -> PythonObject:
         raise Error("TypeError: pandas scalar storage requires NumPy's native module")
     var fields = py_fields(module)
     _rp_string_keys(fields)
-    var capsule = py_get(fields, "_ARRAY_API")
+    var capsule = py_get(fields, nk[].k__ARRAY_API)
     ref cpy = Python().cpython()
     var null_name = Optional[MutPointer[UInt8, MutUntrackedOrigin]](None)
     if cpy.lib.get_function[Int32]("PyCapsule_IsValid")(capsule._obj_ptr, null_name) == 0:
@@ -105,12 +108,13 @@ def _rp_cell_entries(kind: String, context: PythonObject) raises -> PythonObject
     """(NA, NaT, temporal boxing entry) of one array from the operation
     context (lane ne2-b-rounds, N047): references `resample_pandas_array`
     resolved once; None for an entry the context does not carry."""
+    var nk = resample_keys()
     var time_from = PythonObject(None)
     if kind == "M":
-        time_from = py_get(context, "resample_pandas_timestamp_from")
+        time_from = py_get(context, nk[].k_resample_pandas_timestamp_from)
     elif kind == "m":
-        time_from = py_get(context, "resample_pandas_timedelta_from")
-    return Python.tuple(py_get(context, "resample_pandas_na"), py_get(context, "resample_pandas_nat"), time_from)
+        time_from = py_get(context, nk[].k_resample_pandas_timedelta_from)
+    return Python.tuple(py_get(context, nk[].k_resample_pandas_na), py_get(context, nk[].k_resample_pandas_nat), time_from)
 
 
 struct _RPArray(Movable):
@@ -132,10 +136,11 @@ struct _RPArray(Movable):
     var time_from: PythonObject
 
     def __init__(out self, value: PythonObject, context: PythonObject) raises:
+        var nk = resample_keys()
         var layout = _RPLayout()
-        if py_type(value) is not context["ndarray"]:
+        if py_type(value) is not py_item(context, nk[].k_ndarray):
             raise Error("TypeError: pandas storage requires an exact native ndarray")
-        var snapshots = context["resample_pandas_array_snapshots"]
+        var snapshots = py_item(context, nk[].k_resample_pandas_array_snapshots)
         for i in range(len(snapshots)):  # driver-loop: reuse once-captured metadata and the retained independent native ndarray view
             var snapshot = snapshots[i]
             if snapshot[0] is value:
@@ -163,17 +168,17 @@ struct _RPArray(Movable):
                 return
         # Exact ndarray C descriptor; no subtype/finalize callback. The view
         # pins the original storage and owns independent shape/stride metadata.
-        self.owner = py_call(context["resample_pandas_view"], value)
+        self.owner = py_call(py_item(context, nk[].k_resample_pandas_view), value)
         self.dtype = self.owner.dtype
         var admitted_dtype = False
-        var classes = context["resample_pandas_dtype_classes"]
+        var classes = py_item(context, nk[].k_resample_pandas_dtype_classes)
         for i in range(len(classes)):  # driver-loop: exact builtin dtype descriptors before any dtype metadata read
             admitted_dtype = admitted_dtype or py_type(self.dtype) is classes[i]
         if not admitted_dtype:
             raise Error("TypeError: pandas storage cannot invoke custom dtype metadata or scalar hooks")
         layout.kind = String(self.dtype.kind)
         layout.number = Int(py=self.dtype.num)
-        self.api_owner = context["resample_pandas_scalar_api"]
+        self.api_owner = py_item(context, nk[].k_resample_pandas_scalar_api)
         var table = Int(py=self.api_owner[2])
         self.scalar_box = MutPointer[_RPScalarBox, MutUntrackedOrigin](unsafe_from_address=table + 60 * size_of[Int]())[0]
         layout.item = Int(py=self.dtype.itemsize)
@@ -203,7 +208,8 @@ struct _RPArray(Movable):
         self.layout = layout^
 
 def _rp_new(shape: PythonObject, dtype: PythonObject, context: PythonObject) raises -> PythonObject:
-    return py_call(context["ndarray"], shape, dtype=dtype)
+    var nk = resample_keys()
+    return py_call(py_item(context, nk[].k_ndarray), shape, dtype=dtype)
 
 
 def _rp_object(destination: Int, value: PythonObject) raises:
@@ -280,7 +286,8 @@ def _rp_box(source: _RPArray, address: Int) raises -> PythonObject:
 
 
 def _rp_scalar_array(value: PythonObject, context: PythonObject) raises -> PythonObject:
-    var classes = context["resample_pandas_scalar_classes"]
+    var nk = resample_keys()
+    var classes = py_item(context, nk[].k_resample_pandas_scalar_classes)
     var admitted = False
     for i in range(len(classes)):  # driver-loop: scalar storage API cannot receive subclasses or user conversion hooks
         admitted = admitted or py_type(value) is classes[i]
@@ -290,7 +297,7 @@ def _rp_scalar_array(value: PythonObject, context: PythonObject) raises -> Pytho
     var target = _RPArray(result, context)
     if target.layout.kind != "b" and target.layout.kind != "i" and target.layout.kind != "u" and target.layout.kind != "f" and target.layout.kind != "c" and target.layout.kind != "M" and target.layout.kind != "m" and target.layout.kind != "S" and target.layout.kind != "U" and target.layout.kind != "V":
         raise Error("TypeError: pandas scalar byte storage requires a native builtin scalar dtype")
-    var api = context["resample_pandas_scalar_api"]
+    var api = py_item(context, nk[].k_resample_pandas_scalar_api)
     var extract = MutPointer[_RPScalarBytes, MutUntrackedOrigin](unsafe_from_address=Int(py=api[2]) + 62 * size_of[Int]())[0]
     if target.layout.kind == "S" or target.layout.kind == "U" or target.layout.kind == "V":
         var address = Int(0)
@@ -353,6 +360,7 @@ def _rp_nan() -> PythonObject:
 
 
 def _rp_distinguish_na() raises -> Bool:
+    var nk = resample_keys()
     var module = py_get(native_loaded_module("sys").modules, "pandas._config.config")
     if module is None:
         return False
@@ -360,17 +368,17 @@ def _rp_distinguish_na() raises -> Bool:
         raise Error("TypeError: pandas options require their loaded native module")
     var module_fields = py_fields(module)
     _rp_string_keys(module_fields)
-    var config = py_get(module_fields, "_global_config")
+    var config = py_get(module_fields, nk[].k__global_config)
     if py_type(config) is not py_type(Python.dict()):
         raise Error("TypeError: pandas options require ordinary native dictionaries")
     _rp_string_keys(config)
-    var future = py_get(config, "future")
+    var future = py_get(config, nk[].k_future)
     if future is None:
         return False
     if py_type(future) is not py_type(Python.dict()):
         raise Error("TypeError: pandas future options require an ordinary native dictionary")
     _rp_string_keys(future)
-    var distinguish = py_get(future, "distinguish_nan_and_na")
+    var distinguish = py_get(future, nk[].k_distinguish_nan_and_na)
     if distinguish is None:
         return False
     if py_type(distinguish) is not py_type(PythonObject(True)):
@@ -379,9 +387,10 @@ def _rp_distinguish_na() raises -> Bool:
 
 
 def _rp_masked(values: PythonObject, force_object: Bool, distinguish: Bool, context: PythonObject) raises -> PythonObject:
+    var nk = resample_keys()
     var fields = _pd_fields(values)
-    var source = _RPArray(py_get(fields, "_data"), context)
-    var mask = _RPArray(py_get(fields, "_mask"), context)
+    var source = _RPArray(py_get(fields, nk[].k__data), context)
+    var mask = _RPArray(py_get(fields, nk[].k__mask), context)
     var cls = py_type(values)
     if (cls is _pd_class("pandas.core.arrays.integer", "IntegerArray") and source.layout.kind != "i" and source.layout.kind != "u") or (cls is _pd_class("pandas.core.arrays.floating", "FloatingArray") and source.layout.kind != "f") or (cls is _pd_class("pandas.core.arrays.boolean", "BooleanArray") and source.layout.kind != "b"):
         raise Error("TypeError: pandas nullable dtype and native storage disagree")
@@ -410,11 +419,12 @@ def _rp_masked(values: PythonObject, force_object: Bool, distinguish: Bool, cont
 
 
 def _rp_native_method(cls: PythonObject, name: String) raises -> PythonObject:
+    var nk = resample_keys()
     # Admit the raw C classmethod descriptor before binding: looking up a
     # replaceable class attribute first could execute a Python descriptor.
     var b = native_loaded_module("builtins")
-    var native_classmethod = py_type(b.dict.__dict__["fromkeys"])
-    var ancestry = py_call(b.type.__dict__["__mro__"].__get__, cls)
+    var native_classmethod = py_type(py_item(b.dict.__dict__, nk[].k_fromkeys))
+    var ancestry = py_call(py_item(b.type.__dict__, nk[].k___mro__).__get__, cls)
     for i in range(len(ancestry)):  # driver-loop: native boxing descriptors live on _Timestamp/_Timedelta/_Period bases
         var owner = ancestry[i]
         var descriptor = py_get(_pd_type_fields(owner), name)
@@ -434,19 +444,20 @@ def _rp_native_method(cls: PythonObject, name: String) raises -> PythonObject:
             var function = descriptor.__func__
             var expected = String(py=owner.__qualname__) + "." + name
             if String(py=py_type(function).__qualname__) == "cython_function_or_method" and String(py=function.__qualname__) == expected:
-                return py_call(b.classmethod.__dict__["__get__"], descriptor, PythonObject(None), cls)
+                return py_call(py_item(b.classmethod.__dict__, nk[].k___get__), descriptor, PythonObject(None), cls)
         raise Error("TypeError: pandas scalar boxing requires its native classmethod descriptor")
     raise Error("TypeError: pandas scalar boxing native classmethod is unavailable")
 
 
 def _rp_timezone(tz: PythonObject) raises:
+    var nk = resample_keys()
     if tz is None:
         return
     var cls = py_type(tz)
     if cls is _pd_class("datetime", "timezone") or cls is _pd_class("zoneinfo", "ZoneInfo"):
-        var method = py_get(_pd_type_fields(cls), "utcoffset")
+        var method = py_get(_pd_type_fields(cls), nk[].k_utcoffset)
         var b = native_loaded_module("builtins")
-        if py_type(method) is not py_type(b.list.__dict__["copy"]) or method.__objclass__ is not cls:
+        if py_type(method) is not py_type(py_item(b.list.__dict__, nk[].k_copy)) or method.__objclass__ is not cls:
             raise Error("TypeError: native timezone requires its native UTC-offset descriptor")
         return
     # Custom/dateutil/pytz tzinfo methods are Python callbacks. Admission must
@@ -475,8 +486,9 @@ def _rp_time_box(source: _RPArray, address: Int, tz: PythonObject) raises -> Pyt
 
 
 def _rp_arrow(values: PythonObject, force_object: Bool, distinguish: Bool, context: PythonObject) raises -> PythonObject:
+    var nk = resample_keys()
     var fields = _pd_fields(values)
-    var chunked = py_get(fields, "_pa_array")
+    var chunked = py_get(fields, nk[].k__pa_array)
     if py_type(chunked) is not _pd_class("pyarrow.lib", "ChunkedArray"):
         raise Error("TypeError: pandas Arrow storage requires an exact native ChunkedArray")
     var arrow_type = chunked.type
@@ -508,10 +520,10 @@ def _rp_arrow(values: PythonObject, force_object: Bool, distinguish: Bool, conte
     var target = _RPArray(result, context)
     var na = _rp_na()
     if py_type(values) is _pd_class("pandas.core.arrays.string_arrow", "ArrowStringArray"):
-        var string_dtype = py_get(fields, "_dtype")
+        var string_dtype = py_get(fields, nk[].k__dtype)
         if py_type(string_dtype) is not _pd_class("pandas.core.arrays.string_", "StringDtype"):
             raise Error("TypeError: pandas Arrow strings require their exact stored dtype")
-        na = py_get(_pd_fields(string_dtype), "_na_value")
+        na = py_get(_pd_fields(string_dtype), nk[].k__na_value)
         if na is None:
             na = _rp_na()
     var position = 0
@@ -547,12 +559,12 @@ def _rp_arrow(values: PythonObject, force_object: Bool, distinguish: Bool, conte
         var numeric = Optional[PythonObject]()
         var numeric_sources = List[_RPArray]()
         if not text and not binary and type_id != 0 and type_id != 1:
-            var item = Int(py=py_call(context["resample_pandas_dtype_factory"], dtype).itemsize)
+            var item = Int(py=py_call(py_item(context, nk[].k_resample_pandas_dtype_factory), dtype).itemsize)
             if (offset + length) > sizes[1] // item:
                 raise Error("ValueError: pandas Arrow numeric data buffer is too small")
             # A native ndarray view supplies admitted scalar metadata; data
             # never passes through Arrow/NumPy conversion or compute methods.
-            numeric = py_present(py_call(context["ndarray"], Python.tuple(length), dtype=PythonObject(dtype), buffer=buffers[1], offset=offset * Int(py=py_call(context["resample_pandas_dtype_factory"], dtype).itemsize)))
+            numeric = py_present(py_call(py_item(context, nk[].k_ndarray), Python.tuple(length), dtype=PythonObject(dtype), buffer=buffers[1], offset=offset * Int(py=py_call(py_item(context, nk[].k_resample_pandas_dtype_factory), dtype).itemsize)))
         if Bool(numeric):
             numeric_sources.append(_RPArray(numeric.value(), context))
         for row in range(length):  # driver-loop: unpack Arrow validity and copy/box one stored cell
@@ -603,12 +615,13 @@ def _rp_arrow(values: PythonObject, force_object: Bool, distinguish: Bool, conte
 
 
 def _rp_index_values(categories: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = resample_keys()
     var category_class = py_type(categories)
     if category_class is not _pd_class("pandas.core.indexes.range", "RangeIndex") and category_class is not _pd_class("pandas.core.indexes.base", "Index") and category_class is not _pd_class("pandas.core.indexes.datetimes", "DatetimeIndex") and category_class is not _pd_class("pandas.core.indexes.timedeltas", "TimedeltaIndex") and category_class is not _pd_class("pandas.core.indexes.period", "PeriodIndex"):
         raise Error("TypeError: categorical categories require ordinary native index storage")
     var category_values = PythonObject(None)
     if category_class is _pd_class("pandas.core.indexes.range", "RangeIndex"):
-        var stored_range = py_get(_pd_fields(categories), "_range")
+        var stored_range = py_get(_pd_fields(categories), nk[].k__range)
         if py_type(stored_range) is not py_type(py_call(native_loaded_module("builtins").range, 0)):
             raise Error("TypeError: categorical RangeIndex requires native range storage")
         category_values = _rp_new(Python.tuple(len(stored_range)), PythonObject("i8"), context)
@@ -616,12 +629,13 @@ def _rp_index_values(categories: PythonObject, context: PythonObject) raises -> 
         for i in range(range_array.layout.rows):  # driver-loop: materialize the native categorical range metadata
             sequence_store_word(range_array.layout.at(i), UInt64(Int(py=stored_range[i])), 8, True)
     else:
-        category_values = py_get(_pd_fields(categories), "_data")
+        category_values = py_get(_pd_fields(categories), nk[].k__data)
     return category_values
 
 
 def _rp_category_record(values: PythonObject, distinguish: Bool, context: PythonObject, depth: Int) raises -> PythonObject:
-    var records = context["resample_pandas_category_records"]
+    var nk = resample_keys()
+    var records = py_item(context, nk[].k_resample_pandas_category_records)
     for i in range(len(records)):  # driver-loop: categorical metadata and category buffers are captured once per operation
         if records[i][0] is values:
             return records[i]
@@ -629,8 +643,8 @@ def _rp_category_record(values: PythonObject, distinguish: Bool, context: Python
     if py_type(dtype) is not _rp_item("pandas.core.dtypes.dtypes", "CategoricalDtype"):
         raise Error("TypeError: pandas categorical requires its exact stored dtype")
     var fields = _rp_dict(dtype)
-    var categories = py_get(fields, "_categories")
-    var ordered = py_get(fields, "_ordered")
+    var categories = py_get(fields, nk[].k__categories)
+    var ordered = py_get(fields, nk[].k__ordered)
     if ordered is not None and py_type(ordered) is not py_type(PythonObject(True)):
         raise Error("TypeError: pandas categorical ordering metadata must be a native bool")
     var raw = _rp_index_values(categories, context)
@@ -767,37 +781,39 @@ def _rp_categories_equal(left: PythonObject, right: PythonObject, distinguish: B
 
 
 def _rp_sparse_record(values: PythonObject, context: PythonObject) raises -> PythonObject:
-    var records = context["resample_pandas_sparse_records"]
+    var nk = resample_keys()
+    var records = py_item(context, nk[].k_resample_pandas_sparse_records)
     for i in range(len(records)):  # driver-loop: one immutable sparse metadata snapshot per public operation
         if records[i][0] is values:
             return records[i]
     var fields = _rp_dict(values)
-    var dtype = py_get(fields, "_dtype")
+    var dtype = py_get(fields, nk[].k__dtype)
     if py_type(dtype) is not _pd_class("pandas.core.dtypes.dtypes", "SparseDtype"):
         raise Error("TypeError: pandas sparse storage requires its exact stored dtype")
     var dtype_fields = _rp_dict(dtype)
-    var fill = py_get(dtype_fields, "_fill_value")
-    var index = py_get(fields, "_sparse_index")
+    var fill = py_get(dtype_fields, nk[].k__fill_value)
+    var index = py_get(fields, nk[].k__sparse_index)
     if py_type(index) is not _pd_class("pandas._libs.sparse", "IntIndex") and py_type(index) is not _pd_class("pandas._libs.sparse", "BlockIndex"):
         raise Error("TypeError: pandas sparse placement requires an exact native index")
     var rows = _rp_sparse_field(index, "length")
     var points = _rp_sparse_field(index, "npoints")
-    var source = _RPArray(py_get(fields, "_sparse_values"), context)
-    var subtype = py_get(dtype_fields, "_dtype")
+    var source = _RPArray(py_get(fields, nk[].k__sparse_values), context)
+    var subtype = py_get(dtype_fields, nk[].k__dtype)
     if py_type(subtype) is not py_type(source.dtype) or String(subtype.str) != source.layout.code:
         raise Error("TypeError: pandas sparse logical subtype and stored values disagree")
-    var record = Python.tuple(values, fields, py_get(fields, "_sparse_values"), dtype, dtype_fields, fill, index, rows, points)
+    var record = Python.tuple(values, fields, py_get(fields, nk[].k__sparse_values), dtype, dtype_fields, fill, index, rows, points)
     py_call(records.append, record)
     return record
 
 
 def _rp_sparse_field(value: PythonObject, name: String) raises -> PythonObject:
+    var nk = resample_keys()
     # Caller already admitted exact IntIndex/BlockIndex. Public Cython fields
     # may be inherited from SparseIndex; inspect descriptors without attribute
     # resolution or a sparse index conversion method.
     var b = native_loaded_module("builtins")
     var cls = py_type(value)
-    var ancestry = py_call(b.type.__dict__["__mro__"].__get__, cls)
+    var ancestry = py_call(py_item(b.type.__dict__, nk[].k___mro__).__get__, cls)
     for i in range(len(ancestry)):  # driver-loop: resolve only native field descriptors on the admitted index hierarchy
         var owner = ancestry[i]
         var descriptor = py_get(_pd_type_fields(owner), name)
@@ -822,6 +838,7 @@ def _rp_temporal_scalar(value: PythonObject) raises -> Bool:
 
 
 def _rp_temporal_scalar_array(value: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = resample_keys()
     var cls = py_type(value)
     var kind = String("M")
     var unit = String("us")
@@ -870,9 +887,9 @@ def _rp_temporal_scalar_array(value: PythonObject, context: PythonObject) raises
             var tz = _rp_sparse_field(value, "tzinfo")
             _rp_timezone(tz)
             if tz is not None:
-                var method = py_get(_pd_type_fields(cls), "utcoffset")
+                var method = py_get(_pd_type_fields(cls), nk[].k_utcoffset)
                 var b = native_loaded_module("builtins")
-                if py_type(method) is not py_type(b.list.__dict__["copy"]) or method.__objclass__ is not cls:
+                if py_type(method) is not py_type(py_item(b.list.__dict__, nk[].k_copy)) or method.__objclass__ is not cls:
                     raise Error("TypeError: datetime fill requires its native UTC-offset method")
                 var offset = py_call(method, value)
                 if offset is not None:
@@ -936,6 +953,7 @@ def _rp_sparse_fill_array(value: PythonObject, context: PythonObject) raises -> 
 
 
 def _rp_sparse_fill_type(value: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = resample_keys()
     # np.result_type(dtype, TYPE(fill)) treats builtin int/float/complex as
     # fixed i8/f8/c16, independent of value or narrower stored sparse subtype.
     var cls = py_type(value)
@@ -950,7 +968,7 @@ def _rp_sparse_fill_type(value: PythonObject, context: PythonObject) raises -> P
         return Python.tuple("c", 16)
     var codes = Python.tuple("?", "i1", "u1", "i2", "u2", "i4", "u4", "i8", "u8", "q", "Q", "l", "L", "f2", "f4", "f8", "g", "c8", "c16", "G", "M8[ns]", "m8[ns]")
     for i in range(len(codes)):  # driver-loop: exact builtin NumPy scalar identity before reading its dtype
-        var dtype = py_call(context["resample_pandas_dtype_factory"], codes[i])
+        var dtype = py_call(py_item(context, nk[].k_resample_pandas_dtype_factory), codes[i])
         if cls is dtype.type:
             var actual = value.dtype
             return Python.tuple(String(actual.kind), Int(py=actual.itemsize))
@@ -1051,7 +1069,8 @@ def _rp_numpy_temporal_box(source: _RPArray, address: Int) raises -> PythonObjec
 
 
 def _rp_sparse_object_fill(value: PythonObject, context: PythonObject) raises -> PythonObject:
-    var scalars = context["resample_pandas_scalar_classes"]
+    var nk = resample_keys()
+    var scalars = py_item(context, nk[].k_resample_pandas_scalar_classes)
     for i in range(len(scalars)):  # driver-loop: exact NumPy scalar fills use native storage-to-object boxing
         if py_type(value) is scalars[i]:
             var source = _RPArray(_rp_scalar_array(value, context), context)
@@ -1135,6 +1154,7 @@ def _rp_sparse_fill_copy(source: _RPArray, destination: Int, target: _RPArray) r
 
 def _rp_sparse(values: PythonObject, force_object: Bool, context: PythonObject,
                requested_dtype: PythonObject) raises -> PythonObject:
+    var nk = resample_keys()
     var record = _rp_sparse_record(values, context)
     var fields = record[1]
     var source = _RPArray(record[2], context)
@@ -1200,7 +1220,7 @@ def _rp_sparse(values: PythonObject, force_object: Bool, context: PythonObject,
             var kind = "f" if source.layout.kind == "c" else source.layout.kind
             var size = source.layout.item // 2 if source.layout.kind == "c" else source.layout.item
             _rp_promote(kind, size, "f" if fill_kind == "c" else fill_kind, fill_size // 2 if fill_kind == "c" else fill_size)
-            var extended = source.layout.number == 13 or source.layout.number == 16 or py_type(fill) is py_call(context["resample_pandas_dtype_factory"], "g").type or py_type(fill) is py_call(context["resample_pandas_dtype_factory"], "G").type
+            var extended = source.layout.number == 13 or source.layout.number == 16 or py_type(fill) is py_call(py_item(context, nk[].k_resample_pandas_dtype_factory), "g").type or py_type(fill) is py_call(py_item(context, nk[].k_resample_pandas_dtype_factory), "G").type
             target_dtype = PythonObject(("G" if complex_values else "g") if extended else (("c" if complex_values else kind) + String(size * (2 if complex_values else 1))))
         else:
             target_dtype = PythonObject("O")
@@ -1226,7 +1246,7 @@ def _rp_sparse(values: PythonObject, force_object: Bool, context: PythonObject,
                 # through float64. Never silently narrow a wide floating fill;
                 # arbitrary-precision integer encoding remains an explicit gap.
                 var b = native_loaded_module("builtins")
-                var bits = Int(py=py_call(b.int.__dict__["bit_length"], fill))
+                var bits = Int(py=py_call(py_item(b.int.__dict__, nk[].k_bit_length), fill))
                 ref cpy = Python().cpython()
                 var zero = PythonObject(0)
                 var negative = cpy.lib.get_function[Int32]("PyObject_RichCompareBool")(fill._obj_ptr, zero._obj_ptr, Int32(0)) != 0
@@ -1253,18 +1273,19 @@ def _rp_sparse(values: PythonObject, force_object: Bool, context: PythonObject,
 
 
 def _rp_interval_constructor() raises -> PythonObject:
+    var nk = resample_keys()
     var b = native_loaded_module("builtins")
     var cls = _pd_class("pandas._libs.interval", "Interval")
     if cls is None or py_type(cls) is not b.type:
         raise Error("TypeError: pandas Interval requires its exact native constructor type")
     var fields = _pd_type_fields(cls)
-    var new = py_get(fields, "__new__")
-    var init = py_get(fields, "__init__")
+    var new = py_get(fields, nk[].k___new__)
+    var init = py_get(fields, nk[].k___init__)
     # Read raw class fields before descriptor binding. Borrowed native slots on
     # a substituted Python class fail their bound owner checks before a call.
-    if new is None or py_type(new) is not py_type(b.object.__dict__["__new__"]) or new.__self__ is not cls:
+    if new is None or py_type(new) is not py_type(py_item(b.object.__dict__, nk[].k___new__)) or new.__self__ is not cls:
         raise Error("TypeError: pandas Interval requires its native allocation entry")
-    if init is None or py_type(init) is not py_type(b.object.__dict__["__init__"]) or init.__objclass__ is not cls:
+    if init is None or py_type(init) is not py_type(py_item(b.object.__dict__, nk[].k___init__)) or init.__objclass__ is not cls:
         raise Error("TypeError: pandas Interval requires its native initialization entry")
     return cls
 
@@ -1302,6 +1323,7 @@ def _rp_interval_missing(source: _RPArray, row: Int) raises -> Bool:
 
 
 def _rp_interval_scalar(value: PythonObject, context: PythonObject) raises:
+    var nk = resample_keys()
     var cls = py_type(value)
     var b = native_loaded_module("builtins")
     if cls is b.int or cls is b.float or cls is b.bool:
@@ -1309,18 +1331,18 @@ def _rp_interval_scalar(value: PythonObject, context: PythonObject) raises:
     # lane ne2-b-rounds (N047): the two pandas scalar classes and the 16
     # numerical scalar types are resolved once (per operation / per NumPy
     # identity, `resample_pandas_array`), not per endpoint
-    var timestamp = py_get(context, "resample_pandas_timestamp_class")
+    var timestamp = py_get(context, nk[].k_resample_pandas_timestamp_class)
     if timestamp is None:
         timestamp = _pd_class("pandas._libs.tslibs.timestamps", "Timestamp")
     if cls is timestamp:
         _rp_timezone(_rp_sparse_field(value, "tzinfo"))
         return
-    var timedelta = py_get(context, "resample_pandas_timedelta_class")
+    var timedelta = py_get(context, nk[].k_resample_pandas_timedelta_class)
     if timedelta is None:
         timedelta = _pd_class("pandas._libs.tslibs.timedeltas", "Timedelta")
     if cls is timedelta:
         return
-    var types = py_get(context, "resample_pandas_interval_types")
+    var types = py_get(context, nk[].k_resample_pandas_interval_types)
     if types is not None:
         for i in range(len(types)):  # driver-loop: exact native numerical endpoints only, before Interval comparisons
             if cls is types[i]:
@@ -1328,25 +1350,26 @@ def _rp_interval_scalar(value: PythonObject, context: PythonObject) raises:
         raise Error("TypeError: pandas Interval endpoints cannot invoke Python scalar comparison hooks")
     var codes = Python.tuple("i1", "u1", "i2", "u2", "i4", "u4", "i8", "u8", "q", "Q", "l", "L", "f2", "f4", "f8", "g")
     for i in range(len(codes)):  # driver-loop: exact native numerical endpoints only, before Interval comparisons
-        var dtype = py_call(context["resample_pandas_dtype_factory"], codes[i])
+        var dtype = py_call(py_item(context, nk[].k_resample_pandas_dtype_factory), codes[i])
         if cls is dtype.type:
             return
     raise Error("TypeError: pandas Interval endpoints cannot invoke Python scalar comparison hooks")
 
 
 def _rp_interval(values: PythonObject, distinguish: Bool, context: PythonObject, depth: Int) raises -> PythonObject:
+    var nk = resample_keys()
     var fields = _rp_dict(values)
-    var dtype = py_get(fields, "_dtype")
+    var dtype = py_get(fields, nk[].k__dtype)
     if py_type(dtype) is not _pd_class("pandas.core.dtypes.dtypes", "IntervalDtype"):
         raise Error("TypeError: pandas interval storage requires its exact stored dtype")
-    var closed = py_get(_rp_dict(dtype), "_closed")
+    var closed = py_get(_rp_dict(dtype), nk[].k__closed)
     if py_type(closed) is not py_type(PythonObject("")):
         raise Error("TypeError: pandas interval closure must be an exact native string")
     var closure = String(closed)
     if closure != "left" and closure != "right" and closure != "both" and closure != "neither":
         raise Error("ValueError: pandas interval closure is invalid")
-    var left_owner = py_get(fields, "_left")
-    var right_owner = py_get(fields, "_right")
+    var left_owner = py_get(fields, nk[].k__left)
+    var right_owner = py_get(fields, nk[].k__right)
     var left = _RPArray(_rp_storage(left_owner, False, distinguish, context, depth + 1), context)
     var right = _RPArray(_rp_storage(right_owner, False, distinguish, context, depth + 1), context)
     if left.layout.rank != 1 or right.layout.rank != 1 or left.layout.rows != right.layout.rows:
@@ -1374,10 +1397,11 @@ def _rp_interval(values: PythonObject, distinguish: Bool, context: PythonObject,
 
 
 def _rp_storage(values: PythonObject, force_object: Bool, distinguish: Bool, context: PythonObject, depth: Int = 0) raises -> PythonObject:
+    var nk = resample_keys()
     if depth > 32:
         raise Error("TypeError: pandas native extension nesting exceeds the supported depth")
     var cls = py_type(values)
-    if cls is context["ndarray"]:
+    if cls is py_item(context, nk[].k_ndarray):
         return values
     if cls is _pd_class("pandas.core.arrays.integer", "IntegerArray") or cls is _pd_class("pandas.core.arrays.floating", "FloatingArray") or cls is _pd_class("pandas.core.arrays.boolean", "BooleanArray"):
         return _rp_masked(values, force_object, distinguish, context)
@@ -1394,10 +1418,10 @@ def _rp_storage(values: PythonObject, force_object: Bool, distinguish: Bool, con
         elif category_type is _pd_class("pandas.core.arrays.integer", "IntegerArray") or category_type is _pd_class("pandas.core.arrays.floating", "FloatingArray") or category_type is _pd_class("pandas.core.arrays.boolean", "BooleanArray") or category_type is _pd_class("pandas.core.arrays.arrow.array", "ArrowExtensionArray"):
             category_na = _rp_na()
         elif category_type is _pd_class("pandas.core.arrays.string_", "StringArray") or category_type is _pd_class("pandas.core.arrays.string_arrow", "ArrowStringArray"):
-            var string_dtype = _pd_get("pandas._libs.arrays", "NDArrayBacked", "_dtype", category_values) if category_type is _pd_class("pandas.core.arrays.string_", "StringArray") else py_get(_pd_fields(category_values), "_dtype")
+            var string_dtype = _pd_get("pandas._libs.arrays", "NDArrayBacked", "_dtype", category_values) if category_type is _pd_class("pandas.core.arrays.string_", "StringArray") else py_get(_pd_fields(category_values), nk[].k__dtype)
             if py_type(string_dtype) is not _pd_class("pandas.core.arrays.string_", "StringDtype"):
                 raise Error("TypeError: pandas string categories require their exact native dtype")
-            category_na = py_get(_pd_fields(string_dtype), "_na_value")
+            category_na = py_get(_pd_fields(string_dtype), nk[].k__na_value)
             if category_na is None:
                 category_na = _rp_na()
         var source = _RPArray(record[4], context)
@@ -1438,7 +1462,7 @@ def _rp_storage(values: PythonObject, force_object: Bool, distinguish: Bool, con
         var dtype = _pd_get("pandas._libs.arrays", "NDArrayBacked", "_dtype", values)
         var data = _pd_get("pandas._libs.arrays", "NDArrayBacked", "_ndarray", values)
         if py_type(dtype) is _pd_class("pandas.core.dtypes.dtypes", "DatetimeTZDtype"):
-            var tz = py_get(_pd_fields(dtype), "_tz")
+            var tz = py_get(_pd_fields(dtype), nk[].k__tz)
             _rp_timezone(tz)
             var source = _RPArray(data, context)
             if source.layout.kind != "M" or source.layout.item != 8:
@@ -1458,7 +1482,7 @@ def _rp_storage(values: PythonObject, force_object: Bool, distinguish: Bool, con
         var dtype = _pd_get("pandas._libs.arrays", "NDArrayBacked", "_dtype", values)
         if py_type(dtype) is not _pd_class("pandas.core.dtypes.dtypes", "PeriodDtype"):
             raise Error("TypeError: pandas period storage requires its exact dtype")
-        var freq = py_get(_pd_fields(dtype), "_freq")
+        var freq = py_get(_pd_fields(dtype), nk[].k__freq)
         var offsets = Python.tuple("Day", "MonthEnd", "QuarterEnd", "YearEnd", "Week", "Hour", "Minute", "Second", "Milli", "Micro", "Nano", "BusinessDay")
         var admitted = False
         for k in range(len(offsets)):  # driver-loop: exact native period frequencies, never user offset subclasses
@@ -1490,14 +1514,15 @@ def _rp_storage(values: PythonObject, force_object: Bool, distinguish: Bool, con
 
 
 def _rp_blocks(value: PythonObject, series: Bool) raises -> PythonObject:
+    var nk = resample_keys()
     # Same manager/descriptor admission as msel_inputs._pandas_blocks, extended
     # to the ordinary datetime blocks that the numeric-only reader excludes.
-    var manager = py_get(_pd_fields(value), "_mgr")
+    var manager = py_get(_pd_fields(value), nk[].k__mgr)
     var blocks = PythonObject(None)
     if series:
         if py_type(manager) is not _pd_class("pandas.core.internals.managers", "SingleBlockManager"):
             raise Error("TypeError: resample requires ordinary pandas Series storage")
-        blocks = py_get(_pd_fields(manager), "blocks")
+        blocks = py_get(_pd_fields(manager), nk[].k_blocks)
     else:
         if py_type(manager) is not _pd_class("pandas.core.internals.managers", "BlockManager"):
             raise Error("TypeError: resample requires ordinary pandas DataFrame storage")
@@ -1516,6 +1541,7 @@ def _rp_blocks(value: PythonObject, series: Bool) raises -> PythonObject:
 
 
 def _rp_materialize(value: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = resample_keys()
     if not native_pandas_exact(value):
         raise Error("TypeError: pandas resample requires an exact DataFrame or Series")
     var series = py_type(value) is _pd_class("pandas.core.series", "Series")
@@ -1548,14 +1574,14 @@ def _rp_materialize(value: PythonObject, context: PythonObject) raises -> Python
         if categorical:
             var record = _rp_category_record(raw, distinguish, context, 0)
             var category_kind = py_type(record[3])
-            if len(blocks) > 1 and category_kind is not _pd_class("pandas.core.arrays.sparse.array", "SparseArray") and category_kind is not context["ndarray"] and category_kind is not _pd_class("pandas.core.arrays.datetimes", "DatetimeArray") and category_kind is not _pd_class("pandas.core.arrays.timedeltas", "TimedeltaArray"):
+            if len(blocks) > 1 and category_kind is not _pd_class("pandas.core.arrays.sparse.array", "SparseArray") and category_kind is not py_item(context, nk[].k_ndarray) and category_kind is not _pd_class("pandas.core.arrays.datetimes", "DatetimeArray") and category_kind is not _pd_class("pandas.core.arrays.timedeltas", "TimedeltaArray"):
                 force_object = True
             var dtype = record[1]
             if not categorical_dtype:
                 categorical_dtype = dtype
             else:
                 same_categorical_dtype = same_categorical_dtype and dtype is categorical_dtype.value()
-        if len(blocks) > 1 and not categorical and cls is not _pd_class("pandas.core.arrays.sparse.array", "SparseArray") and cls is not context["ndarray"] and cls is not _pd_class("pandas.core.arrays.datetimes", "DatetimeArray") and cls is not _pd_class("pandas.core.arrays.timedeltas", "TimedeltaArray"):
+        if len(blocks) > 1 and not categorical and cls is not _pd_class("pandas.core.arrays.sparse.array", "SparseArray") and cls is not py_item(context, nk[].k_ndarray) and cls is not _pd_class("pandas.core.arrays.datetimes", "DatetimeArray") and cls is not _pd_class("pandas.core.arrays.timedeltas", "TimedeltaArray"):
             force_object = True
     var use_sparse_promotion = has_sparse and not has_categorical
     if has_categorical:
@@ -1853,16 +1879,17 @@ def _rp_copy_block(source: _RPLayout, target: _RPLayout, rows: Int, cols: Int, p
 
 
 def resample_pandas_array(value: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = resample_keys()
     classical_connect_numpy(context)
     # Snapshot this operation's native factories/classes; the shared bridge
     # context is not mutated with temporary resample metadata.
     var dtype = native_numpy_dtype(context)
     var ndarray = native_numpy_type("ndarray", context)
-    var view = py_get(_pd_type_fields(ndarray), "view")
-    if py_type(view) is not py_type(native_loaded_module("builtins").list.__dict__["copy"]) or view.__objclass__ is not ndarray:
+    var view = py_get(_pd_type_fields(ndarray), nk[].k_view)
+    if py_type(view) is not py_type(py_item(native_loaded_module("builtins").list.__dict__, nk[].k_copy)) or view.__objclass__ is not ndarray:
         raise Error("TypeError: pandas snapshots require the native ndarray.view descriptor")
     var table = _rp_static(dtype, ndarray, view, context)
-    var local = Python.dict(ndarray=ndarray, modules=context["modules"],
+    var local = Python.dict(ndarray=ndarray, modules=py_item(context, nk[].k_modules),
         resample_pandas_dtype_classes=table[3], resample_pandas_dtype_factory=dtype,
         resample_pandas_scalar_classes=table[4], resample_pandas_scalar_api=table[5], resample_pandas_view=view,
         resample_pandas_interval_types=table[6],
@@ -1883,7 +1910,8 @@ def _rp_static(dtype: PythonObject, ndarray: PythonObject, view: PythonObject, c
     beside the connected NumPy entries (lane ne2-b-rounds, N065: it was
     rebuilt on every call: 26 dtype descriptors, a key walk of NumPy's
     native module dictionary and a capsule check)."""
-    var cached = py_get(context, "resample_pandas_static")
+    var nk = resample_keys()
+    var cached = py_get(context, nk[].k_resample_pandas_static)
     if cached is not None and py_type(cached) is py_type(Python.tuple()) and len(cached) == 7:
         if cached[0] is dtype and cached[1] is ndarray and cached[2] is view:
             return cached
@@ -1899,7 +1927,7 @@ def _rp_static(dtype: PythonObject, ndarray: PythonObject, view: PythonObject, c
     for i in range(len(numeric)):  # driver-loop: the numerical Interval endpoint types, once per NumPy identity
         py_call(interval_types.append, py_call(dtype, numeric[i]).type)
     var table = Python.tuple(dtype, ndarray, view, classes, scalars, _rp_api(dtype), py_call(native_loaded_module("builtins").tuple, interval_types))
-    py_setitem(context, "resample_pandas_static", table)
+    py_setitem(context, nk[].k_resample_pandas_static, table)
     return table
 
 
@@ -1908,25 +1936,26 @@ def _rp_operation_entries(local: PythonObject) raises:
     `_from_value_and_reso` boxing classmethods into the operation context.
     An entry pandas has not loaded stays absent; the cell that needs it then
     resolves it itself and raises its own refusal."""
+    var nk = resample_keys()
     try:
-        py_setitem(local, "resample_pandas_na", _rp_na())
+        py_setitem(local, nk[].k_resample_pandas_na, _rp_na())
     except:
         pass
     try:
-        py_setitem(local, "resample_pandas_nat", _rp_item("pandas._libs.tslibs.nattype", "NaT"))
+        py_setitem(local, nk[].k_resample_pandas_nat, _rp_item("pandas._libs.tslibs.nattype", "NaT"))
     except:
         pass
     var timestamp = _pd_class("pandas._libs.tslibs.timestamps", "Timestamp")
     if timestamp is not None:
-        py_setitem(local, "resample_pandas_timestamp_class", timestamp)
+        py_setitem(local, nk[].k_resample_pandas_timestamp_class, timestamp)
         try:
-            py_setitem(local, "resample_pandas_timestamp_from", _rp_native_method(timestamp, "_from_value_and_reso"))
+            py_setitem(local, nk[].k_resample_pandas_timestamp_from, _rp_native_method(timestamp, "_from_value_and_reso"))
         except:
             pass
     var timedelta = _pd_class("pandas._libs.tslibs.timedeltas", "Timedelta")
     if timedelta is not None:
-        py_setitem(local, "resample_pandas_timedelta_class", timedelta)
+        py_setitem(local, nk[].k_resample_pandas_timedelta_class, timedelta)
         try:
-            py_setitem(local, "resample_pandas_timedelta_from", _rp_native_method(timedelta, "_from_value_and_reso"))
+            py_setitem(local, nk[].k_resample_pandas_timedelta_from, _rp_native_method(timedelta, "_from_value_and_reso"))
         except:
             pass
