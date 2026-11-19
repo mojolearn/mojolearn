@@ -1201,7 +1201,8 @@ def xcnn_dev(layer: PythonObject, entries: PythonObject, context: PythonObject) 
     (the old one's arrays freed) when the binding changed."""
     var table = PythonObject(None)
     var mods = NativeModules()
-    return _xcnn_dev_admitted(mods, _fields(mods, layer), entries, context, table)
+    var fields = _fields(mods, layer)
+    return _xcnn_dev_admitted(mods, fields, entries, context, table)
 
 
 def xcnn_dev_get_f(fields: PythonObject, entries: PythonObject, name: String, count: Int,
