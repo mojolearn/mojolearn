@@ -69,6 +69,7 @@ from sequence.gemm_packed_route import SEQ_GEMM_PACKED_EPI, seq_gemm_packed_epi_
 # lane fx-fast-matrix-units (2026-11-19): the matrix-units relaxation of an NVIDIA `fast` build (default OFF).
 from sequence.gemm_matrix_units_route import (
     SEQ_GEMM_MATRIX_UNITS, SMU_NONE, seq_gemm_matrix_units_on, seq_gemm_matrix_units_launch,
+    seq_gemm_matrix_units_ta_on, seq_gemm_matrix_units_ta_launch,
 )
 from sequence.ops import OP_GEMM_EPI_TAIL
 from sequence.ops import OP_GEMM_EPI
@@ -1366,6 +1367,25 @@ struct DeviceExec(Exec, Movable):
             if units_form != SMU_NONE:
                 seq_gemm_matrix_units_launch(self.ctx, a, units_form)
                 self.execution_profile.kernel()
+                comptime if OP != OP_GEMM:
+                    if seq_gemm_epi_kind(a.i9, a.i10) != GK_PLAIN:
+                        self._launch[OP_GEMM_EPI_TAIL](a, a.i0 * a.i1)
+                return
+            # lane fx-fast-nvidia-routes (2026-11-19): the same arm for a transposed A (the tape's weight
+            # gradient X^T dY), so a training step's three products are all on the matrix unit. The m k
+            # scratch is the executor's own allocation (exact-count reuse from its idle list or pool after
+            # the first step) and is freed here: `free` retires it until the next sync, after the two
+            # launches that use it. Per call under the arm: the integer tests, one take, one free, two
+            # launches; no wait. Off: not compiled.
+            var units_ta_form = seq_gemm_matrix_units_ta_on[OP](a)
+            if units_ta_form != SMU_NONE:
+                var units_scratch = self._alloc(a.i0 * a.i2, False)
+                seq_gemm_matrix_units_ta_launch(
+                    self.ctx, a, units_ta_form, units_scratch.unsafe_origin_cast[MutAnyOrigin]()
+                )
+                self.execution_profile.kernel()
+                self.execution_profile.kernel()
+                self.free(units_scratch)
                 comptime if OP != OP_GEMM:
                     if seq_gemm_epi_kind(a.i9, a.i10) != GK_PLAIN:
                         self._launch[OP_GEMM_EPI_TAIL](a, a.i0 * a.i1)

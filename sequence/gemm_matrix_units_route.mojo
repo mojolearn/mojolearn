@@ -17,8 +17,14 @@ WHICH ADDRESSINGS. The executor's operands are strided: A(m, k) = p0[m i3 + k i4
     A row-major m x k      (i3 = K, i4 = 1), and
     B row-major k x n      (i5 = N, i6 = 1)   -> transpose_b False, or
     B row-major n x k      (i5 = 1, i6 = K)   -> transpose_b True.
-NOT ROUTED (today's FP32 route kept): a transposed A (i3 = 1, i4 = M: the weight gradient X^T dY of the tape;
-the executor has no workspace to transpose into), the accumulate form (i7 != 0), a C that is not dense
+A TRANSPOSED A (i3 = 1, i4 = M: the weight gradient X^T dY of the tape, a third of a training step's product
+work) is routed since lane fx-fast-nvidia-routes (2026-11-19): `linalg.matmul` documents `transpose_a` as
+unsupported, so `DeviceExec._launch` takes an m k scratch from the executor's own allocator (`_alloc`: the
+idle list of an owned executor, the pool of a pooled one; an exact-count reuse after the first step),
+`transpose_kernel` (data movement only) writes A row-major into it, the product is the row-major form over
+it, and the scratch is returned with `free` (it is released at the executor's next sync, after the queue
+that reads it has drained). Per call: one allocator take and one free (short host list scans), two launches.
+NOT ROUTED (today's FP32 route kept): the accumulate form (i7 != 0), a C that is not dense
 (i8 != N), the column-sum launches (i11 != 0), every product the split-K rule or the coop rule takes first
 (they are tested before this rule), every product under the size rule, the host column.
 
@@ -31,6 +37,7 @@ neural-dispatch products; nothing else reads this file.
 COST PER CALL under the arm: seven integer tests, then one launch (two with a follower); no lookup, allocation,
 lock or wait.
 """
+from core.column_stats import CUDA_MAX_GRID_YZ, TRANSPOSE_TILE, transpose_kernel
 from layout import TileTensor
 from layout.tile_layout import row_major
 from linalg.matmul import matmul
@@ -86,4 +93,61 @@ def seq_gemm_matrix_units_launch(ctx: DeviceContext, a: Args, form: Int) raises:
             matmul[transpose_b=True, target="gpu"](tc, ta, tbt, ctx)
             return
         var tb = TileTensor(ptr=pb, layout=row_major(a.i2, a.i1))
+        matmul[transpose_b=False, target="gpu"](tc, ta, tb, ctx)
+
+
+@always_inline
+def seq_gemm_matrix_units_ta_on[OP: Int](a: Args) -> Int:
+    """SMU_* for a launch whose A is stored transposed (k x m row-major: i3 = 1, i4 = M), else SMU_NONE. The
+    same plain dense form, B addressings and size rule as `seq_gemm_matrix_units_on`, which is asked first (a
+    row-major A never reaches this test as a transposed one: K >= 32 under the rule, so i3 = 1 is not i3 = K)."""
+    comptime assert OP == OP_GEMM or OP == OP_GEMM_EPI or OP == OP_AGK_GEMM_EPI, "seq_gemm_matrix_units_ta_on: a GEMM opcode"
+    comptime if not SEQ_GEMM_MATRIX_UNITS:
+        return SMU_NONE
+    if a.i7 != 0 or a.i8 != a.i1 or a.i11 != 0:
+        return SMU_NONE
+    if a.i3 != 1 or a.i4 != a.i0:
+        return SMU_NONE
+    if not matrix_units_takes(a.i0, a.i1, a.i2):
+        return SMU_NONE
+    if a.i5 == a.i1 and a.i6 == 1:
+        return SMU_NN
+    if a.i5 == 1 and a.i6 == a.i2:
+        return SMU_NT
+    return SMU_NONE
+
+
+def seq_gemm_matrix_units_ta_launch(
+    ctx: DeviceContext, a: Args, form: Int, scratch: MutPointer[Float32, MutAnyOrigin]
+) raises:
+    """The product of a launch `seq_gemm_matrix_units_ta_on` selected: `scratch[m x k] = p0[k x m]^T`
+    (`transpose_kernel`, the launch of core/gemm.mojo::gemm_tn_via_transpose), then C = scratch . B on
+    `linalg.matmul`. Two asynchronous launches, no wait; `scratch` holds m k floats and stays live to the
+    executor's next sync (the caller frees it through the executor, which retires it until then)."""
+    comptime if SEQ_GEMM_MATRIX_UNITS:
+        var m = a.i0
+        var k = a.i2
+        var pa = a.p0.unsafe_origin_cast[MutAnyOrigin]()
+        var ps = scratch
+        ctx.enqueue_function[transpose_kernel](
+            ps,
+            pa,
+            Int32(k),
+            Int32(m),
+            grid_dim=(
+                (m + TRANSPOSE_TILE - 1) // TRANSPOSE_TILE,
+                min((k + TRANSPOSE_TILE - 1) // TRANSPOSE_TILE, CUDA_MAX_GRID_YZ),
+                1,
+            ),
+            block_dim=(TRANSPOSE_TILE, TRANSPOSE_TILE, 1),
+        )
+        var pc = a.p2.unsafe_origin_cast[MutAnyOrigin]()
+        var pb = a.p1.unsafe_origin_cast[MutAnyOrigin]()
+        var tc = TileTensor(ptr=pc, layout=row_major(m, a.i1))
+        var ta = TileTensor(ptr=ps, layout=row_major(m, k))
+        if form == SMU_NT:
+            var tbt = TileTensor(ptr=pb, layout=row_major(a.i1, k))
+            matmul[transpose_b=True, target="gpu"](tc, ta, tbt, ctx)
+            return
+        var tb = TileTensor(ptr=pb, layout=row_major(k, a.i1))
         matmul[transpose_b=False, target="gpu"](tc, ta, tb, ctx)

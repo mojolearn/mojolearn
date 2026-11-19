@@ -18,6 +18,7 @@ from max.gpu.sync import barrier
 from std.memory import stack_allocation
 
 from core.gemm import gemm_nt, gemm_tn
+from decomposition.gram_matrix_units_route import decomp_gram_units_into, decomp_project_units_into
 from gemm.afn_apple_fast import (
     AFN_EPI_NONE,
     AFN_GEMM_APPLE,
@@ -200,7 +201,10 @@ def compute_covariance(
             grid_dim=((cells + 255) // 256, 1, 1),
             block_dim=(256, 1, 1),
         )
-        gemm_tn(ctx, cov, x, x_alias, x_alias2, n_cols, n_cols, n_rows)
+        # fast route (-D MOJOLEARN_DECOMP_FAST_MATRIX_UNITS, default OFF, fast-rows builds only;
+        # decomposition/gram_matrix_units_route.mojo): False without the define, compiled out.
+        if not decomp_gram_units_into(ctx, cov, x, n_cols, n_rows):
+            gemm_tn(ctx, cov, x, x_alias, x_alias2, n_cols, n_cols, n_rows)
     ctx.enqueue_function[scale_in_place_kernel](
         cov.unsafe_ptr(),
         Int32(n_cols * n_cols),
@@ -769,15 +773,18 @@ def pca_transform(
         grid_dim=((cells + 255) // 256, 1, 1),
         block_dim=(256, 1, 1),
     )
-    gemm_nt(
-        ctx,
-        output,
-        x,
-        components,
-        n_rows,
-        n_components,
-        n_cols,
-    )
+    # fast route (-D MOJOLEARN_DECOMP_FAST_MATRIX_UNITS, default OFF, fast-rows builds only;
+    # decomposition/gram_matrix_units_route.mojo): False without the define, compiled out.
+    if not decomp_project_units_into(ctx, output, x, components, n_rows, n_components, n_cols):
+        gemm_nt(
+            ctx,
+            output,
+            x,
+            components,
+            n_rows,
+            n_components,
+            n_cols,
+        )
     ctx.enqueue_function[shift_columns_kernel](
         x.unsafe_ptr(),
         mu.unsafe_ptr(),

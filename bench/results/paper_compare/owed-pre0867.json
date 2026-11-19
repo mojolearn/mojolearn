@@ -808,6 +808,31 @@
    "define": "MOJOLEARN_IDENTITY_FAST_NAN_CANON",
    "status": "define in code (core/nan_canon.mojo NAN_CANON_ON; gemm/host_transport.mojo gemm_down_f32; gemm/host/linalg_native.mojo; core/staged_download.mojo download_f32_into_canon; sequence/mlp_fit.mojo mlp_predict; sequence/seq_tensor.mojo seq_tensor_download; IDENTICAL only): B = every NaN word of a float32 result that leaves the device (and of the CPU column's finished result) is the one quiet NaN 0x7fc00000, written by a host pass over the caller's pages right after the copy that filled them (one read of the words, a store only where a NaN is, across the host's cores); A = the default, the vendor's NaN word (NVIDIA 0x7fffffff, AMD and an x86 host 0xffc00000, Apple 0x7fc00000). No kernel changes; no word other than a NaN moves",
    "owed": "RUN"
+  },
+  "fast-decomp-matrix-units": {
+   "define": "MOJOLEARN_DECOMP_FAST_MATRIX_UNITS (with MOJOLEARN_MODE_FAST_ROWS)",
+   "status": "define in code (checks/mode_policy.mojo ROUTE_DECOMP_MATRIX_UNITS; decomposition/gram_matrix_units_route.mojo): B runs the PCA / truncated-SVD Gram past the split-K width and the projections on MAX linalg.matmul (NVIDIA TF32 operands, FP32 accumulation); A = the zero-row fast set (the exact kernels), flags -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_MODE_FAST_ROWS",
+   "owed": "RUN"
+  },
+  "fast-neighbors-matrix-units": {
+   "define": "MOJOLEARN_NEIGHBORS_FAST_MATRIX_UNITS (with MOJOLEARN_MODE_FAST_ROWS)",
+   "status": "define in code (checks/mode_policy.mojo ROUTE_NEIGHBORS_MATRIX_UNITS; neighbors/distance_matrix_units_route.mojo): B runs the tiled brute-force k-NN L2 distance product on MAX linalg.matmul at n_features >= 256, then the FP32 epilogue and the unchanged selectors; A = the zero-row fast set (fused exact kernels), flags -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_MODE_FAST_ROWS",
+   "owed": "RUN"
+  },
+  "fast-flush-off": {
+   "define": "MOJOLEARN_MODE_FAST_FLUSH_OFF (with MOJOLEARN_MODE_FAST_ROWS)",
+   "status": "define in code (checks/mode_policy.mojo ROW_FLUSH_OFF; checks/numerics.mojo ftz, ftz_simd): B drops the denormal flush at every seam call of every family; A = the zero-row fast set",
+   "owed": "RUN"
+  },
+  "fast-vendor-math": {
+   "define": "MOJOLEARN_MODE_FAST_VENDOR_MATH (with MOJOLEARN_MODE_FAST_ROWS)",
+   "status": "define in code (checks/mode_policy.mojo ROW_VENDOR_MATH; checks/numerics.mojo identical_exp ... identical_clamp): B uses the stdlib exp / log / sqrt / div forms; A = the zero-row fast set",
+   "owed": "RUN"
+  },
+  "fast-fold-free": {
+   "define": "MOJOLEARN_MODE_FAST_FOLD_FREE -D MOJOLEARN_MODE_FAST_TILE_FREE (with MOJOLEARN_MODE_FAST_ROWS)",
+   "status": "defines in code (checks/mode_policy.mojo ROW_FOLD_FREE, ROW_TILE_FREE; core/pinned_reduce.mojo pinned_block_sum, checks/kernel_matrix.mojo lib_block_size_for): B takes the library fold at the hardware width and the column's own block size; A = the zero-row fast set",
+   "owed": "RUN"
   }
  },
  "rows": [
@@ -5072,6 +5097,174 @@
    ],
    "owed": "RUN",
    "decides": "B becomes the default (with -D MOJOLEARN_IDENTITY_FAST_NAN_CANON_OFF as the A/B switch until measured on the release) if its cost is within the pair's noise on the NVIDIA L40S, base and arm back to back in one job: the gemm row (the pass reads the 64 MB product once on the host, per chunk, while the copy engine fills the other stage half), the mlp-infer row (one pass over the returned predictions) and one decode row (transformer-decode: no pass on its path, the control). Digests must not move on these rows (their outputs hold no NaN; a moved digest is a defect). Time also the neighbouring shape 2048 x 3072 x 1024 and a non-board product of standard normal draws 3000 x 3000 x 3000 before a flip (no dimension targeting). Before the flip the native check nan_canon must pass on the CPU and GPU columns from a build with the define (exact words against the oracle on +-inf / +-FLT_MAX operands). A loser is deleted with the four tombstone parts and the vendor NaN word stays in the contract (IDENTITY_PATHS row 39)"
+  },
+  {
+   "id": "fast-decomp-matrix-units-board",
+   "source": "lane fx-fast-nvidia-routes (2026-11-19; Andrew: 'get fast for everything'); both arms are fast sets built from one sha and timed in the same pod job; quality of both arms beside every time; hashes are not expected to match",
+   "kind": "ab",
+   "lane": [
+    "pca",
+    "tsvd",
+    "svd"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "fast-decomp-matrix-units"
+   ],
+   "owed": "RUN",
+   "columns": [
+    "time",
+    "quality"
+   ],
+   "quality": {
+    "pca": "explained_variance_ratio (max abs difference vs A 2e-3), reconstruction error (relative 0.01), transform max_rel_diff vs A (drop above 0.01)",
+    "tsvd": "explained_variance_ratio and singular_values (relative 2e-3 on the kept components), transform max_rel_diff vs A",
+    "svd": "as tsvd"
+   },
+   "decides": "B becomes the default of the NVIDIA fast set for the family only if it is faster than A beyond noise with every quality field inside its tolerance; a board row narrower than the split-K width or under the size rule runs the same kernels in both arms and must time equal (it is the rule's control)"
+  },
+  {
+   "id": "fast-decomp-matrix-units-shapes",
+   "source": "lane fx-fast-nvidia-routes (2026-11-19; Andrew: 'get fast for everything'); both arms are fast sets built from one sha and timed in the same pod job; quality of both arms beside every time; hashes are not expected to match; the rule's constants are reasoned, not measured; neighbouring shapes and a non-board dataset",
+   "kind": "driver",
+   "driver": "PCA fit + transform and TruncatedSVD fit on synthetic low-rank-plus-noise data (rank 32, noise 0.1), n_components 64",
+   "shapes": [
+    {
+     "rows": 200000,
+     "features": 96,
+     "side": "exact (split-K width)"
+    },
+    {
+     "rows": 200000,
+     "features": 192,
+     "side": "routed Gram (just past the split-K width)"
+    },
+    {
+     "rows": 100000,
+     "features": 768,
+     "side": "routed Gram and projection"
+    },
+    {
+     "rows": 20000,
+     "features": 4096,
+     "side": "routed, wide"
+    },
+    {
+     "rows": 2000,
+     "features": 192,
+     "side": "exact (work under 2^27)"
+    }
+   ],
+   "vendor": "nvidia",
+   "b_arms": [
+    "fast-decomp-matrix-units"
+   ],
+   "owed": "RUN",
+   "columns": [
+    "time",
+    "explained_variance_ratio max abs diff vs A",
+    "reconstruction error",
+    "subspace angle of the leading 32 components vs A"
+   ],
+   "decides": "each routed shape faster in B with the leading-subspace angle under 1e-3 rad and explained_variance_ratio within 2e-3; a routed shape slower in B is a rule defect"
+  },
+  {
+   "id": "fast-neighbors-matrix-units-board",
+   "source": "lane fx-fast-nvidia-routes (2026-11-19; Andrew: 'get fast for everything'); both arms are fast sets built from one sha and timed in the same pod job; quality of both arms beside every time; hashes are not expected to match",
+   "kind": "ab",
+   "lane": [
+    "knn",
+    "knn-clf",
+    "knn-reg"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "fast-neighbors-matrix-units"
+   ],
+   "owed": "RUN",
+   "columns": [
+    "time",
+    "quality"
+   ],
+   "quality": {
+    "knn": "recall@k of B's indices against A's (floor 0.99), max relative distance difference",
+    "knn-clf": "held-out accuracy (not below A beyond the board's margin)",
+    "knn-reg": "held-out rmse (relative 0.01)"
+   },
+   "decides": "B becomes the default of the NVIDIA fast set for the family only if faster than A beyond noise with recall@k >= 0.99 and the estimator metric not lower; board rows under 256 features run the same kernels in both arms and must time equal (the rule's control)"
+  },
+  {
+   "id": "fast-neighbors-matrix-units-shapes",
+   "source": "lane fx-fast-nvidia-routes (2026-11-19; Andrew: 'get fast for everything'); both arms are fast sets built from one sha and timed in the same pod job; quality of both arms beside every time; hashes are not expected to match; rule 2 (n_features >= 256) is reasoned from memory traffic against chain rate, not measured",
+   "kind": "driver",
+   "driver": "NearestNeighbors(algorithm='brute', metric L2) kneighbors, k = 10 and k = 100, on unit-normalised synthetic embeddings (a non-board dataset; clustered, 64 centres)",
+   "shapes": [
+    {
+     "index": 200000,
+     "queries": 10000,
+     "features": 128,
+     "side": "exact (under the feature floor)"
+    },
+    {
+     "index": 200000,
+     "queries": 10000,
+     "features": 256,
+     "side": "routed (at the floor)"
+    },
+    {
+     "index": 200000,
+     "queries": 10000,
+     "features": 768,
+     "side": "routed"
+    },
+    {
+     "index": 1000000,
+     "queries": 10000,
+     "features": 384,
+     "side": "routed, index-axis tiled"
+    },
+    {
+     "index": 50000,
+     "queries": 64,
+     "features": 1024,
+     "side": "routed, small query tile"
+    }
+   ],
+   "vendor": "nvidia",
+   "b_arms": [
+    "fast-neighbors-matrix-units"
+   ],
+   "owed": "RUN",
+   "columns": [
+    "time",
+    "recall@k vs A",
+    "recall@k vs float64 exact"
+   ],
+   "decides": "KNN_UNITS_MIN_FEATURES moved to where B stops being faster than A; recall@k vs exact of B not below A's by more than 0.005; a routed shape slower in B is a rule defect"
+  },
+  {
+   "id": "fast-seam-rows-board",
+   "source": "lane fx-fast-nvidia-routes (2026-11-19; Andrew: 'get fast for everything'); both arms are fast sets built from one sha and timed in the same pod job; quality of both arms beside every time; hashes are not expected to match; the seam rows of checks/mode_policy.mojo were written by lane fx-mode-policy-core and had no owed row: this is what `fast` may drop in every family that has no matrix product to move",
+   "kind": "ab",
+   "lane": "*",
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "fast-flush-off",
+    "fast-vendor-math",
+    "fast-fold-free"
+   ],
+   "owed": "RUN",
+   "columns": [
+    "time",
+    "quality"
+   ],
+   "decides": "per row and per family: a seam row becomes the default of the NVIDIA fast set (policy_row_default in checks/mode_policy.mojo) only for families where it is faster than A beyond noise with the board quality field not lower; a row that moves no family is retired with its EXPERIMENTS.md verdict (the seam keeps its exact arm either way: it is the identical kernel)"
   }
  ]
 }
