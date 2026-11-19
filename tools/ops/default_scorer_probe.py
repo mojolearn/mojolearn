@@ -90,7 +90,8 @@ print("RAISED " + " | ".join(errors), flush=True)
 sys.exit(3)
 '''
 
-V3_FLAGS = ("avx", "avx2", "bmi1", "bmi2", "f16c", "fma", "lzcnt", "movbe", "xsave")
+#: /proc/cpuinfo names: `abm` carries LZCNT
+V3_FLAGS = ("avx", "avx2", "bmi1", "bmi2", "f16c", "fma", "abm", "movbe", "xsave")
 V4_FLAGS = ("avx512f", "avx512bw", "avx512cd", "avx512dq", "avx512vl")
 
 
