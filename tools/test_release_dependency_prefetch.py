@@ -54,10 +54,14 @@ def requests(repo):
 class Slow:
     """A worker that takes a while and records how many ran at once."""
 
-    def __init__(self, real, delay=0.4, fail=()):
+    def __init__(self, real, delay=0.4, fail=(), together=0):
         self.real, self.delay, self.fail = real, delay, set(fail)
         self.calls, self.active, self.peak = [], 0, 0
         self.lock = threading.Lock()
+        # together=N: every call waits at a barrier that N calls must reach before any of them returns.
+        # A serial (or narrower than N) pool can never fill it, so the barrier breaks and the call raises;
+        # a parallel pool passes however long each thread's worktree setup takes before the worker runs.
+        self.barrier = threading.Barrier(together, timeout=120) if together else None
 
     def __call__(self, tree, temporary, request, log):
         with self.lock:
@@ -65,6 +69,8 @@ class Slow:
             self.active += 1
             self.peak = max(self.peak, self.active)
         try:
+            if self.barrier is not None:
+                self.barrier.wait()
             time.sleep(self.delay)
             if json.dumps(request, sort_keys=True) in self.fail:
                 raise ValueError("frozen dependency analysis exited 1")
@@ -75,7 +81,10 @@ class Slow:
 
 
 def test_prefetch_runs_every_needed_snapshot_at_once_then_the_real_pass_is_all_cache(repo, monkeypatch):
-    slow = Slow(deps._run_snapshot_worker)
+    # FIX (2026-11-19): the old check was an observed peak of a 0.4 s sleep, which read 3 on loaded 4-core
+    # runners when one thread's serialized `git worktree add` finished after another worker's sleep ended.
+    # The barrier proves all four ran at once deterministically: it only opens when four workers are inside.
+    slow = Slow(deps._run_snapshot_worker, delay=0, together=4)
     monkeypatch.setattr(deps, "_run_snapshot_worker", slow)
 
     def compute():
@@ -91,8 +100,10 @@ def test_prefetch_runs_every_needed_snapshot_at_once_then_the_real_pass_is_all_c
 
     ran = []
     deps.prefetch(compute, jobs=4, say=lambda line: None, ran=ran)
+    # A broken barrier (fewer than four inside at once) fails that snapshot, so every row ok proves concurrency.
     assert len(ran) == 4 and all(row["ok"] for row in ran)
-    assert slow.peak == 4   # all four at once (wall time on a loaded Mac is not a stable assertion)
+    assert slow.peak == 4 and not slow.barrier.broken
+    slow.barrier = None   # a later call (there must be none) would otherwise wait for three partners
     calls = len(slow.calls)
     result = compute()
     assert len(slow.calls) == calls == 4   # a later pass runs nothing
