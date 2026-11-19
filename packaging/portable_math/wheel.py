@@ -488,9 +488,17 @@ def finalize(wheel, helper=None, audit_only=False):
             import sys
             for directory in runtime_dirs:
                 selected_helper = helper
-                if linux and sys.platform != "linux" and selected_helper is None:
-                    selected_helper = directory / "libMojolearnMath.so"
-                    if not selected_helper.is_file():
+                if linux and selected_helper is None:
+                    # The set's own libMojolearnMath.so (built by the leg's stage_libs, recorded in the
+                    # LINUX_PAYLOAD runtime_sha256) is packed as is on EVERY packing host. Rebuilding it
+                    # here with the packer's `cc` (what a Linux packer did until 2026-11-19) shipped
+                    # bytes the payload does not record: the GitHub-packed base of 7f5eac7eab carried
+                    # 9b82408bae1d against its payload's 35c849364120, and release_reuse refused every
+                    # B arm on it. Only an old set without the helper is still built here (Linux only).
+                    own = directory / "libMojolearnMath.so"
+                    if own.is_file():
+                        selected_helper = own
+                    elif sys.platform != "linux":
                         raise ValueError("old Linux sets require --helper built on Linux; new build_sets outputs include it")
                 changes.append({"directory": directory.relative_to(root).as_posix(), **stage(directory, selected_helper)})
             # Python host math loads one vendor-neutral helper by an exact path.

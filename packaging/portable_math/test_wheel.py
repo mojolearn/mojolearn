@@ -373,3 +373,25 @@ def test_baseline_manifest_is_rechecked_against_final_bytes(payload):
     binary.write_bytes(binary.read_bytes() + b'changed')
     with pytest.raises(ValueError, match='complete GPU binding bytes'):
         audit.audit_tree(payload)
+
+
+@pytest.mark.parametrize('platform', ['linux', 'darwin'])
+def test_finalize_packs_the_sets_own_math_helper_on_every_packing_host(tmp_path, monkeypatch, platform):
+    # A Linux packer (the GitHub pack runner) rebuilt libMojolearnMath.so with its own `cc`, so the packed
+    # bytes were not the leg-built bytes LINUX_PAYLOAD records and release_reuse refused every B arm on that
+    # base (2026-11-19). The set's own helper is packed byte for byte wherever the wheel is finalized.
+    import zipfile
+    stage_module = sys.modules['stage']
+    def no_build(*args, **kwargs):
+        raise AssertionError('finalize rebuilt the set\'s own libMojolearnMath.so')
+    monkeypatch.setattr(stage_module, 'build', no_build)
+    monkeypatch.setattr(audit, 'audit_tree', lambda root, python_only=False: {})
+    monkeypatch.setattr(sys, 'platform', platform)
+    whl = tmp_path / 'mojolearn_core-0.0.0-py3-none-manylinux_2_35_x86_64.whl'
+    with zipfile.ZipFile(whl, 'w') as z:
+        z.writestr('mojolearn/.libs/libMojolearnMath.so', b'leg-built helper bytes')
+        z.writestr('mojolearn_core-0.0.0.dist-info/RECORD', '')
+    report = audit.finalize(whl)
+    with zipfile.ZipFile(whl) as z:
+        assert z.read('mojolearn/.libs/libMojolearnMath.so') == b'leg-built helper bytes'
+    assert 'supplied_helper_sha256' in report['runtime_changes'][0]['build']
