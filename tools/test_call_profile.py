@@ -10,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -198,12 +199,24 @@ class HarnessWindow(unittest.TestCase):
                 afd = os.open(ack, os.O_RDWR)
                 ready.set()
                 import select
+                deadline = time.monotonic() + 20.0
                 try:
                     while len(got) < 2:
                         r, _, _ = select.select([rfd], [], [], 5.0)
                         if not r:
                             break
-                        data = os.read(rfd, 64).decode()
+                        # Between two writers the FIFO is at end-of-file and select keeps reporting it readable; a
+                        # read that lands after the next writer has opened but before it has written raises
+                        # BlockingIOError (run 44580558011: the thread died there and 'disable' was never read).
+                        try:
+                            data = os.read(rfd, 64).decode()
+                        except BlockingIOError:
+                            data = ""
+                        if not data:
+                            if time.monotonic() > deadline:
+                                break
+                            time.sleep(0.005)
+                            continue
                         for w in data.split():
                             got.append(w)
                             os.write(afd, b"ack\n")
