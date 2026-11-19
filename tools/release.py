@@ -3989,7 +3989,12 @@ class Release(release_identity_wheels.IdentityOnWheels):
         directory-entry strip, then split_audit over the final set."""
         finals = self.split_finals()
         if all(finals.values()) and wheel_commit(finals["linux"]) == self.commit:
-            return "have " + ", ".join(w.name for w in finals.values())
+            # a final set whose runtime bytes differ from its own LINUX_PAYLOAD (the GitHub-packed 7f5eac7eab base,
+            # 2026-11-19) is not this step's output: every B arm on it is refused, so it packs again
+            drift = [f"{w.name}: {line}" for w in finals.values() for line in release_reuse.payload_runtime_mismatches(w)]
+            if not drift:
+                return "have " + ", ".join(w.name for w in finals.values())
+            self.say("  the final wheels' runtime bytes differ from their LINUX_PAYLOAD; packing again: " + "; ".join(drift))
         if candidate_pack(self) == "github":
             # THE PACK ON GITHUB (lane fx-pack-offload, 2026-11-19; Andrew: offload the laptop): this same step,
             # with linux-wait's tree checks and linux-assemble, runs on a free runner beside the trees

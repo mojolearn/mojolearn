@@ -517,7 +517,10 @@ def source_tree(work, commit, dry):
     if dry:
         return tree
     tree.parent.mkdir(parents=True, exist_ok=True)
-    sh("git", "worktree", "add", "--detach", str(tree), commit)
+    # -f only when the path is absent: a worktree directory deleted by hand stays registered ("a missing but already
+    # registered worktree"), which refused the 2026-11-19 rerun of arm fx-lc-test-reuse before any work
+    force = [] if tree.exists() else ["-f"]
+    sh("git", "worktree", "add", *force, "--detach", str(tree), commit)
     # A worktree added from a lean (sparse) checkout inherits its patterns and lacks bench/results, which
     # holds the verification CTR models the pack stages; the source tree is the whole commit. Per worktree
     # under extensions.worktreeConfig; a no-op on a full tree. (2026-11-12: two measurement builds packed
