@@ -3269,9 +3269,10 @@ struct DevExec(Exec):
 
     @staticmethod
     def orth(a: F32Ptr, m: Int, l: Int) raises:
-        """Two passes of: R of the matrix (`qr_factor` on a device copy, as
-        `device_qr_r`), the rank guard on the host, then A R^-1 by rows
-        (`trsm_kernel`); `orth_on_device`. One upload, one download."""
+        """`orth_on_device`: under IDENTICAL one blocked TSQR pass with the
+        rank-guarded selection (RSVD_IDN_TSQR_ORTHO) for the shapes the TSQR
+        takes; otherwise two passes of R (`qr_factor`), the rank guard on the
+        device and A R^-1 by rows (`trsm_kernel`). One upload, one download."""
         var ctx = xd_ctx()
         var da = _up(ctx, a, m * l)
         orth_on_device(ctx, da, m, l)
