@@ -3,9 +3,11 @@
 """LARGE SEQUENCE PRODUCTS ON THE NEURAL PACKED BODY, ONE LEAF
 (lane fx-gemm-seq-packed, 2026-11-18; idea 1 of the GEMM headroom review).
 
-EXPERIMENT `-D MOJOLEARN_GEMM_FAST_SEQ_PACKED`, default OFF, A/B owed
-(docs/apple-fast/EXPERIMENTS.md). With the define off nothing here is
-compiled into a launch and `DeviceExec._launch` is unchanged.
+THE DEFAULT on the NVIDIA and AMD columns since 2026-11-19 (the experiment
+`MOJOLEARN_GEMM_FAST_SEQ_PACKED`, promoted; A/B numbers beside
+`SEQ_GEMM_PACKED` below; docs/apple-fast/EXPERIMENTS.md).
+`-D MOJOLEARN_GEMM_FAST_SEQ_PACKED_OFF` restores the 16 x 16 tile at every
+size: then nothing here is compiled into a launch.
 
 WHAT MOVES. The 16 x 16 sequence tile (sequence/gemm_tiled.mojo) gives every
 thread ONE cell and reads two threadgroup words per fused multiply-add, so it
@@ -70,7 +72,7 @@ reloads `ld(C) = ftz(ftz(acc)) = acc`, so its operands and operations are the
 tile's in-register epilogue's (sequence/mlp.mojo, "the tape's in-register
 epilogue").
 
-THE FUSED STORE (lane fx-leftovers-product, 2026-11-19; this arm together
+THE FUSED STORE (lane fx-leftovers-product, 2026-11-19; this route together
 with `-D MOJOLEARN_GEMM_FAST_EPI=1`, default OFF, A/B owed). A follower that
 is a bias, a bias and an activation, or the activation derivative runs in the
 packed body's own store (`seq_gemm_packed_epi_kind`,
@@ -126,7 +128,7 @@ from gemm.neural_dispatch import (
     GEMM_LEAF_PTR_KS, GEMM_LEAF_PTR_MIN_BLOCKS,
     identical_gemm_leaf_ptr_into,
 )
-# lane fx-leftovers-product (2026-11-19): the fused store of a follower (`-D MOJOLEARN_GEMM_FAST_EPI=1` with this arm).
+# lane fx-leftovers-product (2026-11-19): the fused store of a follower (`-D MOJOLEARN_GEMM_FAST_EPI=1` on this route).
 from gemm.neural_dispatch import (
     GEMM_LEAF_PTR_EPI, GEMM_EPI_PLUS_BIAS, GEMM_EPI_BIAS_ACT, GEMM_EPI_ACT_BWD,
     identical_gemm_leaf_ptr_epi_into,
@@ -135,10 +137,24 @@ from sequence.act_values import ACT_IDENTITY
 # `op_gemm_epi`'s codes for i9 (sequence/mlp.mojo; sequence/gemm_tiled.mojo imports them the same way).
 from sequence.mlp import EPI_BIAS_ACT, EPI_ACT_BWD
 
-#: The arm. IDENTICAL on the NVIDIA and AMD columns (`GEMM_LEAF_PTR_COLUMN`);
+#: The route switch. IDENTICAL on the NVIDIA and AMD columns (`GEMM_LEAF_PTR_COLUMN`);
 #: never Apple, whose sequence GEMM is not tiled (SEQ_GEMM_TILED).
+# MOJOLEARN_GEMM_FAST_SEQ_PACKED: PROMOTED 2026-11-19 (lane fx-verdicts3). The packed route is the default;
+# `-D MOJOLEARN_GEMM_FAST_SEQ_PACKED_OFF` restores the 16 x 16 tile for the products the rule selects (the old
+# opt-in name is refused, core/experiment_guards_neural.mojo). Evidence: A/B round 1, NVIDIA L40S (host
+# bd9c355c19c0, 14-core cgroup), wheel 0c68d6cd27 and its B set, base and arm back to back in ONE pod job
+# (nvc1-0006, tag nvc-ab-20261119T125554Z-6f7afc), one scored run per arm; digests and quality equal on all 8
+# cells. Base -> arm ms: mlp-clf istella fit 1462.4 -> 868.3 (0.59), infer 52.80 -> 28.63 (0.54); mlp-clf taxi
+# fit 1013.1 -> 672.9 (0.66), infer 15.91 (one call) -> 7.97 (median of 20; warm-up calls 16.4 -> 9.9, 0.60);
+# mlp-reg istella fit 1463.8 -> 857.0 (0.59), infer 25.28 -> 17.09 (0.68); mlp-reg taxi fit 1004.3 -> 660.1
+# (0.66), infer 6.42 -> 2.77 (0.43, median of 20 both). Geomean 0.58 over 8 cells; no cell slower. Same words
+# (the module docstring's order argument), so no column, oracle or verify record moves.
+# The rule is sizes and the column's tile and block floor only (`seq_gemm_packed_shape`): no shape or dataset key.
+# Limits: NVIDIA only (AGENTS.md part 8); the AMD column takes the route only from 1024 wide tiles (about 16.7 M
+# cells), not timed. OWED (does not hold the flip): the driver row gemm-seq-packed-shapes (neighbour
+# 4096 x 256 x 128, non-board 2048 x 512 x 512 and 8192 x 192 x 96, control 1024 x 256) against the _OFF arm.
 comptime SEQ_GEMM_PACKED = (
-    is_defined["MOJOLEARN_GEMM_FAST_SEQ_PACKED"]()
+    not is_defined["MOJOLEARN_GEMM_FAST_SEQ_PACKED_OFF"]()
     and GEMM_LEAF_PTR_COLUMN
     and not TARGET_HAS_APPLE_GPU
 )
@@ -211,7 +227,7 @@ def seq_gemm_packed_launch(ctx: DeviceContext, a: Args, geom: Int) raises:
         )
 
 
-#: The fused store of a follower: this arm and the GEMM store-epilogue arm together.
+#: The fused store of a follower: this route (default) with the GEMM store-epilogue arm (default off).
 comptime SEQ_GEMM_PACKED_EPI = SEQ_GEMM_PACKED and GEMM_LEAF_PTR_EPI
 
 

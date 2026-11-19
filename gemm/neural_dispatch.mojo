@@ -210,7 +210,8 @@ def neural_model_leaf_into[MIN_LEAF: Int](ctx: DeviceContext,
 # ---------------------------------------------------------------------------
 # lane fx-gemm-seq-packed (2026-11-18, idea 1 of briefs-20261118/ideas-gemm-headroom-RESULT.md):
 # THE PACKED BODY AT A CALLER'S PARTITION, OVER RAW POINTERS.
-# Reached only under -D MOJOLEARN_GEMM_FAST_SEQ_PACKED (sequence/gemm_packed_route.mojo, default OFF, A/B owed).
+# Reached from the sequence packed route (sequence/gemm_packed_route.mojo; the default since 2026-11-19,
+# -D MOJOLEARN_GEMM_FAST_SEQ_PACKED_OFF removes the caller).
 # Every neural caller keeps `identical_gemm_into`, whose `(L, P)` is `contract_partition(k)` and nothing else.
 # ---------------------------------------------------------------------------
 #: The columns whose build carries `identical_gemm_kpack_kernel` with the gather staging and the hardware fold

@@ -1084,6 +1084,11 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_OPTIMIZER_RESIDENT_OFF.patch; record in docs/TOMBSTONES.md.
     comptime assert not is_defined["MOJOLEARN_OPTIMIZER_RESIDENT_OFF"](), "removed 2026-11-18 (lane/fx-verdicts2, A/B ab3 NVIDIA L40S, wheel d652a4b0a1, job nvc-ab-20261118T182558Z-cb6e02, one run per arm, digests equal): the per-call optimizer step was arm/base 1.129 geomean over 5 cells (samba-train-step 1.97); resident optimizer state is the single-device route; recoverable at 85c36e324f"
     # ---- end lane fx-verdicts2
+    # ---- lane fx-verdicts3 (2026-11-19): A/B verdicts of round 1 (NVIDIA L40S, wheel 0c68d6cd27, job nvc-ab-20261119T125554Z-6f7afc)
+    # MOJOLEARN_GEMM_FAST_SEQ_PACKED (sequence/gemm_packed_route.mojo): promoted to the default on the NVIDIA and AMD
+    # columns; the old opt-in name is refused so a stale build line does not silently mean the default.
+    comptime assert not is_defined["MOJOLEARN_GEMM_FAST_SEQ_PACKED"](), "promoted 2026-11-19 (lane/fx-verdicts3, A/B round 1 NVIDIA L40S, wheel 0c68d6cd27, job nvc-ab-20261119T125554Z-6f7afc, one run per arm, digests and quality equal on 8 cells, mlp-clf/mlp-reg fit 0.59-0.66, infer 0.43-0.68): large plain dense sequence GEMMs run the neural packed body with one leaf; drop -D MOJOLEARN_GEMM_FAST_SEQ_PACKED, use -D MOJOLEARN_GEMM_FAST_SEQ_PACKED_OFF for the 16 x 16 tile"
+    # ---- end lane fx-verdicts3
     return True
 
 

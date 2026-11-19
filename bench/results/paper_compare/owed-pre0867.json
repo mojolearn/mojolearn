@@ -686,7 +686,8 @@
   "gemm-seq-packed": {
    "define": "MOJOLEARN_GEMM_FAST_SEQ_PACKED",
    "status": "define in code (sequence/gemm_packed_route.mojo SEQ_GEMM_PACKED, read by sequence/exec_device.mojo _launch; the launch is gemm/neural_dispatch.mojo identical_gemm_leaf_ptr_into; IDENTICAL, NVIDIA and AMD columns, never Apple, host column unchanged): B = a plain dense sequence GEMM (OP_GEMM, OP_GEMM_EPI, OP_AGK_GEMM_EPI; no accumulate, no column sums) with K >= 64, both edges >= 128 and at least the column's block floor of packed tiles (NVIDIA 192 tiles of 128 x 64, else of 64 x 64; AMD 1024 tiles of 128 x 128) runs the neural packed body with ONE leaf of K terms, and an epilogue runs as the OP_GEMM_EPI_TAIL follower launch; A = the 16 x 16 sequence tile with the epilogue in registers. Same chain per cell (k ascending from +0.0, flushed operands, one flushed FMA a term): digests must not move. Build every binding that imports sequence/exec_device.mojo (the sequence device executor's groups); the host bindings are untouched. MOJOLEARN_AG_PROFILE=1 names the route of each product (route=packed) to prove which arm ran",
-   "owed": "RUN"
+   "owed": "DECIDED",
+   "evidence": "A/B round 1 2026-11-19, NVIDIA L40S host bd9c355c19c0 (14-core cgroup), wheel 0c68d6cd27 and its B set, base and arm back to back in one pod job (nvc1-0006, tag nvc-ab-20261119T125554Z-6f7afc; ~/mojolearn-evidence/measure-candidate/build-0c68d6cd27/ab1/x/, tables ~/mojolearn-evidence/briefs-20261118/fx-verdicts3/tab-<arm>.txt), one scored run per arm: digests and quality equal on all 8 cells; arm/base mlp-clf istella fit 0.59 / infer 0.54, mlp-clf taxi 0.66 / 0.50, mlp-reg istella 0.59 / 0.68, mlp-reg taxi 0.66 / 0.43 (geomean 0.58); PROMOTED to the default (lane fx-verdicts3), MOJOLEARN_GEMM_FAST_SEQ_PACKED_OFF restores the tile; the old define is refused"
   },
   "gemm-epi": {
    "define": "MOJOLEARN_GEMM_FAST_EPI",
@@ -761,6 +762,11 @@
   "fx-lc-test-reuse": {
    "define": "MOJOLEARN_MSEL_FAST_LC_TEST_REUSE",
    "status": "define in code (bindings/msel_cv_door.mojo MSEL_LC_TEST_REUSE): B gathers each fold's host test rows once per learning_curve call; A = once per (size, fold) unit. Scores must equal A's",
+   "owed": "RUN"
+  },
+  "gemm-seq-packed-off": {
+   "define": "MOJOLEARN_GEMM_FAST_SEQ_PACKED_OFF",
+   "status": "define in code (sequence/gemm_packed_route.mojo SEQ_GEMM_PACKED): B = the 16 x 16 sequence tile for every product (the default before 2026-11-19); A = the packed route, default since 2026-11-19 (lane fx-verdicts3). Same bits on both arms. Owed for the neighbouring and non-board shapes only",
    "owed": "RUN"
   }
  },
@@ -4249,12 +4255,12 @@
    },
    "arms": [
     "candidate",
-    "gemm-seq-packed"
+    "gemm-seq-packed-off"
    ],
    "b_arms": [
-    "gemm-seq-packed"
+    "gemm-seq-packed-off"
    ],
-   "decides": "B at least as fast as the candidate on MLPClassifier.fit at the three routed cases: batch 4096 x hidden 256 over K = 128 (the neighbouring shape 4096 x 256 x 128, the stepped-down packed tile), batch 2048 x hidden 512, 512 (2048 x 512 x 512 and x 300, non-board), batch 8192 x hidden 192 over K = 96 (non-board edges that are not tile multiples: 192 wide tiles, the floor itself). The fourth case (batch 1024 x 256: 64 packed tiles, under the floor) takes the 16 x 16 tile on both arms and is the control: a move there is box noise. A routed case that is slower blocks the promotion decided on the board rows"
+   "decides": "after the promotion of 2026-11-19 (lane fx-verdicts3): keep the packed route (the candidate) unless the 16 x 16 tile (B, MOJOLEARN_GEMM_FAST_SEQ_PACKED_OFF) is faster on MLPClassifier.fit at the three routed cases: batch 4096 x hidden 256 over K = 128 (neighbouring shape), batch 2048 x hidden 512, 512 (non-board), batch 8192 x hidden 192 over K = 96 (non-board, the block floor itself). The fourth case (batch 1024 x 256, under the floor) takes the tile on both arms and is the control: a move there is box noise. If B wins a routed case, the rule bound that admits it is raised by cost reasoning (not by that shape)"
   },
   {
    "id": "fx-gemm-epi-rows",
