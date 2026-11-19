@@ -2110,6 +2110,19 @@ def semantic_exception(lane, param, arm, ours, theirs, library):
                                "max_norm": "None disables embedding-vector renormalization on both arms"}}
         if param in unset.get(optimizer, {}) and param in ours and param in theirs and ours[param] is None and theirs[param] is None:
             return unset[optimizer][param] + "; all active arguments remain compared"
+        # lane fx-harness-honest (2026-11-18): ours' graph layers read back `cached`. PyG SAGEConv has no cache: it
+        # aggregates from edge_index by scatter on every call with no check of it, which is the work ours does with
+        # cached=True (its CSR view reused, no compare). Waived only for that value; any other is compared.
+        if (optimizer == "graphsage" and param == "cached" and param not in theirs
+                and ours.get(param) is True):
+            return ("PyG SAGEConv has no `cached`: it reads edge_index by scatter on every call with no check, as "
+                    "ours does with cached=True")
+        # an older mojolearn GCNConv has no `cached` (it compares edge_index with its cached graph on every forward,
+        # more work than PyG's cached=True, never less): waived only against torch's cached=True
+        if (optimizer == "gcn" and param == "cached" and param not in ours
+                and theirs.get(param) is True):
+            return ("this mojolearn GCNConv has no `cached`: it caches the normalized graph and compares edge_index "
+                    "on every forward (more work than PyG's cached=True, never less)")
     # preflight-smoke (2026-10-14): the math-changing flags (amsgrad, maximize, decoupled_weight_decay) are no
     # longer waived here. Ours' read-back carries the values its implementation fixes (bench_board_algos.py
     # _OURS_OPT_SEMANTICS, bench_board_neural.py OURS_ADAMW_SEMANTICS), the torch arm passes the same values

@@ -1700,6 +1700,12 @@ _add("resnet-block", xlane="cnn", ours=("BasicBlock", "ResNetBasicBlock"), kind=
 # say so, which also changes the store's settings key. Results raced before this change were
 # wrong for this lane; apply extra scrutiny.
 GCN_TORCH_KW = {"cached": True}
+#: lane fx-harness-honest (2026-11-18 audit, H1): the harness-clock stamp of the gcn and graphsage cells once both
+#: arms run cached=True (ours from 2026-11-18; torch always did). The lane notes, and so the store's settings key,
+#: changed with it: a stored torch cell is under the old key and waits for the opponent job ("(all arms)":
+#: tools/race_fairness.py calls such a pair BROKEN; tools/paper_compare.py lists the row as waiting for a re-score),
+#: and an own cell timed before (no stamp, the content compare per forward) is HARNESS-CLOCK, never FASTER.
+GRAPH_CACHED_CLOCK = "2026-11-18 graph layers cached=True, settings key changed (all arms)"
 _GRAPH_FAIR = ("both arms compute the full backward of forward + backward(dy): the weight and "
                "bias gradients and grad_x (torch: x.requires_grad); ours loads torch's seeded "
                "initial weights from the neural fixture, so its y is compared with torch's "
@@ -1708,16 +1714,47 @@ _add("gcn", xlane="cnn", ours=("GCNConv", "GCN"), kind="layer", task="gcn", bloc
      torch=True, params=dict(out_channels=128, improved=False, add_self_loops=True, normalize=True,
                              bias=True),
      notes=["the kNN graph and its node features; PyG GCNConv (normalize=True, self loops)",
-            "the normalized graph is cached on both arms after the first (warm-up) call: ours' "
-            "GCNConv caches it per edge_index, torch's is PyG GCNConv(cached=True) (a torch-only "
-            "argument; ours has no `cached`)", _GRAPH_FAIR])
+            # FAIRNESS FIX (2026-11-18 audit, lane fx-harness-honest): this note said "ours has no
+            # `cached`" after ours started passing cached=True (GRAPH_CACHED_CLOCK), so the store's
+            # settings key did not record a setting that changes ours' work. The note now states the
+            # setting both arms run with; the settings key changes with it (the work changed), so the
+            # stored torch cells wait for the opponent job's re-score (tools/paper_compare.py prints
+            # the list). The user default, cached=False, is timed on gcn-default-call.
+            "cached=True on both arms: the normalized graph is built in the first (warm-up) call "
+            "and reused with no check of edge_index: ours GCNConv(cached=True) (read back from the "
+            "layer), torch's PyG GCNConv(cached=True); a wheel whose GCNConv has no `cached` runs "
+            "its default (a content compare of edge_index per forward) and its record says so",
+            _GRAPH_FAIR])
 _add("graphsage", xlane="cnn", ours=("SAGEConv", "GraphSAGE"), kind="layer", task="sage",
      block="graph", torch=True,
      params=dict(out_channels=128, aggr="mean", normalize=False, root_weight=True, project=False,
                  bias=True),
      notes=["the kNN graph and its node features; PyG SAGEConv (mean aggregation)",
-            "ours keeps its CSR view of edge_index between calls; PyG aggregates from edge_index "
-            "by scatter and needs no such view", _GRAPH_FAIR])
+            # FAIRNESS FIX (2026-11-18 audit, lane fx-harness-honest): see gcn's note
+            "ours SAGEConv(cached=True) (read back from the layer): its CSR view of edge_index is "
+            "built in the first (warm-up) call and reused with no check of edge_index; PyG "
+            "SAGEConv aggregates from edge_index by scatter on every call and has no cache or "
+            "check; a wheel whose SAGEConv has no `cached` runs its default (a content compare of "
+            "edge_index per forward) and its record says so; the user default, cached=False, is "
+            "timed on graphsage-default-call", _GRAPH_FAIR])
+# lane fx-harness-honest (2026-11-18 audit, H1): the user's default call, GCNConv / SAGEConv with
+# cached=False (the default: the whole edge_index is compared with the cached graph's snapshot on every
+# forward, and the graph is rebuilt when it differs), is no longer timed by gcn / graphsage, which pass
+# cached=True to match PyG's cached GCNConv. These two rows keep it on the board: our arm only (no
+# opponent, never an opponent ratio: PyG GCNConv(cached=False) renormalizes the graph on every call,
+# which is different work again), the same graph, weights and dy as gcn / graphsage.
+_GRAPH_DEFAULT = ("the user's default call: cached=False, passed explicitly (read back from the "
+                  "layer); every forward compares the whole edge_index with the cached graph's "
+                  "snapshot; our arm only, never raced or used for an opponent ratio")
+_add("gcn-default-call", xlane="cnn", ours=("GCNConv", "GCN"), kind="layer", task="gcn",
+     block="graph", own_only=True, graph_cached=False, params=dict(LANES["gcn"]["params"]),
+     notes=["the kNN graph and its node features of gcn; mojolearn GCNConv (normalize=True, "
+            "self loops)", _GRAPH_DEFAULT, _GRAPH_FAIR])
+_add("graphsage-default-call", xlane="cnn", ours=("SAGEConv", "GraphSAGE"), kind="layer",
+     task="sage", block="graph", own_only=True, graph_cached=False,
+     params=dict(LANES["graphsage"]["params"]),
+     notes=["the kNN graph and its node features of graphsage; mojolearn SAGEConv (mean "
+            "aggregation)", _GRAPH_DEFAULT, _GRAPH_FAIR])
 
 _add("embedding", xlane="embedding", ours=("Embedding",), kind="layer", task="embedding",
      block="tensor", datasets=("synthetic",), torch=True,
@@ -2043,6 +2080,8 @@ def opponents(vendor, lane):
     arms = []
     if s["kind"] == "extra":
         return _EXTRA.opponents(vendor, lane, s, TORCH_GPU[vendor])
+    if s.get("own_only"):                 # our arm only (gcn/graphsage-default-call): no opponent
+        return ()
     if s["kind"] in ("layer", "seqmodel", "cnnclf"):
         arms = ["torch-" + t for t in TORCH_GPU[vendor]]
         if s["task"] == "dropout2d":
@@ -5810,11 +5849,15 @@ def _build_layer(lane, arm, D):
             # compared the whole live edge_index (16 E bytes) against a snapshot on every
             # forward: ours did more work per call. Ours now takes the same setting,
             # cached=True (identity key, no compare), when its constructor has it; an older
-            # wheel without `cached` runs as before (its record states its kw). The lane notes
-            # (which enter the store's settings key) are left as they were so the stored torch
-            # cells keep matching; ours' record carries cached=True in its kw.
+            # wheel without `cached` runs as before (its record states its kw).
+            # FAIRNESS FIX (2026-11-18 audit, lane fx-harness-honest): the lane notes said "ours
+            # has no `cached`", so the store's settings key missed a setting that changes ours'
+            # work, and no row timed the user default. The notes now state cached=True (the key
+            # changes), the cell carries GRAPH_CACHED_CLOCK (tools/paper_compare.py HARNESS-CLOCK
+            # against a cell timed before), the layer's effective `cached` is read back below,
+            # and gcn/graphsage-default-call pass the default, cached=False, explicitly.
             if s["task"] in ("gcn", "sage") and "cached" in _sig:
-                kw["cached"] = True
+                kw["cached"] = bool(s.get("graph_cached", True))
         except (TypeError, ValueError):
             pass
         probe_light = s["task"] == "moe" and _params_probe_only()
@@ -5830,6 +5873,14 @@ def _build_layer(lane, arm, D):
             info["constructed"] = "parameter probe: the lane's arguments at D=F=8; the record holds the real ones"
         else:
             layer = cls(**kw)
+        if "cached" in kw:
+            # the effective setting, read back from the layer (lane fx-harness-honest): the record carries it
+            got = getattr(layer, "cached", None)
+            if got is not None and bool(got) != kw["cached"]:
+                raise RuntimeError("mojolearn.%s(cached=%r) reads back cached=%r" % (name, kw["cached"], got))
+            info["graph_cached"] = {"asked": kw["cached"], "read_back": None if got is None else bool(got)}
+            if kw["cached"] and not s.get("own_only"):
+                info["harness_clock"] = GRAPH_CACHED_CLOCK
         _neural_ab_layer_mode(layer, s)
         info["config"] = "mojolearn.%s(%s)" % (name, kw)
         info["weights_loaded"] = False
@@ -6013,6 +6064,8 @@ def _build_layer(lane, arm, D):
             mod(x, *extra)
         _torch_sync(torch, dev)
         info["gcn_cache"] = "PyG GCNConv(cached=True), filled by one untimed forward before the clock"
+    if s["task"] in ("gcn", "sage"):
+        info["harness_clock"] = GRAPH_CACHED_CLOCK     # the settings key changed with the lane notes (2026-11-18)
     run = torch.compile(mod) if mode == "compile" else mod
     dt = torch.bfloat16 if prec == "bf16" else None
     info["config"] = "%s on %s, %s, %s%s" % (type(mod).__name__, dev, mode, prec,
@@ -6061,6 +6114,11 @@ def _build_layer(lane, arm, D):
                    [("extra%d" % i, a.numpy()) for i, a in enumerate(extra_cpu)] + sorted(state.items())))
     if s["task"] in ("gcn", "sage"):
         rec["in_channels"] = x_cpu.shape[1]
+    if s["task"] == "gcn":
+        # the effective PyG setting, read back from the module (lane fx-harness-honest, 2026-11-18): compared
+        # with ours' cached (tools/bench_board_params.py); PyG SAGEConv has none (a reviewed absent field there)
+        conv = getattr(mod, "conv", mod)
+        rec["cached"] = bool(getattr(conv, "cached", GCN_TORCH_KW.get("cached")))
     return Runner(info, fit, outputs, infer, record=rec)
 
 
