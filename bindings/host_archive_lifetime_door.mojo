@@ -12,6 +12,8 @@ from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from std.sys.compile import is_defined
 from std.time import perf_counter_ns
+from bindings.host_tree_archive_keys_unpack import host_tree_archive_keys
+from bindings.py_balanced import py_item
 
 # fix-knn-door-fixed-cost (2026-11-14): under `-D MOJOLEARN_KNN_PHASE_TIMERS=1`
 # a device class's finalizer prints `KNN_PHASE_TIMERS finalizer <entry>
@@ -22,6 +24,7 @@ comptime _RELEASE_TIMERS = is_defined["MOJOLEARN_KNN_PHASE_TIMERS"]()
 
 
 def host_archive_finalize(model: PythonObject, context: PythonObject) raises:
+    var nk = host_tree_archive_keys()
     # An instance collected during interpreter teardown (a model held in
     # `__main__` at exit) releases nothing: the process is ending, and the
     # loaded-module read below is a fatal error once the interpreter's modules
@@ -32,11 +35,11 @@ def host_archive_finalize(model: PythonObject, context: PythonObject) raises:
     var cls = py_type(model)
     if py_type(cls) is not b.type:
         return
-    var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
+    var mro = py_call(py_item(b.type.__dict__, nk[].k___mro__).__get__, cls)
     # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
     var layout = Optional[PythonObject]()
     for i in range(len(mro)):  # driver-loop: connected host cleanup ownership
-        var got = py_get(context["host_archive_lifetime_layouts"], mro[i])
+        var got = py_get(py_item(context, nk[].k_host_archive_lifetime_layouts), mro[i])
         if got is not None:
             layout = got
             break
@@ -87,10 +90,10 @@ def host_archive_finalize(model: PythonObject, context: PythonObject) raises:
     if groves:
         if cached is None or py_type(cached) is not b.tuple or len(cached) != 2 or py_type(cached[0]) is not b.int or cached[1] is not None:
             return
-        var family = py_get(fields, "family")
+        var family = py_get(fields, nk[].k_family)
         if py_type(family) is not b.str or (String(family) != "rf" and String(family) != "et"):
             return
-        py_setitem(fields, "_groves", PythonObject(None))
+        py_setitem(fields, nk[].k__groves, PythonObject(None))
         _ = py_call(plan[0], cached[0], 0 if String(family) == "rf" else 1)
         return
     if cached is None or py_type(cached) is not b.tuple or len(cached) != 3:
@@ -98,7 +101,7 @@ def host_archive_finalize(model: PythonObject, context: PythonObject) raises:
     var token = cached[1]
     if py_type(token) is not b.int:
         return
-    py_setitem(fields, "_resident", PythonObject(None))
+    py_setitem(fields, nk[].k__resident, PythonObject(None))
     # Exact native entry recorded from _mojolearn_ivf_search_host. Never
     # invoke the cached module or a Python release callback.
     _ = py_call(plan[0], token)

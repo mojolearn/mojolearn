@@ -30,6 +30,8 @@ from core.host_archive_gbdt import host_archive_gbdt_text
 from core.host_finite_scan import host_finite_status
 from neighbors.neighbors_knn_run import knn_metric_code, knn_rbc_metric_code, knn_rbc_metric_resolve
 from umap.host_archive_native_run import _umap_whole, _umap_real
+from bindings.host_tree_archive_keys_unpack import host_tree_archive_keys
+from bindings.py_balanced import py_item
 
 
 def _archive_exact(arrays: PythonObject, name: String, dtype: String, context: PythonObject) raises -> PythonObject:
@@ -68,21 +70,22 @@ def host_archive_shape(arrays: PythonObject, name: String, dtype: String, shape:
 
 
 def host_archive_check_layout(cls: PythonObject, context: PythonObject) raises:
+    var nk = host_tree_archive_keys()
     var b = native_loaded_module("builtins")
     if py_type(cls) is not b.type:
         raise Error("TypeError: native archive classes require an ordinary native class layout")
-    var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
+    var mro = py_call(py_item(b.type.__dict__, nk[].k___mro__).__get__, cls)
     var found_dictionary = False
     var found_finalizer = False
     for i in range(len(mro)):  # driver-loop: connected class ancestry metadata
-        var fields = py_call(b.type.__dict__["__dict__"].__get__, mro[i])
-        if not found_finalizer and py_contains(fields, "__del__"):
-            if (fields["__del__"] is not py_get(context, "host_archive_finalizer_descriptor")
-                    and fields["__del__"] is not py_get(context, "host_archive_peer_finalizer_descriptor")):
+        var fields = py_call(py_item(b.type.__dict__, nk[].k___dict__).__get__, mro[i])
+        if not found_finalizer and py_contains(fields, nk[].k___del__):
+            if (py_item(fields, nk[].k___del__) is not py_get(context, nk[].k_host_archive_finalizer_descriptor)
+                    and py_item(fields, nk[].k___del__) is not py_get(context, nk[].k_host_archive_peer_finalizer_descriptor)):
                 raise Error("TypeError: Python finalizer hooks are not accepted by native archive loading")
             found_finalizer = True
-        if not found_dictionary and py_contains(fields, "__dict__"):
-            if py_type(fields["__dict__"]) is not context["host_archive_dict_descriptor_type"]:
+        if not found_dictionary and py_contains(fields, nk[].k___dict__):
+            if py_type(py_item(fields, nk[].k___dict__)) is not py_item(context, nk[].k_host_archive_dict_descriptor_type):
                 raise Error("TypeError: Python dictionary descriptors are not accepted by native archive loading")
             found_dictionary = True
     if not found_dictionary:
@@ -97,10 +100,11 @@ def host_archive_allocate(cls: PythonObject, context: PythonObject) raises -> Py
 
 
 def host_archive_object(cls: PythonObject, arrays: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = host_tree_archive_keys()
     var b = native_loaded_module("builtins")
     if py_type(cls) is not b.type:
         raise Error("TypeError: native archive classes require an ordinary native class layout")
-    var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
+    var mro = py_call(py_item(b.type.__dict__, nk[].k___mro__).__get__, cls)
     var saved = _archive_string(arrays, "estimator", context)
     var known = False
     for i in range(len(mro)):  # driver-loop: connected class ancestry metadata
@@ -141,8 +145,9 @@ def host_archive_mode_value(arrays: PythonObject, context: PythonObject) raises 
 
 
 def host_archive_mode(arrays: PythonObject, fields: PythonObject, context: PythonObject) raises:
+    var nk = host_tree_archive_keys()
     var mode = host_archive_mode_value(arrays, context)
-    py_setitem(fields, "numeric_mode", mode)
+    py_setitem(fields, nk[].k_numeric_mode, mode)
 
 
 def host_archive_where(path: PythonObject, context: PythonObject) raises -> String:
@@ -183,6 +188,7 @@ def host_archive_matrix(arrays: PythonObject, name: String, dtype: String, rows:
 
 def host_archive_decomposition(cls: PythonObject, arrays: PythonObject, pca: Bool, path: PythonObject,
                                context: PythonObject) raises -> PythonObject:
+    var nk = host_tree_archive_keys()
     # The refusals keep PCA.load's and TruncatedSVD.load's wording.
     var meta = host_archive_meta(arrays, "meta", 4 if pca else 2, path, context)
     var nc = classical_i64(meta, 0)
@@ -192,30 +198,30 @@ def host_archive_decomposition(cls: PythonObject, arrays: PythonObject, pca: Boo
     var fields = sequential_fields(model)
     var solver = _archive_string(arrays, "svd_solver" if pca else "algorithm", context)
     host_archive_mode(arrays, fields, context)
-    py_setitem(fields, "n_components", nc)
-    py_setitem(fields, "n_components_", nc)
-    py_setitem(fields, "n_features_in_", nf)
-    py_setitem(fields, "tol", 0.0)
-    py_setitem(fields, "n_oversamples", 10)
-    py_setitem(fields, "power_iteration_normalizer", "auto")
-    py_setitem(fields, "random_state", PythonObject(None))
-    py_setitem(fields, "components_", host_archive_matrix(arrays, "components", "<f4", nc, nf, path, context))
+    py_setitem(fields, nk[].k_n_components, nc)
+    py_setitem(fields, nk[].k_n_components_, nc)
+    py_setitem(fields, nk[].k_n_features_in_, nf)
+    py_setitem(fields, nk[].k_tol, 0.0)
+    py_setitem(fields, nk[].k_n_oversamples, 10)
+    py_setitem(fields, nk[].k_power_iteration_normalizer, "auto")
+    py_setitem(fields, nk[].k_random_state, PythonObject(None))
+    py_setitem(fields, nk[].k_components_, host_archive_matrix(arrays, "components", "<f4", nc, nf, path, context))
     if pca:
-        py_setitem(fields, "copy", True)
-        py_setitem(fields, "whiten", classical_i64(meta, 3) != 0)
-        py_setitem(fields, "svd_solver", solver)
-        py_setitem(fields, "iterated_power", "auto")
-        py_setitem(fields, "mean_", host_archive_sized(arrays, "mean", "<f4", nf, where + " mean_ does not match n_features_in_", context))
-        py_setitem(fields, "singular_values_", host_archive_sized(arrays, "singular_values", "<f4", nc, where + " singular_values_ does not match n_components_", context))
-        py_setitem(fields, "explained_variance_", host_archive_sized(arrays, "explained_variance", "<f4", nc, where + " explained_variance_ does not match n_components_", context))
-        py_setitem(fields, "explained_variance_ratio_", host_archive_sized(arrays, "explained_variance_ratio", "<f4", nc, where + " explained_variance_ratio_ does not match n_components_", context))
+        py_setitem(fields, nk[].k_copy, True)
+        py_setitem(fields, nk[].k_whiten, classical_i64(meta, 3) != 0)
+        py_setitem(fields, nk[].k_svd_solver, solver)
+        py_setitem(fields, nk[].k_iterated_power, "auto")
+        py_setitem(fields, nk[].k_mean_, host_archive_sized(arrays, "mean", "<f4", nf, where + " mean_ does not match n_features_in_", context))
+        py_setitem(fields, nk[].k_singular_values_, host_archive_sized(arrays, "singular_values", "<f4", nc, where + " singular_values_ does not match n_components_", context))
+        py_setitem(fields, nk[].k_explained_variance_, host_archive_sized(arrays, "explained_variance", "<f4", nc, where + " explained_variance_ does not match n_components_", context))
+        py_setitem(fields, nk[].k_explained_variance_ratio_, host_archive_sized(arrays, "explained_variance_ratio", "<f4", nc, where + " explained_variance_ratio_ does not match n_components_", context))
         var noise = host_archive_sized(arrays, "noise_variance", "<f8", 1, where + " noise_variance must hold one value", context)
-        py_setitem(fields, "noise_variance_", classical_f64(noise, 0))
-        py_setitem(fields, "n_samples_", classical_i64(meta, 2))
+        py_setitem(fields, nk[].k_noise_variance_, classical_f64(noise, 0))
+        py_setitem(fields, nk[].k_n_samples_, classical_i64(meta, 2))
     else:
-        py_setitem(fields, "singular_values_", host_archive_sized(arrays, "singular_values", "<f4", nc, where + " singular_values does not match n_components_", context))
-        py_setitem(fields, "algorithm", solver)
-        py_setitem(fields, "n_iter", 5)
+        py_setitem(fields, nk[].k_singular_values_, host_archive_sized(arrays, "singular_values", "<f4", nc, where + " singular_values does not match n_components_", context))
+        py_setitem(fields, nk[].k_algorithm, solver)
+        py_setitem(fields, nk[].k_n_iter, 5)
     return model
 
 
@@ -232,6 +238,7 @@ def host_archive_held(arrays: PythonObject, name: String, dtype: String, count: 
 
 def host_archive_cd(cls: PythonObject, arrays: PythonObject, lasso: Bool, path: PythonObject,
                     context: PythonObject) raises -> PythonObject:
+    var nk = host_tree_archive_keys()
     # The refusals keep ElasticNet.load's and Lasso.load's wording and order;
     # the fields follow the constructor's, then the loader's, assignments.
     var where = host_archive_where(path, context)
@@ -242,28 +249,28 @@ def host_archive_cd(cls: PythonObject, arrays: PythonObject, lasso: Bool, path: 
         raise Error(where + " carries l1_ratio " + _archive_builtin_repr(PythonObject(ratio)) + ", a Lasso is 1.0")
     var model = host_archive_object(cls, arrays, context)
     var fields = sequential_fields(model)
-    py_setitem(fields, "alpha", classical_f64(hyper, 0))
-    py_setitem(fields, "l1_ratio", ratio)
-    py_setitem(fields, "fit_intercept", classical_i64(meta, 1) != 0)
-    py_setitem(fields, "max_iter", classical_i64(meta, 2))
-    py_setitem(fields, "tol", classical_f64(hyper, 2))
-    py_setitem(fields, "solver", "auto")
-    py_setitem(fields, "selection", "cyclic")
-    py_setitem(fields, "precompute", False)
-    py_setitem(fields, "copy_X", True)
-    py_setitem(fields, "warm_start", False)
-    py_setitem(fields, "positive", False)
-    py_setitem(fields, "random_state", PythonObject(None))
+    py_setitem(fields, nk[].k_alpha, classical_f64(hyper, 0))
+    py_setitem(fields, nk[].k_l1_ratio, ratio)
+    py_setitem(fields, nk[].k_fit_intercept, classical_i64(meta, 1) != 0)
+    py_setitem(fields, nk[].k_max_iter, classical_i64(meta, 2))
+    py_setitem(fields, nk[].k_tol, classical_f64(hyper, 2))
+    py_setitem(fields, nk[].k_solver, "auto")
+    py_setitem(fields, nk[].k_selection, "cyclic")
+    py_setitem(fields, nk[].k_precompute, False)
+    py_setitem(fields, nk[].k_copy_X, True)
+    py_setitem(fields, nk[].k_warm_start, False)
+    py_setitem(fields, nk[].k_positive, False)
+    py_setitem(fields, nk[].k_random_state, PythonObject(None))
     host_archive_mode(arrays, fields, context)
     var nf = classical_i64(meta, 0)
-    py_setitem(fields, "n_features_in_", nf)
+    py_setitem(fields, nk[].k_n_features_in_, nf)
     var coef = _archive_exact(arrays, "coef", "<f4", context)
     if Int(py=coef.ndim) != 1 or Int(py=coef.size) != nf:
         raise Error(where + " coef does not match n_features_in_")
-    py_setitem(fields, "coef_", coef)
+    py_setitem(fields, nk[].k_coef_, coef)
     var intercept = host_archive_sized(arrays, "intercept", "<f8", 1, where + " intercept must hold one value", context)
-    py_setitem(fields, "intercept_", classical_f64(intercept, 0))
-    py_setitem(fields, "n_iter_", classical_i64(meta, 3))
+    py_setitem(fields, nk[].k_intercept_, classical_f64(intercept, 0))
+    py_setitem(fields, nk[].k_n_iter_, classical_i64(meta, 3))
     return model
 
 
@@ -293,6 +300,7 @@ def host_archive_tuple_shape(arrays: PythonObject, name: String, dtype: String, 
 
 def host_archive_kernel(cls: PythonObject, arrays: PythonObject, kind: Int, path: PythonObject,
                         context: PythonObject) raises -> PythonObject:
+    var nk = host_tree_archive_keys()
     # kind: 0 KernelRidge, 1 Nystroem, 2 RBFSampler. These are model
     # schemas, unrelated to benchmark shapes or device execution routes.
     # The refusals keep KernelRidge.load's, Nystroem.load's and
@@ -304,54 +312,54 @@ def host_archive_kernel(cls: PythonObject, arrays: PythonObject, kind: Int, path
     var fields = sequential_fields(model)
     host_archive_mode(arrays, fields, context)
     var gamma = classical_f64(hyper, 0)
-    py_setitem(fields, "gamma", gamma)
+    py_setitem(fields, nk[].k_gamma, gamma)
     if kind == 2:
         var d = classical_i64(meta, 0)
         var q = classical_i64(meta, 1)
         var seed = classical_i64(meta, 2)
-        py_setitem(fields, "n_components", q)
-        py_setitem(fields, "random_state", seed)
-        py_setitem(fields, "n_features_in_", d)
-        py_setitem(fields, "random_weights_", host_archive_tuple_shape(arrays, "random_weights", "<f4", Python.tuple(d, q), path, context))
-        py_setitem(fields, "random_offset_", host_archive_tuple_shape(arrays, "random_offset", "<f4", Python.tuple(q), path, context))
-        py_setitem(fields, "sigma_", classical_f64(hyper, 1))
-        py_setitem(fields, "scale_", classical_f64(hyper, 2))
-        py_setitem(fields, "_params", Python.tuple(gamma, seed))
+        py_setitem(fields, nk[].k_n_components, q)
+        py_setitem(fields, nk[].k_random_state, seed)
+        py_setitem(fields, nk[].k_n_features_in_, d)
+        py_setitem(fields, nk[].k_random_weights_, host_archive_tuple_shape(arrays, "random_weights", "<f4", Python.tuple(d, q), path, context))
+        py_setitem(fields, nk[].k_random_offset_, host_archive_tuple_shape(arrays, "random_offset", "<f4", Python.tuple(q), path, context))
+        py_setitem(fields, nk[].k_sigma_, classical_f64(hyper, 1))
+        py_setitem(fields, nk[].k_scale_, classical_f64(hyper, 2))
+        py_setitem(fields, nk[].k__params, Python.tuple(gamma, seed))
         return model
     var n = classical_i64(meta, 0)
     var d = classical_i64(meta, 1)
     var kernel = classical_i64(meta, 3 if kind == 0 else 2)
     var degree = classical_i64(meta, 4 if kind == 0 else 3)
     var coef0 = classical_f64(hyper, 1)
-    py_setitem(fields, "kernel", kernel)
-    py_setitem(fields, "degree", degree)
-    py_setitem(fields, "coef0", coef0)
-    py_setitem(fields, "n_features_in_", d)
+    py_setitem(fields, nk[].k_kernel, kernel)
+    py_setitem(fields, nk[].k_degree, degree)
+    py_setitem(fields, nk[].k_coef0, coef0)
+    py_setitem(fields, nk[].k_n_features_in_, d)
     if kind == 0:
         var t = classical_i64(meta, 2)
         var alpha = classical_f64(hyper, 2)
         var squeeze = classical_i64(meta, 6) != 0
-        py_setitem(fields, "alpha", alpha)
-        py_setitem(fields, "X_fit_", host_archive_tuple_shape(arrays, "x_fit", "<f4", Python.tuple(n, d), path, context))
+        py_setitem(fields, nk[].k_alpha, alpha)
+        py_setitem(fields, nk[].k_X_fit_, host_archive_tuple_shape(arrays, "x_fit", "<f4", Python.tuple(n, d), path, context))
         var dual = host_archive_tuple_shape(arrays, "dual", "<f4", Python.tuple(n * t), path, context)
         if not squeeze:
             dual = classical_wrap_array(dual._store, Python.tuple(n, t), "<f4", "C", context)
-        py_setitem(fields, "n_targets_", t)
-        py_setitem(fields, "_squeeze", squeeze)
-        py_setitem(fields, "dual_coef_", dual)
-        py_setitem(fields, "info_", classical_i64(meta, 5))
-        py_setitem(fields, "_kernel_params", Python.tuple(kernel, degree, gamma, coef0, alpha))
+        py_setitem(fields, nk[].k_n_targets_, t)
+        py_setitem(fields, nk[].k__squeeze, squeeze)
+        py_setitem(fields, nk[].k_dual_coef_, dual)
+        py_setitem(fields, nk[].k_info_, classical_i64(meta, 5))
+        py_setitem(fields, nk[].k__kernel_params, Python.tuple(kernel, degree, gamma, coef0, alpha))
     else:
         var seed = classical_i64(meta, 4)
-        py_setitem(fields, "n_components", n)
-        py_setitem(fields, "random_state", seed)
-        py_setitem(fields, "components_", host_archive_tuple_shape(arrays, "components", "<f4", Python.tuple(n, d), path, context))
-        py_setitem(fields, "component_indices_", host_archive_tuple_shape(arrays, "component_indices", "<i4", Python.tuple(n), path, context))
-        py_setitem(fields, "normalization_", host_archive_tuple_shape(arrays, "normalization", "<f4", Python.tuple(n, n), path, context))
-        py_setitem(fields, "eigenvalues_", host_archive_tuple_shape(arrays, "eigenvalues", "<f4", Python.tuple(n), path, context))
-        py_setitem(fields, "eigenvectors_", host_archive_tuple_shape(arrays, "eigenvectors", "<f4", Python.tuple(n, n), path, context))
-        py_setitem(fields, "sweeps_", classical_i64(meta, 5))
-        py_setitem(fields, "_kernel_params", Python.tuple(kernel, degree, gamma, coef0, seed))
+        py_setitem(fields, nk[].k_n_components, n)
+        py_setitem(fields, nk[].k_random_state, seed)
+        py_setitem(fields, nk[].k_components_, host_archive_tuple_shape(arrays, "components", "<f4", Python.tuple(n, d), path, context))
+        py_setitem(fields, nk[].k_component_indices_, host_archive_tuple_shape(arrays, "component_indices", "<i4", Python.tuple(n), path, context))
+        py_setitem(fields, nk[].k_normalization_, host_archive_tuple_shape(arrays, "normalization", "<f4", Python.tuple(n, n), path, context))
+        py_setitem(fields, nk[].k_eigenvalues_, host_archive_tuple_shape(arrays, "eigenvalues", "<f4", Python.tuple(n), path, context))
+        py_setitem(fields, nk[].k_eigenvectors_, host_archive_tuple_shape(arrays, "eigenvectors", "<f4", Python.tuple(n, n), path, context))
+        py_setitem(fields, nk[].k_sweeps_, classical_i64(meta, 5))
+        py_setitem(fields, nk[].k__kernel_params, Python.tuple(kernel, degree, gamma, coef0, seed))
     return model
 
 
@@ -371,6 +379,7 @@ def host_archive_cholesky_decoded(cls: PythonObject, members: List[NativeArchive
 
 
 def host_archive_embedding(cls: PythonObject, arrays: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = host_tree_archive_keys()
     var meta = host_archive_count(arrays, "meta", "<i8", 3, context, True)
     var v = classical_i64(meta, 0)
     var d = classical_i64(meta, 1)
@@ -392,15 +401,15 @@ def host_archive_embedding(cls: PythonObject, arrays: PythonObject, context: Pyt
     var model = host_archive_object(cls, arrays, context)
     var fields = sequential_fields(model)
     host_archive_mode(arrays, fields, context)
-    py_setitem(fields, "num_embeddings", v)
-    py_setitem(fields, "embedding_dim", d)
-    py_setitem(fields, "padding_idx", PythonObject(None) if pad == -1 else PythonObject(v + pad if pad < 0 else pad))
-    py_setitem(fields, "max_norm", PythonObject(None))
-    py_setitem(fields, "norm_type", 2.0)
-    py_setitem(fields, "scale_grad_by_freq", False)
-    py_setitem(fields, "sparse", False)
-    py_setitem(fields, "plan", plan)
-    py_setitem(fields, "weight", weight)
+    py_setitem(fields, nk[].k_num_embeddings, v)
+    py_setitem(fields, nk[].k_embedding_dim, d)
+    py_setitem(fields, nk[].k_padding_idx, PythonObject(None) if pad == -1 else PythonObject(v + pad if pad < 0 else pad))
+    py_setitem(fields, nk[].k_max_norm, PythonObject(None))
+    py_setitem(fields, nk[].k_norm_type, 2.0)
+    py_setitem(fields, nk[].k_scale_grad_by_freq, False)
+    py_setitem(fields, nk[].k_sparse, False)
+    py_setitem(fields, nk[].k_plan, plan)
+    py_setitem(fields, nk[].k_weight, weight)
     return model
 
 
@@ -412,6 +421,7 @@ def host_archive_sorted(table: PythonObject) raises -> String:
 
 def host_archive_kmeans(cls: PythonObject, arrays: PythonObject, path: PythonObject,
                         context: PythonObject) raises -> PythonObject:
+    var nk = host_tree_archive_keys()
     # The refusals keep KMeans.load's wording and order.
     var where = host_archive_where(path, context)
     var meta = _archive_exact(arrays, "meta", "<i8", context)
@@ -426,8 +436,8 @@ def host_archive_kmeans(cls: PythonObject, arrays: PythonObject, path: PythonObj
         raise Error(where + " holds an empty model (" + String(k) + " centers of " + String(d) + " features)")
     var metric = _archive_string(arrays, "metric", context)
     var start = _archive_string(arrays, "init", context)
-    var metrics = context["host_archive_kmeans_metrics"]
-    var starts = context["host_archive_kmeans_starts"]
+    var metrics = py_item(context, nk[].k_host_archive_kmeans_metrics)
+    var starts = py_item(context, nk[].k_host_archive_kmeans_starts)
     if not py_contains(metrics, metric):
         raise Error(where + " metric " + _archive_builtin_repr(metric) + " is not one KMeans serves ("
                     + host_archive_sorted(metrics) + ")")
@@ -444,15 +454,15 @@ def host_archive_kmeans(cls: PythonObject, arrays: PythonObject, path: PythonObj
                     + ") but its meta holds code " + String(classical_i64(meta, 5)))
     var model = host_archive_object(cls, arrays, context)
     var fields = sequential_fields(model)
-    py_setitem(fields, "n_clusters", k)
-    py_setitem(fields, "init", start)
-    py_setitem(fields, "n_init", classical_i64(meta, 7))
-    py_setitem(fields, "max_iter", classical_i64(meta, 6))
-    py_setitem(fields, "tol", classical_f64(reals, 3))
-    py_setitem(fields, "random_state", classical_i64(meta, 8))
-    py_setitem(fields, "init_centroids", PythonObject(None))
-    py_setitem(fields, "metric", metric)
-    py_setitem(fields, "oversampling_factor", classical_f64(reals, 4))
+    py_setitem(fields, nk[].k_n_clusters, k)
+    py_setitem(fields, nk[].k_init, start)
+    py_setitem(fields, nk[].k_n_init, classical_i64(meta, 7))
+    py_setitem(fields, nk[].k_max_iter, classical_i64(meta, 6))
+    py_setitem(fields, nk[].k_tol, classical_f64(reals, 3))
+    py_setitem(fields, nk[].k_random_state, classical_i64(meta, 8))
+    py_setitem(fields, nk[].k_init_centroids, PythonObject(None))
+    py_setitem(fields, nk[].k_metric, metric)
+    py_setitem(fields, nk[].k_oversampling_factor, classical_f64(reals, 4))
     host_archive_mode(arrays, fields, context)
     var centers = _archive_exact(arrays, "centers", "<f4", context)
     if Int(py=centers.ndim) != 2 or Int(py=centers.shape[0]) != k or Int(py=centers.shape[1]) != d:
@@ -461,13 +471,13 @@ def host_archive_kmeans(cls: PythonObject, arrays: PythonObject, path: PythonObj
     var labels = _archive_exact(arrays, "labels", "<i4", context)
     if Int(py=labels.ndim) != 1 or Int(py=labels.size) != n:
         raise Error(where + " labels hold " + String(Int(py=labels.size)) + " values, the fit had " + String(n) + " rows")
-    py_setitem(fields, "cluster_centers_", centers)
-    py_setitem(fields, "labels_", labels)
-    py_setitem(fields, "n_features_in_", d)
-    py_setitem(fields, "n_iter_", classical_i64(meta, 3))
-    py_setitem(fields, "inertia_", classical_f64(reals, 0))
-    py_setitem(fields, "sum_scale_", classical_f64(reals, 1))
-    py_setitem(fields, "weight_scale_", classical_f64(reals, 2))
+    py_setitem(fields, nk[].k_cluster_centers_, centers)
+    py_setitem(fields, nk[].k_labels_, labels)
+    py_setitem(fields, nk[].k_n_features_in_, d)
+    py_setitem(fields, nk[].k_n_iter_, classical_i64(meta, 3))
+    py_setitem(fields, nk[].k_inertia_, classical_f64(reals, 0))
+    py_setitem(fields, nk[].k_sum_scale_, classical_f64(reals, 1))
+    py_setitem(fields, nk[].k_weight_scale_, classical_f64(reals, 2))
     return model
 
 
@@ -484,6 +494,7 @@ def host_archive_vector(arrays: PythonObject, name: String, count: Int, where: S
 
 def host_archive_mixture(cls: PythonObject, arrays: PythonObject, path: PythonObject,
                          context: PythonObject) raises -> PythonObject:
+    var nk = host_tree_archive_keys()
     # The refusals keep GaussianMixture.load's wording and order.
     var where = host_archive_where(path, context)
     var meta = _archive_exact(arrays, "ints", "<i8", context)
@@ -499,45 +510,46 @@ def host_archive_mixture(cls: PythonObject, arrays: PythonObject, path: PythonOb
     var init_params = _archive_string(arrays, "init_params", context)
     var model = host_archive_object(cls, arrays, context)
     var fields = sequential_fields(model)
-    py_setitem(fields, "n_components", k)
-    py_setitem(fields, "covariance_type", covariance_type)
-    py_setitem(fields, "tol", classical_f64(reals, 1))
-    py_setitem(fields, "reg_covar", classical_f64(reals, 2))
-    py_setitem(fields, "max_iter", classical_i64(meta, 4))
-    py_setitem(fields, "init_params", init_params)
-    py_setitem(fields, "random_state", classical_i64(meta, 5))
-    py_setitem(fields, "n_init", 1)
-    py_setitem(fields, "warm_start", False)
-    py_setitem(fields, "means_init", PythonObject(None))
-    py_setitem(fields, "weights_init", PythonObject(None))
-    py_setitem(fields, "precisions_init", PythonObject(None))
+    py_setitem(fields, nk[].k_n_components, k)
+    py_setitem(fields, nk[].k_covariance_type, covariance_type)
+    py_setitem(fields, nk[].k_tol, classical_f64(reals, 1))
+    py_setitem(fields, nk[].k_reg_covar, classical_f64(reals, 2))
+    py_setitem(fields, nk[].k_max_iter, classical_i64(meta, 4))
+    py_setitem(fields, nk[].k_init_params, init_params)
+    py_setitem(fields, nk[].k_random_state, classical_i64(meta, 5))
+    py_setitem(fields, nk[].k_n_init, 1)
+    py_setitem(fields, nk[].k_warm_start, False)
+    py_setitem(fields, nk[].k_means_init, PythonObject(None))
+    py_setitem(fields, nk[].k_weights_init, PythonObject(None))
+    py_setitem(fields, nk[].k_precisions_init, PythonObject(None))
     # Match _gmm_default_fit's solver-state initialization. The public save
     # schema only admits this default solver. Omitting _ext on reload sent
     # scoring through a missing-attribute lookup that returned a native
     # SystemError on the 0.8.60 PTX verification run. A retained public
     # fit/save/load reproduction shows all three inference outputs match
     # once this state is restored (verify-0860-ptx-20261026/gmm-repro).
-    py_setitem(fields, "_ext", PythonObject(None))
+    py_setitem(fields, nk[].k__ext, PythonObject(None))
     host_archive_mode(arrays, fields, context)
     var weights = host_archive_vector(arrays, "weights", k, where, context)
     var means = host_archive_vector(arrays, "means", k * d, where, context)
     var covariance = host_archive_vector(arrays, "covariances", k * d * d, where, context)
     var precision = host_archive_vector(arrays, "precisions_cholesky", k * d * d, where, context)
     var log_det = host_archive_vector(arrays, "log_det_chol", k, where, context)
-    py_setitem(fields, "n_features_in_", d)
-    py_setitem(fields, "weights_", weights)
-    py_setitem(fields, "means_", classical_wrap_array(means._store, Python.tuple(k, d), "<f4", "C", context))
-    py_setitem(fields, "covariances_", classical_wrap_array(covariance._store, Python.tuple(k, d, d), "<f4", "C", context))
-    py_setitem(fields, "precisions_cholesky_", classical_wrap_array(precision._store, Python.tuple(k, d, d), "<f4", "C", context))
-    py_setitem(fields, "log_det_chol_", log_det)
-    py_setitem(fields, "n_iter_", classical_i64(meta, 2))
-    py_setitem(fields, "converged_", classical_i64(meta, 3) != 0)
-    py_setitem(fields, "lower_bound_", classical_f64(reals, 0))
+    py_setitem(fields, nk[].k_n_features_in_, d)
+    py_setitem(fields, nk[].k_weights_, weights)
+    py_setitem(fields, nk[].k_means_, classical_wrap_array(means._store, Python.tuple(k, d), "<f4", "C", context))
+    py_setitem(fields, nk[].k_covariances_, classical_wrap_array(covariance._store, Python.tuple(k, d, d), "<f4", "C", context))
+    py_setitem(fields, nk[].k_precisions_cholesky_, classical_wrap_array(precision._store, Python.tuple(k, d, d), "<f4", "C", context))
+    py_setitem(fields, nk[].k_log_det_chol_, log_det)
+    py_setitem(fields, nk[].k_n_iter_, classical_i64(meta, 2))
+    py_setitem(fields, nk[].k_converged_, classical_i64(meta, 3) != 0)
+    py_setitem(fields, nk[].k_lower_bound_, classical_f64(reals, 0))
     return model
 
 
 def host_archive_density(cls: PythonObject, arrays: PythonObject, kde: Bool, path: PythonObject,
                          context: PythonObject) raises -> PythonObject:
+    var nk = host_tree_archive_keys()
     if not kde:
         return host_archive_dbscan(cls, arrays, path, context)
     var meta = host_archive_count(arrays, "meta", "<i8", 3, context, True)
@@ -548,33 +560,34 @@ def host_archive_density(cls: PythonObject, arrays: PythonObject, kde: Bool, pat
     var model = host_archive_object(cls, arrays, context)
     var fields = sequential_fields(model)
     host_archive_mode(arrays, fields, context)
-    py_setitem(fields, "metric", metric)
-    py_setitem(fields, "n_features_in_", nf)
-    py_setitem(fields, "n_samples_fit_", n)
+    py_setitem(fields, nk[].k_metric, metric)
+    py_setitem(fields, nk[].k_n_features_in_, nf)
+    py_setitem(fields, nk[].k_n_samples_fit_, n)
     var bandwidth = classical_f64(parameter, 0)
     if not bandwidth > 0.0:
         raise Error("mojolearn KernelDensity: bandwidth must be positive, got " + host_archive_float_repr(bandwidth))
-    py_setitem(fields, "bandwidth", bandwidth)
-    py_setitem(fields, "kernel", _archive_string(arrays, "kernel", context))
-    py_setitem(fields, "algorithm", "auto")
-    py_setitem(fields, "atol", 0)
-    py_setitem(fields, "rtol", 0)
-    py_setitem(fields, "breadth_first", True)
-    py_setitem(fields, "leaf_size", 40)
-    py_setitem(fields, "metric_params", PythonObject(None))
-    py_setitem(fields, "_x", host_archive_shape(arrays, "x", "<f4", Python.tuple(n, nf), context))
+    py_setitem(fields, nk[].k_bandwidth, bandwidth)
+    py_setitem(fields, nk[].k_kernel, _archive_string(arrays, "kernel", context))
+    py_setitem(fields, nk[].k_algorithm, "auto")
+    py_setitem(fields, nk[].k_atol, 0)
+    py_setitem(fields, nk[].k_rtol, 0)
+    py_setitem(fields, nk[].k_breadth_first, True)
+    py_setitem(fields, nk[].k_leaf_size, 40)
+    py_setitem(fields, nk[].k_metric_params, PythonObject(None))
+    py_setitem(fields, nk[].k__x, host_archive_shape(arrays, "x", "<f4", Python.tuple(n, nf), context))
     if classical_i64(meta, 2) != 0:
-        py_setitem(fields, "_w", host_archive_shape(arrays, "weights", "<f4", Python.tuple(n), context))
+        py_setitem(fields, nk[].k__w, host_archive_shape(arrays, "weights", "<f4", Python.tuple(n), context))
     else:
-        if py_contains(arrays, "weights"):
+        if py_contains(arrays, nk[].k_weights):
             raise Error("KernelDensity archive carries weights its meta says it lacks")
-        py_setitem(fields, "_w", PythonObject(None))
+        py_setitem(fields, nk[].k__w, PythonObject(None))
     return model
 
 
 def host_archive_dbscan(cls: PythonObject, arrays: PythonObject, path: PythonObject,
                         context: PythonObject) raises -> PythonObject:
     """DBSCAN.load: the refusals keep the Python loader's wording and order."""
+    var nk = host_tree_archive_keys()
     var where = host_archive_where(path, context)
     var meta = host_archive_meta(arrays, "meta", 3, path, context)
     var eps = host_archive_sized(arrays, "eps", "<f8", 1, where + " eps must hold one value", context)
@@ -584,15 +597,15 @@ def host_archive_dbscan(cls: PythonObject, arrays: PythonObject, path: PythonObj
     var algorithm = _archive_string(arrays, "algorithm", context)
     var model = host_archive_object(cls, arrays, context)
     var fields = sequential_fields(model)
-    py_setitem(fields, "eps", classical_f64(eps, 0))
-    py_setitem(fields, "min_samples", classical_i64(meta, 2))
-    py_setitem(fields, "metric", metric)
-    py_setitem(fields, "algorithm", algorithm)
-    py_setitem(fields, "max_mbytes_per_batch", PythonObject(None))
-    py_setitem(fields, "max_iterations", PythonObject(None))
-    py_setitem(fields, "prediction_data", True)
+    py_setitem(fields, nk[].k_eps, classical_f64(eps, 0))
+    py_setitem(fields, nk[].k_min_samples, classical_i64(meta, 2))
+    py_setitem(fields, nk[].k_metric, metric)
+    py_setitem(fields, nk[].k_algorithm, algorithm)
+    py_setitem(fields, nk[].k_max_mbytes_per_batch, PythonObject(None))
+    py_setitem(fields, nk[].k_max_iterations, PythonObject(None))
+    py_setitem(fields, nk[].k_prediction_data, True)
     host_archive_mode(arrays, fields, context)
-    if not py_contains(context["host_archive_dbscan_metrics"], metric):
+    if not py_contains(py_item(context, nk[].k_host_archive_dbscan_metrics), metric):
         raise Error(where + " metric " + _archive_builtin_repr(metric) + " is not one DBSCAN serves")
     var components = _archive_exact(arrays, "components", "<f4", context)
     var indices = _archive_exact(arrays, "core_sample_indices", "<i4", context)
@@ -604,17 +617,18 @@ def host_archive_dbscan(cls: PythonObject, arrays: PythonObject, path: PythonObj
                     + " is not (" + String(nc) + ", " + String(nf) + ")")
     if Int(py=core_labels.size) != nc or Int(py=labels.size) != n:
         raise Error(where + " core labels or labels do not match the saved counts")
-    py_setitem(fields, "components_", components)
-    py_setitem(fields, "core_sample_indices_", indices)
-    py_setitem(fields, "_core_labels", core_labels)
-    py_setitem(fields, "labels_", labels)
-    py_setitem(fields, "n_features_in_", nf)
-    py_setitem(fields, "n_samples_fit_", n)
+    py_setitem(fields, nk[].k_components_, components)
+    py_setitem(fields, nk[].k_core_sample_indices_, indices)
+    py_setitem(fields, nk[].k__core_labels, core_labels)
+    py_setitem(fields, nk[].k_labels_, labels)
+    py_setitem(fields, nk[].k_n_features_in_, nf)
+    py_setitem(fields, nk[].k_n_samples_fit_, n)
     return model
 
 
 def host_archive_agglomerative(cls: PythonObject, arrays: PythonObject, path: PythonObject,
                                context: PythonObject) raises -> PythonObject:
+    var nk = host_tree_archive_keys()
     # The refusals keep AgglomerativeClustering.load's wording and order
     # (the metric refusal is its constructor check's).
     var where = host_archive_where(path, context)
@@ -623,25 +637,25 @@ def host_archive_agglomerative(cls: PythonObject, arrays: PythonObject, path: Py
     var nf = classical_i64(meta, 1)
     var n = classical_i64(meta, 2)
     var metric = _archive_string(arrays, "metric", context)
-    var metrics = context["host_archive_agglo_metrics"]
+    var metrics = py_item(context, nk[].k_host_archive_agglo_metrics)
     if not py_contains(metrics, metric):
         raise Error("NotImplementedError: mojolearn AgglomerativeClustering: metric=" + _archive_builtin_repr(metric)
                     + " is refused by name; one of " + host_archive_sorted(metrics) + ". A callable metric would "
                     + "compute the dissimilarities outside every identity column. See x_cluster/NOT_IMPLEMENTED.tsv")
     var model = host_archive_object(cls, arrays, context)
     var fields = sequential_fields(model)
-    py_setitem(fields, "n_clusters", k)
-    py_setitem(fields, "metric", metric)
-    py_setitem(fields, "connectivity", PythonObject(None))
-    py_setitem(fields, "linkage", "single")
-    py_setitem(fields, "c", 15)
-    py_setitem(fields, "memory", PythonObject(None))
-    py_setitem(fields, "compute_full_tree", "auto")
-    py_setitem(fields, "distance_threshold", PythonObject(None))
-    py_setitem(fields, "compute_distances", False)
-    py_setitem(fields, "prediction_data", True)
-    py_setitem(fields, "_connectivity", "pairwise")
-    py_setitem(fields, "_compute_distances", False)
+    py_setitem(fields, nk[].k_n_clusters, k)
+    py_setitem(fields, nk[].k_metric, metric)
+    py_setitem(fields, nk[].k_connectivity, PythonObject(None))
+    py_setitem(fields, nk[].k_linkage, "single")
+    py_setitem(fields, nk[].k_c, 15)
+    py_setitem(fields, nk[].k_memory, PythonObject(None))
+    py_setitem(fields, nk[].k_compute_full_tree, "auto")
+    py_setitem(fields, nk[].k_distance_threshold, PythonObject(None))
+    py_setitem(fields, nk[].k_compute_distances, False)
+    py_setitem(fields, nk[].k_prediction_data, True)
+    py_setitem(fields, nk[].k__connectivity, "pairwise")
+    py_setitem(fields, nk[].k__compute_distances, False)
     host_archive_mode(arrays, fields, context)
     var x = _archive_exact(arrays, "x", "<f4", context)
     var labels = _archive_exact(arrays, "labels", "<i4", context)
@@ -649,11 +663,11 @@ def host_archive_agglomerative(cls: PythonObject, arrays: PythonObject, path: Py
         raise Error(where + " x shape " + _archive_builtin_repr(x.shape) + " is not (" + String(n) + ", " + String(nf) + ")")
     if Int(py=labels.size) != n:
         raise Error(where + " labels do not match n_leaves_")
-    py_setitem(fields, "_fit_X", x)
-    py_setitem(fields, "labels_", labels)
-    py_setitem(fields, "n_clusters_", k)
-    py_setitem(fields, "n_leaves_", n)
-    py_setitem(fields, "n_features_in_", nf)
+    py_setitem(fields, nk[].k__fit_X, x)
+    py_setitem(fields, nk[].k_labels_, labels)
+    py_setitem(fields, nk[].k_n_clusters_, k)
+    py_setitem(fields, nk[].k_n_leaves_, n)
+    py_setitem(fields, nk[].k_n_features_in_, nf)
     return model
 
 
@@ -670,7 +684,10 @@ def host_archive_class_values(value: PythonObject, context: PythonObject) raises
             var nested = host_archive_class_values(value[i], context)
             _ = py_call(result.extend, nested)
         return result
-    if py_type(value) is not context["array_class"]:
+    # Fetched after the str and list branches: a label list recurses here per
+    # label, and those branches read no key.
+    var nk = host_tree_archive_keys()
+    if py_type(value) is not py_item(context, nk[].k_array_class):
         raise Error("TypeError: saved class labels must be native archive values")
     var rank = Int(py=value.ndim)
     var count = Int(py=value.size)
@@ -695,6 +712,7 @@ def host_archive_class_values(value: PythonObject, context: PythonObject) raises
 
 def host_archive_logistic(cls: PythonObject, arrays: PythonObject, path: PythonObject,
                           context: PythonObject) raises -> PythonObject:
+    var nk = host_tree_archive_keys()
     # The refusals keep LogisticRegression.load's wording and order; the
     # fields follow the constructor's, then the loader's, assignments.
     var where = host_archive_where(path, context)
@@ -703,19 +721,19 @@ def host_archive_logistic(cls: PythonObject, arrays: PythonObject, path: PythonO
     var intercept = classical_i64(meta, 1) != 0
     var model = host_archive_object(cls, arrays, context)
     var fields = sequential_fields(model)
-    py_setitem(fields, "penalty", "l2")
-    py_setitem(fields, "tol", 0.0001)
-    py_setitem(fields, "C", 1.0)
-    py_setitem(fields, "fit_intercept", intercept)
-    py_setitem(fields, "class_weight", PythonObject(None))
-    py_setitem(fields, "max_iter", 1000)
-    py_setitem(fields, "linesearch_max_iter", 50)
-    py_setitem(fields, "l1_ratio", PythonObject(None))
-    py_setitem(fields, "solver", "qn")
+    py_setitem(fields, nk[].k_penalty, "l2")
+    py_setitem(fields, nk[].k_tol, 0.0001)
+    py_setitem(fields, nk[].k_C, 1.0)
+    py_setitem(fields, nk[].k_fit_intercept, intercept)
+    py_setitem(fields, nk[].k_class_weight, PythonObject(None))
+    py_setitem(fields, nk[].k_max_iter, 1000)
+    py_setitem(fields, nk[].k_linesearch_max_iter, 50)
+    py_setitem(fields, nk[].k_l1_ratio, PythonObject(None))
+    py_setitem(fields, nk[].k_solver, "qn")
     host_archive_mode(arrays, fields, context)
-    if not py_contains(arrays, "classes"):
+    if not py_contains(arrays, nk[].k_classes):
         raise Error(where + " has no classes member")
-    var classes = host_archive_class_values(arrays["classes"], context)
+    var classes = host_archive_class_values(py_item(arrays, nk[].k_classes), context)
     if len(classes) < 2:
         raise Error(where + " must carry at least two classes")
     var targets = 1 if len(classes) == 2 else len(classes)
@@ -732,11 +750,11 @@ def host_archive_logistic(cls: PythonObject, arrays: PythonObject, path: PythonO
                               targets, 1, Int(py=classical_address(bias)))
         _ = w  # keep the Python object alive through the native call above
         _ = bias  # keep the Python object alive through the native call above
-    py_setitem(fields, "classes_", classes)
-    py_setitem(fields, "_w", w)
-    py_setitem(fields, "coef_", coef)
-    py_setitem(fields, "intercept_", bias)
-    py_setitem(fields, "n_features_in_", nf)
+    py_setitem(fields, nk[].k_classes_, classes)
+    py_setitem(fields, nk[].k__w, w)
+    py_setitem(fields, nk[].k_coef_, coef)
+    py_setitem(fields, nk[].k_intercept_, bias)
+    py_setitem(fields, nk[].k_n_features_in_, nf)
     return model
 
 
@@ -750,6 +768,7 @@ def _arima_order(values: PythonObject, label: String) raises:
 
 def host_archive_arima(cls: PythonObject, arrays: PythonObject, exog: Bool, path: PythonObject,
                        context: PythonObject) raises -> PythonObject:
+    var nk = host_tree_archive_keys()
     # The refusals keep ARIMA.load's wording and order: the meta size and
     # format checks, the constructor's validation, the trend's intercept,
     # the saved mode, then each array's shape.
@@ -768,7 +787,7 @@ def host_archive_arima(cls: PythonObject, arrays: PythonObject, exog: Bool, path
     var nx = classical_i64(meta, 12) if exog else 0
     if exog and nx < 1:
         raise Error(where + " is 'mojolearn-arima-2' with n_exog=" + String(nx))
-    if not exog and py_contains(arrays, "exog"):
+    if not exog and py_contains(arrays, nk[].k_exog):
         raise Error(where + " is 'mojolearn-arima-1' and holds an exog member")
     var trend = _archive_string(arrays, "trend", context)
     var trend_arg = PythonObject(None) if String(trend) == "none" else trend
@@ -803,37 +822,37 @@ def host_archive_arima(cls: PythonObject, arrays: PythonObject, exog: Bool, path
                     + " resolves to " + String(expected_k))
     var model = host_archive_object(cls, arrays, context)
     var fields = sequential_fields(model)
-    py_setitem(fields, "order", order)
-    py_setitem(fields, "seasonal_order", seasonal_order)
-    py_setitem(fields, "trend", trend_arg)
-    py_setitem(fields, "k_", expected_k)
-    py_setitem(fields, "method", method)
-    py_setitem(fields, "maxiter", classical_i64(meta, 10))
-    py_setitem(fields, "verbose", False)
-    py_setitem(fields, "output_type", PythonObject(None))
-    py_setitem(fields, "n_exog_", 0)
-    py_setitem(fields, "complexity_", p + q + sp + sq + expected_k + 1)
+    py_setitem(fields, nk[].k_order, order)
+    py_setitem(fields, nk[].k_seasonal_order, seasonal_order)
+    py_setitem(fields, nk[].k_trend, trend_arg)
+    py_setitem(fields, nk[].k_k_, expected_k)
+    py_setitem(fields, nk[].k_method, method)
+    py_setitem(fields, nk[].k_maxiter, classical_i64(meta, 10))
+    py_setitem(fields, nk[].k_verbose, False)
+    py_setitem(fields, nk[].k_output_type, PythonObject(None))
+    py_setitem(fields, nk[].k_n_exog_, 0)
+    py_setitem(fields, nk[].k_complexity_, p + q + sp + sq + expected_k + 1)
     host_archive_mode(arrays, fields, context)
     var complexity = p + q + sp + sq + expected_k + 1 + nx
     var loaded = Python.dict()
-    py_setitem(loaded, "_y", host_archive_series_shape(arrays, "y", "<f4", Python.tuple(batch, n), path, context))
+    py_setitem(loaded, nk[].k__y, host_archive_series_shape(arrays, "y", "<f4", Python.tuple(batch, n), path, context))
     var coefficients = Python.tuple("params", "x", "x0")
     for i in range(len(coefficients)):  # driver-loop: three saved coefficient states
         var name = String(coefficients[i])
         py_setitem(loaded, name + "_", host_archive_series_shape(arrays, name, "<f4", Python.tuple(batch, complexity), path, context))
-    py_setitem(loaded, "fx_", host_archive_series_shape(arrays, "fx", "<f4", Python.tuple(batch), path, context))
-    py_setitem(loaded, "n_iter_", host_archive_series_shape(arrays, "n_iter", "<i4", Python.tuple(batch), path, context))
-    py_setitem(loaded, "retcode_", host_archive_series_shape(arrays, "retcode", "<i4", Python.tuple(batch), path, context))
+    py_setitem(loaded, nk[].k_fx_, host_archive_series_shape(arrays, "fx", "<f4", Python.tuple(batch), path, context))
+    py_setitem(loaded, nk[].k_n_iter_, host_archive_series_shape(arrays, "n_iter", "<i4", Python.tuple(batch), path, context))
+    py_setitem(loaded, nk[].k_retcode_, host_archive_series_shape(arrays, "retcode", "<i4", Python.tuple(batch), path, context))
     var scores = Python.tuple("llf", "aic", "bic")
     for i in range(len(scores)):  # driver-loop: three saved fit criterion arrays
         var name = String(scores[i])
         py_setitem(loaded, name + "_", host_archive_series_shape(arrays, name, "<f8", Python.tuple(batch), path, context))
-    py_setitem(loaded, "_exog", host_archive_series_shape(arrays, "exog", "<f4", Python.tuple(batch, n, nx), path, context) if exog else PythonObject(None))
-    py_setitem(fields, "batch_size_", batch)
-    py_setitem(fields, "n_obs_", n)
-    py_setitem(fields, "input_copied_", classical_i64(meta, 11) != 0)
-    py_setitem(fields, "n_exog_", nx)
-    py_setitem(fields, "complexity_", complexity)
+    py_setitem(loaded, nk[].k__exog, host_archive_series_shape(arrays, "exog", "<f4", Python.tuple(batch, n, nx), path, context) if exog else PythonObject(None))
+    py_setitem(fields, nk[].k_batch_size_, batch)
+    py_setitem(fields, nk[].k_n_obs_, n)
+    py_setitem(fields, nk[].k_input_copied_, classical_i64(meta, 11) != 0)
+    py_setitem(fields, nk[].k_n_exog_, nx)
+    py_setitem(fields, nk[].k_complexity_, complexity)
     var keys = Python.tuple("_exog", "_y", "params_", "x_", "x0_", "fx_", "n_iter_", "retcode_", "llf_", "aic_", "bic_")
     for i in range(len(keys)):  # driver-loop: eleven saved fitted fields
         py_setitem(fields, keys[i], loaded[keys[i]])
@@ -854,6 +873,7 @@ def host_archive_series_shape(arrays: PythonObject, name: String, dtype: String,
 
 def host_archive_holtwinters(cls: PythonObject, arrays: PythonObject, path: PythonObject,
                              context: PythonObject) raises -> PythonObject:
+    var nk = host_tree_archive_keys()
     # The refusals keep ExponentialSmoothing.load's wording and order.
     var where = host_archive_where(path, context)
     var meta = host_archive_meta(arrays, "meta", 4, path, context)
@@ -864,7 +884,7 @@ def host_archive_holtwinters(cls: PythonObject, arrays: PythonObject, path: Pyth
     var eps = _archive_exact(arrays, "eps", "<f8", context)
     if Int(py=eps.size) != 1:
         raise Error(where + " eps holds " + String(Int(py=eps.size)) + " values, 1 is needed")
-    var initialization = _archive_string(arrays, "initialization_method", context) if py_contains(arrays, "initialization_method") else PythonObject("heuristic")
+    var initialization = _archive_string(arrays, "initialization_method", context) if py_contains(arrays, nk[].k_initialization_method) else PythonObject("heuristic")
     var seasonal = _archive_string(arrays, "seasonal", context)
     # The constructor's refusals.
     if String(seasonal) != "additive" and String(seasonal) != "add" and String(seasonal) != "multiplicative" and String(seasonal) != "mul":
@@ -875,14 +895,14 @@ def host_archive_holtwinters(cls: PythonObject, arrays: PythonObject, path: Pyth
                     + " is refused; it must be 'estimated' (the default), 'heuristic' or 'cuml'")
     var model = host_archive_object(cls, arrays, context)
     var fields = sequential_fields(model)
-    py_setitem(fields, "endog", PythonObject(None))
-    py_setitem(fields, "initialization_method", initialization)
-    py_setitem(fields, "seasonal", seasonal)
-    py_setitem(fields, "seasonal_periods", period)
-    py_setitem(fields, "start_periods", start)
-    py_setitem(fields, "ts_num", batch)
-    py_setitem(fields, "eps", classical_f64(eps, 0))
-    py_setitem(fields, "fit_executed_flag", False)
+    py_setitem(fields, nk[].k_endog, PythonObject(None))
+    py_setitem(fields, nk[].k_initialization_method, initialization)
+    py_setitem(fields, nk[].k_seasonal, seasonal)
+    py_setitem(fields, nk[].k_seasonal_periods, period)
+    py_setitem(fields, nk[].k_start_periods, start)
+    py_setitem(fields, nk[].k_ts_num, batch)
+    py_setitem(fields, nk[].k_eps, classical_f64(eps, 0))
+    py_setitem(fields, nk[].k_fit_executed_flag, False)
     host_archive_mode(arrays, fields, context)
     if batch < 1 or n <= period:
         raise Error(where + " records n=" + String(n) + ", ts_num=" + String(batch) + ", seasonal_periods=" + String(period))
@@ -894,13 +914,13 @@ def host_archive_holtwinters(cls: PythonObject, arrays: PythonObject, path: Pyth
     for i in range(len(stats)):  # driver-loop: four saved per-series fit statistics
         var name = String(stats[i])
         py_setitem(loaded, name + "_", host_archive_series_shape(arrays, name, "<f4", Python.tuple(batch), path, context))
-    py_setitem(loaded, "n_iter_", host_archive_series_shape(arrays, "n_iter", "<i4", Python.tuple(batch), path, context))
-    py_setitem(loaded, "criterion_", host_archive_series_shape(arrays, "criterion", "<i4", Python.tuple(batch), path, context))
+    py_setitem(loaded, nk[].k_n_iter_, host_archive_series_shape(arrays, "n_iter", "<i4", Python.tuple(batch), path, context))
+    py_setitem(loaded, nk[].k_criterion_, host_archive_series_shape(arrays, "criterion", "<i4", Python.tuple(batch), path, context))
     # `_set_fitted`: the packed components and their time-major blocks.
-    py_setitem(fields, "n", n)
-    py_setitem(fields, "_components_len", cl)
-    py_setitem(fields, "_comps", comps)
-    py_setitem(fields, "_comp_layout", Python.tuple(cl, batch, rows))
+    py_setitem(fields, nk[].k_n, n)
+    py_setitem(fields, nk[].k__components_len, cl)
+    py_setitem(fields, nk[].k__comps, comps)
+    py_setitem(fields, nk[].k__comp_layout, Python.tuple(cl, batch, rows))
     var time_major = Python.dict()
     var names = Python.tuple("level", "trend", "season")
     for i in range(len(names)):  # driver-loop: three named saved component blocks
@@ -910,15 +930,16 @@ def host_archive_holtwinters(cls: PythonObject, arrays: PythonObject, path: Pyth
         _ = comps  # keep the Python object alive through the native call above
         _ = copy  # keep the Python object alive through the native call above
         py_setitem(time_major, names[i], copy)
-    py_setitem(fields, "_time_major", time_major)
+    py_setitem(fields, nk[].k__time_major, time_major)
     var keys = Python.tuple("sse_", "alpha_", "beta_", "gamma_", "n_iter_", "criterion_")
     for i in range(len(keys)):  # driver-loop: six saved per-series fit statistics
         py_setitem(fields, keys[i], loaded[keys[i]])
-    py_setitem(fields, "fit_executed_flag", True)
+    py_setitem(fields, nk[].k_fit_executed_flag, True)
     return model
 
 
 def host_archive_ivf(cls: PythonObject, arrays: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = host_tree_archive_keys()
     var meta = host_archive_count(arrays, "meta", "<i8", 8, context, True)
     var n = classical_i64(meta, 0)
     var d = classical_i64(meta, 1)
@@ -929,21 +950,21 @@ def host_archive_ivf(cls: PythonObject, arrays: PythonObject, context: PythonObj
     var model = host_archive_object(cls, arrays, context)
     var fields = sequential_fields(model)
     host_archive_mode(arrays, fields, context)
-    py_setitem(fields, "n_lists", lists)
-    py_setitem(fields, "n_probes", classical_i64(meta, 4))
-    py_setitem(fields, "n_neighbors", classical_i64(meta, 5))
-    py_setitem(fields, "kmeans_n_iters", classical_i64(meta, 6))
-    py_setitem(fields, "metric", "sqeuclidean" if metric == 0 else "euclidean")
-    py_setitem(fields, "random_state", classical_i64(meta, 7))
-    py_setitem(fields, "centers_", host_archive_shape(arrays, "centers", "<f4", Python.tuple(lists, d), context))
-    py_setitem(fields, "center_norms_", host_archive_shape(arrays, "center_norms", "<f4", Python.tuple(lists), context))
-    py_setitem(fields, "list_offsets_", host_archive_shape(arrays, "list_offsets", "<i4", Python.tuple(lists + 1), context))
-    py_setitem(fields, "list_indices_", host_archive_shape(arrays, "list_indices", "<i4", Python.tuple(n), context))
-    py_setitem(fields, "list_data_", host_archive_shape(arrays, "list_data", "<f4", Python.tuple(n, d), context))
-    py_setitem(fields, "n_features_in_", d)
-    py_setitem(fields, "n_rows_", n)
-    py_setitem(fields, "n_lists_", lists)
-    py_setitem(fields, "metric_code_", metric)
+    py_setitem(fields, nk[].k_n_lists, lists)
+    py_setitem(fields, nk[].k_n_probes, classical_i64(meta, 4))
+    py_setitem(fields, nk[].k_n_neighbors, classical_i64(meta, 5))
+    py_setitem(fields, nk[].k_kmeans_n_iters, classical_i64(meta, 6))
+    py_setitem(fields, nk[].k_metric, "sqeuclidean" if metric == 0 else "euclidean")
+    py_setitem(fields, nk[].k_random_state, classical_i64(meta, 7))
+    py_setitem(fields, nk[].k_centers_, host_archive_shape(arrays, "centers", "<f4", Python.tuple(lists, d), context))
+    py_setitem(fields, nk[].k_center_norms_, host_archive_shape(arrays, "center_norms", "<f4", Python.tuple(lists), context))
+    py_setitem(fields, nk[].k_list_offsets_, host_archive_shape(arrays, "list_offsets", "<i4", Python.tuple(lists + 1), context))
+    py_setitem(fields, nk[].k_list_indices_, host_archive_shape(arrays, "list_indices", "<i4", Python.tuple(n), context))
+    py_setitem(fields, nk[].k_list_data_, host_archive_shape(arrays, "list_data", "<f4", Python.tuple(n, d), context))
+    py_setitem(fields, nk[].k_n_features_in_, d)
+    py_setitem(fields, nk[].k_n_rows_, n)
+    py_setitem(fields, nk[].k_n_lists_, lists)
+    py_setitem(fields, nk[].k_metric_code_, metric)
     return model
 
 
@@ -956,8 +977,9 @@ def host_archive_ann(cls: PythonObject, arrays: PythonObject, fmt: String, path:
     maps the format to (parameter names, fitted names, (attribute, member,
     dtype) arrays, the other constructor defaults, the parameters saved as
     -1 for None)."""
+    var nk = host_tree_archive_keys()
     var b = native_loaded_module("builtins")
-    var layout = context["host_archive_ann_layouts"][fmt]
+    var layout = py_item(context, nk[].k_host_archive_ann_layouts)[fmt]
     var names = layout[0]
     var fitted_names = layout[1]
     var saved = layout[2]
@@ -998,6 +1020,7 @@ def host_archive_ann(cls: PythonObject, arrays: PythonObject, fmt: String, path:
 def host_archive_hdbscan(cls: PythonObject, arrays: PythonObject, path: PythonObject,
                          context: PythonObject) raises -> PythonObject:
     """HDBSCAN.load: the refusals keep the Python loader's wording and order."""
+    var nk = host_tree_archive_keys()
     var where = host_archive_where(path, context)
     var meta = _archive_exact(arrays, "ints", "<i8", context)
     var reals = _archive_exact(arrays, "reals", "<f8", context)
@@ -1013,16 +1036,16 @@ def host_archive_hdbscan(cls: PythonObject, arrays: PythonObject, path: PythonOb
     var method = _archive_string(arrays, "cluster_selection_method", context)
     var model = host_archive_object(cls, arrays, context)
     var fields = sequential_fields(model)
-    py_setitem(fields, "min_cluster_size", classical_i64(meta, 6))
+    py_setitem(fields, nk[].k_min_cluster_size, classical_i64(meta, 6))
     var samples = classical_i64(meta, 7)
-    py_setitem(fields, "min_samples", PythonObject(None) if samples == -1 else PythonObject(samples))
-    py_setitem(fields, "cluster_selection_epsilon", classical_f64(reals, 1))
-    py_setitem(fields, "max_cluster_size", classical_i64(meta, 8))
-    py_setitem(fields, "metric", metric)
-    py_setitem(fields, "alpha", classical_f64(reals, 0))
-    py_setitem(fields, "cluster_selection_method", method)
-    py_setitem(fields, "allow_single_cluster", classical_i64(meta, 9) != 0)
-    py_setitem(fields, "prediction_data", True)
+    py_setitem(fields, nk[].k_min_samples, PythonObject(None) if samples == -1 else PythonObject(samples))
+    py_setitem(fields, nk[].k_cluster_selection_epsilon, classical_f64(reals, 1))
+    py_setitem(fields, nk[].k_max_cluster_size, classical_i64(meta, 8))
+    py_setitem(fields, nk[].k_metric, metric)
+    py_setitem(fields, nk[].k_alpha, classical_f64(reals, 0))
+    py_setitem(fields, nk[].k_cluster_selection_method, method)
+    py_setitem(fields, nk[].k_allow_single_cluster, classical_i64(meta, 9) != 0)
+    py_setitem(fields, nk[].k_prediction_data, True)
     host_archive_mode(arrays, fields, context)
     var raw = _archive_exact(arrays, "raw_data", "<f4", context)
     if Int(py=raw.ndim) != 2 or Int(py=raw.shape[1]) != d or Int(py=raw.shape[0]) < 2:
@@ -1042,18 +1065,18 @@ def host_archive_hdbscan(cls: PythonObject, arrays: PythonObject, path: PythonOb
             raise Error(where + " " + name + " holds " + String(Int(py=value.size)) + " values, "
                         + String(size) + " are needed")
         py_setitem(got, names[i], value)
-    py_setitem(fields, "n_features_in_", d)
-    py_setitem(fields, "labels_", got["labels"])
-    py_setitem(fields, "core_distances_", got["core_distances"])
-    py_setitem(fields, "n_clusters_", selected)
-    py_setitem(fields, "n_outliers_", classical_i64(meta, 2))
-    py_setitem(fields, "n_boruvka_rounds_", classical_i64(meta, 3))
-    py_setitem(fields, "n_condensed_clusters_", condensed)
-    py_setitem(fields, "_raw_data", raw)
+    py_setitem(fields, nk[].k_n_features_in_, d)
+    py_setitem(fields, nk[].k_labels_, py_item(got, nk[].k_labels))
+    py_setitem(fields, nk[].k_core_distances_, py_item(got, nk[].k_core_distances))
+    py_setitem(fields, nk[].k_n_clusters_, selected)
+    py_setitem(fields, nk[].k_n_outliers_, classical_i64(meta, 2))
+    py_setitem(fields, nk[].k_n_boruvka_rounds_, classical_i64(meta, 3))
+    py_setitem(fields, nk[].k_n_condensed_clusters_, condensed)
+    py_setitem(fields, nk[].k__raw_data, raw)
     var prediction = Python.dict(n_edges=edges, n_condensed=condensed, n_exemplars=exemplars)
     for i in range(2, len(names)):  # driver-loop: seven saved prediction-data arrays
         py_setitem(prediction, names[i], got[names[i]])
-    py_setitem(fields, "_prediction_data", prediction)
+    py_setitem(fields, nk[].k__prediction_data, prediction)
     return model
 
 
@@ -1142,13 +1165,14 @@ def host_archive_radius_refusals(fields: PythonObject, cls_name: String, context
     """`RadiusNeighbors._check_refusals` over the instance fields (at `fit`
     and at `load`): the metric (which sets `_metric_value`/`_metric_arg`),
     then the algorithm, then the radius, in the Python method's wording."""
+    var nk = host_tree_archive_keys()
     var b = native_loaded_module("builtins")
-    var metric = fields["metric"]
-    var algorithm = fields["algorithm"]
-    var radius = fields["radius"]
-    var resolved = host_archive_rbc_metric_object(cls_name, metric, fields["p"], context)
-    py_setitem(fields, "_metric_value", resolved[0])
-    py_setitem(fields, "_metric_arg", resolved[1])
+    var metric = py_item(fields, nk[].k_metric)
+    var algorithm = py_item(fields, nk[].k_algorithm)
+    var radius = py_item(fields, nk[].k_radius)
+    var resolved = host_archive_rbc_metric_object(cls_name, metric, py_item(fields, nk[].k_p), context)
+    py_setitem(fields, nk[].k__metric_value, resolved[0])
+    py_setitem(fields, nk[].k__metric_arg, resolved[1])
     if not (py_type(algorithm) is b.str and (String(algorithm) == "auto" or String(algorithm) == "rbc")):
         raise Error("mojolearn RadiusNeighbors: algorithm=" + _archive_builtin_repr(algorithm) + " is "
             + "refused. The index here is cuVS's RANDOM BALL COVER, which "
@@ -1180,6 +1204,7 @@ def host_archive_radius(cls: PythonObject, arrays: PythonObject, path: PythonObj
                         context: PythonObject) raises -> PythonObject:
     """RadiusNeighbors.load: the object, attributes and refusals (wording
     and order) of the Python loader it replaced."""
+    var nk = host_tree_archive_keys()
     var where = host_archive_where(path, context)
     var meta = host_archive_meta(arrays, "meta", 2, path, context)
     var saved_radius = _archive_exact(arrays, "radius", "<f8", context)
@@ -1193,13 +1218,13 @@ def host_archive_radius(cls: PythonObject, arrays: PythonObject, path: PythonObj
     var model = host_archive_object(cls, arrays, context)
     var fields = sequential_fields(model)
     # The constructor's attributes, in its order.
-    py_setitem(fields, "radius", radius)
-    py_setitem(fields, "metric", metric)
-    py_setitem(fields, "algorithm", algorithm)
-    py_setitem(fields, "p", p)
-    py_setitem(fields, "_index", PythonObject(None))
-    py_setitem(fields, "_metric_value", PythonObject(None))
-    py_setitem(fields, "_metric_arg", PythonObject(None))
+    py_setitem(fields, nk[].k_radius, radius)
+    py_setitem(fields, nk[].k_metric, metric)
+    py_setitem(fields, nk[].k_algorithm, algorithm)
+    py_setitem(fields, nk[].k_p, p)
+    py_setitem(fields, nk[].k__index, PythonObject(None))
+    py_setitem(fields, nk[].k__metric_value, PythonObject(None))
+    py_setitem(fields, nk[].k__metric_arg, PythonObject(None))
     host_archive_mode(arrays, fields, context)
     host_archive_radius_refusals(fields, String(cls.__name__), context)
     var nf = classical_i64(meta, 0)
@@ -1212,14 +1237,15 @@ def host_archive_radius(cls: PythonObject, arrays: PythonObject, path: PythonObj
     # ONCE, here (one parallel host scan of the words just read); no radius
     # query tests the index again.
     _archive_index_finite(index, where + " index")
-    py_setitem(fields, "_index", index)
-    py_setitem(fields, "n_samples_fit_", ns)
-    py_setitem(fields, "n_features_in_", nf)
+    py_setitem(fields, nk[].k__index, index)
+    py_setitem(fields, nk[].k_n_samples_fit_, ns)
+    py_setitem(fields, nk[].k_n_features_in_, nf)
     return model
 
 
 def host_archive_neighbors(cls: PythonObject, arrays: PythonObject, kind: Int,
                            context: PythonObject) raises -> PythonObject:
+    var nk = host_tree_archive_keys()
     # kind: 0 nearest, 1 classifier, 2 regressor (RadiusNeighbors is
     # host_archive_radius).
     var meta = host_archive_count(arrays, "meta", "<i8", 6, context, True)
@@ -1251,21 +1277,21 @@ def host_archive_neighbors(cls: PythonObject, arrays: PythonObject, kind: Int,
     var model = host_archive_object(cls, arrays, context)
     var fields = sequential_fields(model)
     host_archive_mode(arrays, fields, context)
-    py_setitem(fields, "metric", metric)
-    py_setitem(fields, "algorithm", algorithm)
-    py_setitem(fields, "p", p)
-    py_setitem(fields, "_index", index)
-    py_setitem(fields, "n_samples_fit_", n)
-    py_setitem(fields, "n_features_in_", nf)
-    py_setitem(fields, "n_neighbors", classical_i64(meta, 2))
-    py_setitem(fields, "query_tile", classical_i64(meta, 3))
+    py_setitem(fields, nk[].k_metric, metric)
+    py_setitem(fields, nk[].k_algorithm, algorithm)
+    py_setitem(fields, nk[].k_p, p)
+    py_setitem(fields, nk[].k__index, index)
+    py_setitem(fields, nk[].k_n_samples_fit_, n)
+    py_setitem(fields, nk[].k_n_features_in_, nf)
+    py_setitem(fields, nk[].k_n_neighbors, classical_i64(meta, 2))
+    py_setitem(fields, nk[].k_query_tile, classical_i64(meta, 3))
     if kind == 0:
         return model
-    py_setitem(fields, "weights", weights)
+    py_setitem(fields, nk[].k_weights, weights)
     var outputs = classical_i64(meta, 5)
     var y = host_archive_shape(arrays, "y_cols", "<i4" if kind == 1 else "<f4", Python.tuple(outputs, n), context)
-    py_setitem(fields, "_y_cols", y)
-    py_setitem(fields, "outputs_2d_", classical_i64(meta, 4) != 0)
+    py_setitem(fields, nk[].k__y_cols, y)
+    py_setitem(fields, nk[].k_outputs_2d_, classical_i64(meta, 4) != 0)
     if kind == 1:
         var counts = host_archive_count(arrays, "class_counts", "<i8", outputs, context, True)
         var saved_classes = _archive_exact(arrays, "classes", "<i8", context)
@@ -1295,11 +1321,12 @@ def host_archive_neighbors(cls: PythonObject, arrays: PythonObject, kind: Int,
             off += count
         if off != available:
             raise Error("neighbor class_counts does not consume saved classes")
-        py_setitem(fields, "_classes_list", restored)
+        py_setitem(fields, nk[].k__classes_list, restored)
     return model
 
 
 def host_archive_iforest(cls: PythonObject, arrays: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = host_tree_archive_keys()
     var meta = host_archive_count(arrays, "ints", "<i8", 11, context, True)
     var reals = host_archive_count(arrays, "reals", "<f8", 4, context, True)
     var trees = classical_i64(meta, 0)
@@ -1339,33 +1366,33 @@ def host_archive_iforest(cls: PythonObject, arrays: PythonObject, context: Pytho
     var model = host_archive_object(cls, arrays, context)
     var fields = sequential_fields(model)
     host_archive_mode(arrays, fields, context)
-    py_setitem(fields, "n_estimators", trees)
-    py_setitem(fields, "max_samples", PythonObject("auto") if samples_mode == 0 else (PythonObject(samples_int) if samples_mode == 1 else PythonObject(samples_frac)))
-    py_setitem(fields, "max_depth", PythonObject(None) if depth == -1 else PythonObject(depth))
-    py_setitem(fields, "max_features", PythonObject(features_int) if features_mode == 1 else PythonObject(features_frac))
-    py_setitem(fields, "bootstrap", bootstrap != 0)
-    py_setitem(fields, "contamination", PythonObject("auto") if auto_contamination != 0 else PythonObject(contamination))
-    py_setitem(fields, "random_state", seed)
-    py_setitem(fields, "warm_start", False)
-    py_setitem(fields, "n_jobs", PythonObject(None))
-    py_setitem(fields, "verbose", False)
-    py_setitem(fields, "output_type", PythonObject(None))
-    py_setitem(fields, "_max_samples_mode", samples_mode)
-    py_setitem(fields, "_max_samples_int", samples_int if samples_mode == 1 else 256)
-    py_setitem(fields, "_max_samples_frac", samples_frac if samples_mode == 2 else Float64(1.0))
-    py_setitem(fields, "_max_depth", depth)
-    py_setitem(fields, "_max_features_mode", features_mode)
-    py_setitem(fields, "_max_features_int", features_int if features_mode == 1 else 0)
-    py_setitem(fields, "_max_features_frac", Float64(1.0) if features_mode == 1 else features_frac)
-    py_setitem(fields, "_contamination_auto", auto_contamination != 0)
-    py_setitem(fields, "_contamination", Float64(0.0) if auto_contamination != 0 else contamination)
-    py_setitem(fields, "_n_estimators", trees)
-    py_setitem(fields, "_bootstrap", bootstrap != 0)
-    py_setitem(fields, "_seed", seed)
-    py_setitem(fields, "_x", x)
-    py_setitem(fields, "n_features_in_", nf)
-    py_setitem(fields, "offset_", classical_f64(reals, 3))
-    py_setitem(fields, "max_samples_", classical_i64(meta, 10))
+    py_setitem(fields, nk[].k_n_estimators, trees)
+    py_setitem(fields, nk[].k_max_samples, PythonObject("auto") if samples_mode == 0 else (PythonObject(samples_int) if samples_mode == 1 else PythonObject(samples_frac)))
+    py_setitem(fields, nk[].k_max_depth, PythonObject(None) if depth == -1 else PythonObject(depth))
+    py_setitem(fields, nk[].k_max_features, PythonObject(features_int) if features_mode == 1 else PythonObject(features_frac))
+    py_setitem(fields, nk[].k_bootstrap, bootstrap != 0)
+    py_setitem(fields, nk[].k_contamination, PythonObject("auto") if auto_contamination != 0 else PythonObject(contamination))
+    py_setitem(fields, nk[].k_random_state, seed)
+    py_setitem(fields, nk[].k_warm_start, False)
+    py_setitem(fields, nk[].k_n_jobs, PythonObject(None))
+    py_setitem(fields, nk[].k_verbose, False)
+    py_setitem(fields, nk[].k_output_type, PythonObject(None))
+    py_setitem(fields, nk[].k__max_samples_mode, samples_mode)
+    py_setitem(fields, nk[].k__max_samples_int, samples_int if samples_mode == 1 else 256)
+    py_setitem(fields, nk[].k__max_samples_frac, samples_frac if samples_mode == 2 else Float64(1.0))
+    py_setitem(fields, nk[].k__max_depth, depth)
+    py_setitem(fields, nk[].k__max_features_mode, features_mode)
+    py_setitem(fields, nk[].k__max_features_int, features_int if features_mode == 1 else 0)
+    py_setitem(fields, nk[].k__max_features_frac, Float64(1.0) if features_mode == 1 else features_frac)
+    py_setitem(fields, nk[].k__contamination_auto, auto_contamination != 0)
+    py_setitem(fields, nk[].k__contamination, Float64(0.0) if auto_contamination != 0 else contamination)
+    py_setitem(fields, nk[].k__n_estimators, trees)
+    py_setitem(fields, nk[].k__bootstrap, bootstrap != 0)
+    py_setitem(fields, nk[].k__seed, seed)
+    py_setitem(fields, nk[].k__x, x)
+    py_setitem(fields, nk[].k_n_features_in_, nf)
+    py_setitem(fields, nk[].k_offset_, classical_f64(reals, 3))
+    py_setitem(fields, nk[].k_max_samples_, classical_i64(meta, 10))
     return model
 
 
@@ -1376,6 +1403,7 @@ def host_archive_public_iforest(cls: PythonObject, arrays: PythonObject, path: P
     again (`iforest_validate`, the native `_validate_params`), then the saved
     mode, the training matrix (`mojolearn-iforest-1`) or the fitted forest
     (`forest`, `mojolearn-iforest-2`) and the fitted scalars."""
+    var nk = host_tree_archive_keys()
     var b = native_loaded_module("builtins")
     var where = host_archive_where(path, context)
     var ints = _archive_exact(arrays, "ints", "<i8", context)
@@ -1405,18 +1433,18 @@ def host_archive_public_iforest(cls: PythonObject, arrays: PythonObject, path: P
     var fields = sequential_fields(model)
     # What `cls(n_estimators=..., ...)` stores: the eleven parameters, then
     # the numeric mode the constructor wrapper adds.
-    py_setitem(fields, "n_estimators", trees)
-    py_setitem(fields, "max_samples", PythonObject("auto") if samples_mode == 0 else (PythonObject(samples_int) if samples_mode == 1 else PythonObject(samples_frac)))
-    py_setitem(fields, "max_depth", PythonObject(None) if depth == -1 else PythonObject(depth))
-    py_setitem(fields, "max_features", PythonObject(features_int) if features_mode == 1 else PythonObject(features_frac))
-    py_setitem(fields, "bootstrap", PythonObject(bootstrap != 0))
-    py_setitem(fields, "contamination", PythonObject("auto") if auto_contamination != 0 else PythonObject(contamination))
-    py_setitem(fields, "random_state", seed)
-    py_setitem(fields, "warm_start", PythonObject(False))
-    py_setitem(fields, "n_jobs", PythonObject(None))
-    py_setitem(fields, "verbose", PythonObject(False))
-    py_setitem(fields, "output_type", PythonObject(None))
-    py_setitem(fields, "numeric_mode", PythonObject(None))
+    py_setitem(fields, nk[].k_n_estimators, trees)
+    py_setitem(fields, nk[].k_max_samples, PythonObject("auto") if samples_mode == 0 else (PythonObject(samples_int) if samples_mode == 1 else PythonObject(samples_frac)))
+    py_setitem(fields, nk[].k_max_depth, PythonObject(None) if depth == -1 else PythonObject(depth))
+    py_setitem(fields, nk[].k_max_features, PythonObject(features_int) if features_mode == 1 else PythonObject(features_frac))
+    py_setitem(fields, nk[].k_bootstrap, PythonObject(bootstrap != 0))
+    py_setitem(fields, nk[].k_contamination, PythonObject("auto") if auto_contamination != 0 else PythonObject(contamination))
+    py_setitem(fields, nk[].k_random_state, seed)
+    py_setitem(fields, nk[].k_warm_start, PythonObject(False))
+    py_setitem(fields, nk[].k_n_jobs, PythonObject(None))
+    py_setitem(fields, nk[].k_verbose, PythonObject(False))
+    py_setitem(fields, nk[].k_output_type, PythonObject(None))
+    py_setitem(fields, nk[].k_numeric_mode, PythonObject(None))
     iforest_validate(model, fields, context)
     host_archive_mode(arrays, fields, context)
     if forest:
@@ -1441,16 +1469,16 @@ def host_archive_public_iforest(cls: PythonObject, arrays: PythonObject, path: P
             if Int(py=parts[i].size) != total:
                 raise Error(where + " " + String(members[i]) + " holds " + String(Int(py=parts[i].size))
                             + " nodes, node_feature " + String(total))
-        py_setitem(fields, "_if_forest", py_call(b.tuple, parts))
+        py_setitem(fields, nk[].k__if_forest, py_call(b.tuple, parts))
     else:
         var x = _archive_exact(arrays, "x", "<f4", context)
         if Int(py=x.ndim) != 2 or Int(py=x.shape[1]) != nf or Int(py=x.shape[0]) < 1:
             raise Error(where + " x has shape " + _archive_builtin_repr(py_call(b.tuple, x.shape)) + ", meta says "
                         + String(nf) + " features")
-        py_setitem(fields, "_x", x)
-    py_setitem(fields, "n_features_in_", nf)
-    py_setitem(fields, "offset_", offset)
-    py_setitem(fields, "max_samples_", resolved)
+        py_setitem(fields, nk[].k__x, x)
+    py_setitem(fields, nk[].k_n_features_in_, nf)
+    py_setitem(fields, nk[].k_offset_, offset)
+    py_setitem(fields, nk[].k_max_samples_, resolved)
     return model
 
 
@@ -1458,6 +1486,7 @@ def host_archive_spectral(cls: PythonObject, arrays: PythonObject, path: PythonO
                           context: PythonObject) raises -> PythonObject:
     """SpectralClustering.load: the refusals keep the Python loader's
     wording and order, `_validate_params` included."""
+    var nk = host_tree_archive_keys()
     var where = host_archive_where(path, context)
     var meta = host_archive_meta(arrays, "meta", 8, path, context)
     var clusters = classical_i64(meta, 0)
@@ -1473,7 +1502,7 @@ def host_archive_spectral(cls: PythonObject, arrays: PythonObject, path: PythonO
     var affinity = _archive_string(arrays, "affinity", context)
     var name = String(affinity)
     # SpectralClustering._validate_params, on the values the file holds.
-    var affinities = context["host_archive_spectral_affinities"]
+    var affinities = py_item(context, nk[].k_host_archive_spectral_affinities)
     if not py_contains(affinities, affinity):
         raise Error("mojolearn SpectralClustering: affinity=" + _archive_builtin_repr(affinity)
                     + " is refused; it must be one of "
@@ -1499,28 +1528,28 @@ def host_archive_spectral(cls: PythonObject, arrays: PythonObject, path: PythonO
         raise Error("mojolearn SpectralClustering: n_components must be at least 1, or None to follow n_clusters")
     var model = host_archive_object(cls, arrays, context)
     var fields = sequential_fields(model)
-    py_setitem(fields, "n_clusters", clusters)
-    py_setitem(fields, "n_components", k)
-    py_setitem(fields, "random_state", PythonObject(None) if seed_none else PythonObject(seed))
-    py_setitem(fields, "n_neighbors", neighbors)
-    py_setitem(fields, "n_init", starts)
-    py_setitem(fields, "eigen_tol", tol)
-    py_setitem(fields, "affinity", affinity)
-    py_setitem(fields, "gamma", PythonObject(None))
-    py_setitem(fields, "assign_labels", "kmeans")
-    py_setitem(fields, "prediction_data", True)
-    py_setitem(fields, "eigen_solver", PythonObject(None))
-    py_setitem(fields, "degree", PythonObject(None))
-    py_setitem(fields, "coef0", PythonObject(None))
-    py_setitem(fields, "kernel_params", PythonObject(None))
-    py_setitem(fields, "n_jobs", PythonObject(None))
-    py_setitem(fields, "verbose", False)
-    py_setitem(fields, "_n_clusters", clusters)
-    py_setitem(fields, "_n_neighbors", neighbors)
-    py_setitem(fields, "_n_init", starts)
-    py_setitem(fields, "_eigen_tol", tol)
-    py_setitem(fields, "_gamma", PythonObject(None))
-    py_setitem(fields, "_seed", 0 if seed_none else seed)
+    py_setitem(fields, nk[].k_n_clusters, clusters)
+    py_setitem(fields, nk[].k_n_components, k)
+    py_setitem(fields, nk[].k_random_state, PythonObject(None) if seed_none else PythonObject(seed))
+    py_setitem(fields, nk[].k_n_neighbors, neighbors)
+    py_setitem(fields, nk[].k_n_init, starts)
+    py_setitem(fields, nk[].k_eigen_tol, tol)
+    py_setitem(fields, nk[].k_affinity, affinity)
+    py_setitem(fields, nk[].k_gamma, PythonObject(None))
+    py_setitem(fields, nk[].k_assign_labels, "kmeans")
+    py_setitem(fields, nk[].k_prediction_data, True)
+    py_setitem(fields, nk[].k_eigen_solver, PythonObject(None))
+    py_setitem(fields, nk[].k_degree, PythonObject(None))
+    py_setitem(fields, nk[].k_coef0, PythonObject(None))
+    py_setitem(fields, nk[].k_kernel_params, PythonObject(None))
+    py_setitem(fields, nk[].k_n_jobs, PythonObject(None))
+    py_setitem(fields, nk[].k_verbose, False)
+    py_setitem(fields, nk[].k__n_clusters, clusters)
+    py_setitem(fields, nk[].k__n_neighbors, neighbors)
+    py_setitem(fields, nk[].k__n_init, starts)
+    py_setitem(fields, nk[].k__eigen_tol, tol)
+    py_setitem(fields, nk[].k__gamma, PythonObject(None))
+    py_setitem(fields, nk[].k__seed, 0 if seed_none else seed)
     host_archive_mode(arrays, fields, context)
     var values = _archive_exact(arrays, "eigenvalues", "<f4", context)
     var vectors = _archive_exact(arrays, "eigenvectors", "<f4", context)
@@ -1532,20 +1561,21 @@ def host_archive_spectral(cls: PythonObject, arrays: PythonObject, path: PythonO
             or Int(py=centroids.shape[0]) != clusters or Int(py=centroids.shape[1]) != k or Int(py=labels.size) != n):
         raise Error(where + " prediction data shapes do not match n_train=" + String(n) + ", n_components="
                     + String(k) + ", n_clusters=" + String(clusters))
-    py_setitem(fields, "_fit_X", PythonObject(None))
+    py_setitem(fields, nk[].k__fit_X, PythonObject(None))
     if name == "nearest_neighbors":
-        py_setitem(fields, "_fit_X", host_archive_matrix(arrays, "x", "<f4", n, nf, path, context))
-        py_setitem(fields, "n_features_in_", nf)
-    py_setitem(fields, "_pd_eigenvalues", values)
-    py_setitem(fields, "_pd_eigenvectors", vectors)
-    py_setitem(fields, "_pd_diag", diag)
-    py_setitem(fields, "_pd_centroids", centroids)
-    py_setitem(fields, "labels_", labels)
-    py_setitem(fields, "n_components_", k)
+        py_setitem(fields, nk[].k__fit_X, host_archive_matrix(arrays, "x", "<f4", n, nf, path, context))
+        py_setitem(fields, nk[].k_n_features_in_, nf)
+    py_setitem(fields, nk[].k__pd_eigenvalues, values)
+    py_setitem(fields, nk[].k__pd_eigenvectors, vectors)
+    py_setitem(fields, nk[].k__pd_diag, diag)
+    py_setitem(fields, nk[].k__pd_centroids, centroids)
+    py_setitem(fields, nk[].k_labels_, labels)
+    py_setitem(fields, nk[].k_n_components_, k)
     return model
 
 def host_archive_umap(cls: PythonObject, arrays: PythonObject, path: PythonObject,
                       context: PythonObject) raises -> PythonObject:
+    var nk = host_tree_archive_keys()
     # The refusals keep UMAP.load's wording and order: the vector sizes,
     # then the constructor's validation of the saved controls, the saved
     # mode, the config round trip, then the training and embedding shapes.
@@ -1574,7 +1604,7 @@ def host_archive_umap(cls: PythonObject, arrays: PythonObject, path: PythonObjec
     var power_saved = Float64(2.0)
     var a_saved = Float64(0.0)
     var b_saved = Float64(0.0)
-    if py_contains(arrays, "extras"):
+    if py_contains(arrays, nk[].k_extras):
         var extras = _archive_exact(arrays, "extras", "<f8", context)
         if Int(py=extras.size) != 4:
             raise Error(where + " holds " + String(Int(py=extras.size)) + " extras; 4 are needed")
@@ -1616,7 +1646,7 @@ def host_archive_umap(cls: PythonObject, arrays: PythonObject, path: PythonObjec
         raise Error("ValueError: UMAP set_op_mix_ratio must be in [0, 1]")
     if connectivity < 0:
         raise Error("ValueError: UMAP local_connectivity must be >= 0")
-    var metrics = context["host_archive_umap_metrics"]
+    var metrics = py_item(context, nk[].k_host_archive_umap_metrics)
     if not py_contains(metrics, metric):
         raise Error("ValueError: UMAP metric=" + _archive_builtin_repr(metric) + " is not supported; the kNN computes "
                     + _archive_builtin_repr(py_call(builtins.sorted, metrics))
@@ -1658,36 +1688,36 @@ def host_archive_umap(cls: PythonObject, arrays: PythonObject, path: PythonObjec
         raise Error(where + " training " + _archive_builtin_repr(py_call(builtins.tuple, training.shape)) + " and embedding "
                     + _archive_builtin_repr(py_call(builtins.tuple, embedding.shape)) + " do not agree with n_components="
                     + String(components))
-    py_setitem(fields, "n_neighbors", neighbors)
-    py_setitem(fields, "n_components", components)
-    py_setitem(fields, "min_dist", Float64(py=values[0]))
-    py_setitem(fields, "spread", Float64(py=values[1]))
-    py_setitem(fields, "n_epochs", PythonObject(None) if automatic_epochs else PythonObject(epochs))
-    py_setitem(fields, "random_state", seed)
-    py_setitem(fields, "set_op_mix_ratio", Float64(py=values[2]))
-    py_setitem(fields, "local_connectivity", Float64(py=values[3]))
-    py_setitem(fields, "metric", metric)
-    py_setitem(fields, "init", initialization)
-    py_setitem(fields, "learning_rate", Float64(py=values[4]))
-    py_setitem(fields, "repulsion_strength", Float64(py=values[5]))
-    py_setitem(fields, "negative_sample_rate", negatives)
-    py_setitem(fields, "a", PythonObject(a_saved) if have_a else PythonObject(None))
-    py_setitem(fields, "b", PythonObject(b_saved) if have_b else PythonObject(None))
-    py_setitem(fields, "metric_kwds", Python.dict(p=power_saved) if minkowski_kwds else PythonObject(None))
-    py_setitem(fields, "target_n_neighbors", -1)
-    py_setitem(fields, "target_metric", "categorical")
-    py_setitem(fields, "target_weight", 0.5)
-    py_setitem(fields, "densmap", False)
-    py_setitem(fields, "output_metric", "euclidean")
-    py_setitem(fields, "_transform_training", training)
-    py_setitem(fields, "_transform_embedding", embedding)
-    py_setitem(fields, "_transform_config", config)
-    py_setitem(fields, "_transform_mode", fields["numeric_mode"])
-    var store = py_call(context["array_type"], "f")
+    py_setitem(fields, nk[].k_n_neighbors, neighbors)
+    py_setitem(fields, nk[].k_n_components, components)
+    py_setitem(fields, nk[].k_min_dist, Float64(py=values[0]))
+    py_setitem(fields, nk[].k_spread, Float64(py=values[1]))
+    py_setitem(fields, nk[].k_n_epochs, PythonObject(None) if automatic_epochs else PythonObject(epochs))
+    py_setitem(fields, nk[].k_random_state, seed)
+    py_setitem(fields, nk[].k_set_op_mix_ratio, Float64(py=values[2]))
+    py_setitem(fields, nk[].k_local_connectivity, Float64(py=values[3]))
+    py_setitem(fields, nk[].k_metric, metric)
+    py_setitem(fields, nk[].k_init, initialization)
+    py_setitem(fields, nk[].k_learning_rate, Float64(py=values[4]))
+    py_setitem(fields, nk[].k_repulsion_strength, Float64(py=values[5]))
+    py_setitem(fields, nk[].k_negative_sample_rate, negatives)
+    py_setitem(fields, nk[].k_a, PythonObject(a_saved) if have_a else PythonObject(None))
+    py_setitem(fields, nk[].k_b, PythonObject(b_saved) if have_b else PythonObject(None))
+    py_setitem(fields, nk[].k_metric_kwds, Python.dict(p=power_saved) if minkowski_kwds else PythonObject(None))
+    py_setitem(fields, nk[].k_target_n_neighbors, -1)
+    py_setitem(fields, nk[].k_target_metric, "categorical")
+    py_setitem(fields, nk[].k_target_weight, 0.5)
+    py_setitem(fields, nk[].k_densmap, False)
+    py_setitem(fields, nk[].k_output_metric, "euclidean")
+    py_setitem(fields, nk[].k__transform_training, training)
+    py_setitem(fields, nk[].k__transform_embedding, embedding)
+    py_setitem(fields, nk[].k__transform_config, config)
+    py_setitem(fields, nk[].k__transform_mode, py_item(fields, nk[].k_numeric_mode))
+    var store = py_call(py_item(context, nk[].k_array_type), "f")
     _ = py_call(store.frombytes, py_call(embedding._mv.cast, "B"))
-    py_setitem(fields, "embedding_", classical_wrap_array(store, embedding.shape, "<f4", String(embedding.order), context))
-    py_setitem(fields, "n_features_in_", Int(py=training.shape[1]))
-    py_setitem(fields, "input_copied_", classical_i64(meta, 6) != 0)
+    py_setitem(fields, nk[].k_embedding_, classical_wrap_array(store, embedding.shape, "<f4", String(embedding.order), context))
+    py_setitem(fields, nk[].k_n_features_in_, Int(py=training.shape[1]))
+    py_setitem(fields, nk[].k_input_copied_, classical_i64(meta, 6) != 0)
     return model
 
 
@@ -1720,6 +1750,7 @@ def host_archive_gp_row(array: PythonObject, row: Int, cols: Int, shape: PythonO
 
 def host_archive_gpr(cls: PythonObject, arrays: PythonObject, path: PythonObject,
                      context: PythonObject) raises -> PythonObject:
+    var nk = host_tree_archive_keys()
     # The refusals keep GaussianProcessRegressor.load's wording and order; the
     # fields follow the constructor's, _validate_params's, then the loader's
     # assignments.
@@ -1766,37 +1797,37 @@ def host_archive_gpr(cls: PythonObject, arrays: PythonObject, path: PythonObject
             _ = py_call(node_scales.append, table[offset + j])
         _ = py_call(nodes.append, Python.tuple(kind_list[i], param_list[i], node_scales))
         offset += length
-    var kernel = host_archive_allocate(context["host_archive_gp_saved_kernel"], context)
-    py_setitem(sequential_fields(kernel), "_SavedKernel__nodes", nodes)
+    var kernel = host_archive_allocate(py_item(context, nk[].k_host_archive_gp_saved_kernel), context)
+    py_setitem(sequential_fields(kernel), nk[].k__SavedKernel__nodes, nodes)
     var alpha = classical_f64(reals, 0)
     var model = host_archive_object(cls, arrays, context)
     var fields = sequential_fields(model)
-    py_setitem(fields, "kernel", kernel)
-    py_setitem(fields, "alpha", alpha)
-    py_setitem(fields, "optimizer", PythonObject(None))
-    py_setitem(fields, "n_restarts_optimizer", 0)
-    py_setitem(fields, "normalize_y", norm)
-    py_setitem(fields, "copy_X_train", True)
-    py_setitem(fields, "n_targets", PythonObject(None))
-    py_setitem(fields, "random_state", PythonObject(None))
-    py_setitem(fields, "numeric_mode", PythonObject(None))
-    py_setitem(fields, "_kernel", kernel)
-    py_setitem(fields, "_alpha", alpha)
-    py_setitem(fields, "_optimizer", PythonObject(None))
-    py_setitem(fields, "_n_restarts_optimizer", 0)
-    py_setitem(fields, "_normalize_y", norm)
-    py_setitem(fields, "_random_state", PythonObject(None))
+    py_setitem(fields, nk[].k_kernel, kernel)
+    py_setitem(fields, nk[].k_alpha, alpha)
+    py_setitem(fields, nk[].k_optimizer, PythonObject(None))
+    py_setitem(fields, nk[].k_n_restarts_optimizer, 0)
+    py_setitem(fields, nk[].k_normalize_y, norm)
+    py_setitem(fields, nk[].k_copy_X_train, True)
+    py_setitem(fields, nk[].k_n_targets, PythonObject(None))
+    py_setitem(fields, nk[].k_random_state, PythonObject(None))
+    py_setitem(fields, nk[].k_numeric_mode, PythonObject(None))
+    py_setitem(fields, nk[].k__kernel, kernel)
+    py_setitem(fields, nk[].k__alpha, alpha)
+    py_setitem(fields, nk[].k__optimizer, PythonObject(None))
+    py_setitem(fields, nk[].k__n_restarts_optimizer, 0)
+    py_setitem(fields, nk[].k__normalize_y, norm)
+    py_setitem(fields, nk[].k__random_state, PythonObject(None))
     host_archive_mode(arrays, fields, context)
-    py_setitem(fields, "X_train_", x)
-    py_setitem(fields, "kernel_", kernel)
-    py_setitem(fields, "n_features_in_", d)
-    py_setitem(fields, "L_", host_archive_reshape_f32(factor, Python.tuple(n, n), context))
-    py_setitem(fields, "alpha_", dual)
-    py_setitem(fields, "info_", info)
-    py_setitem(fields, "normalize_y_", norm)
-    py_setitem(fields, "_y_train_mean", classical_f64(reals, 1))
-    py_setitem(fields, "_y_train_std", classical_f64(reals, 2))
-    py_setitem(fields, "log_marginal_likelihood_value_", classical_f64(reals, 3))
+    py_setitem(fields, nk[].k_X_train_, x)
+    py_setitem(fields, nk[].k_kernel_, kernel)
+    py_setitem(fields, nk[].k_n_features_in_, d)
+    py_setitem(fields, nk[].k_L_, host_archive_reshape_f32(factor, Python.tuple(n, n), context))
+    py_setitem(fields, nk[].k_alpha_, dual)
+    py_setitem(fields, nk[].k_info_, info)
+    py_setitem(fields, nk[].k_normalize_y_, norm)
+    py_setitem(fields, nk[].k__y_train_mean, classical_f64(reals, 1))
+    py_setitem(fields, nk[].k__y_train_std, classical_f64(reals, 2))
+    py_setitem(fields, nk[].k_log_marginal_likelihood_value_, classical_f64(reals, 3))
     return model
 
 
@@ -1847,6 +1878,7 @@ def host_archive_gpc_nodes(plan: GPArchiveKernelPlan, where: String) raises -> P
 
 def host_archive_gpc(cls: PythonObject, arrays: PythonObject, path: PythonObject,
                      context: PythonObject) raises -> PythonObject:
+    var nk = host_tree_archive_keys()
     # The refusals keep GaussianProcessClassifier.load's wording and order;
     # the fields follow the constructor's, _validate_params's, then the
     # loader's and _set_fitted's assignments.
@@ -1875,31 +1907,31 @@ def host_archive_gpc(cls: PythonObject, arrays: PythonObject, path: PythonObject
     _ = lengths
     _ = scales
     _ = plan
-    var kernel = host_archive_allocate(context["host_archive_gpc_saved_kernel"], context)
-    py_setitem(sequential_fields(kernel), "_node_list", nodes)
+    var kernel = host_archive_allocate(py_item(context, nk[].k_host_archive_gpc_saved_kernel), context)
+    py_setitem(sequential_fields(kernel), nk[].k__node_list, nodes)
     if max_iter < 1:
         raise Error("mojolearn GaussianProcessClassifier: max_iter_predict must be at least 1, got " + String(max_iter))
     var model = host_archive_object(cls, arrays, context)
     var fields = sequential_fields(model)
-    py_setitem(fields, "kernel", kernel)
-    py_setitem(fields, "optimizer", PythonObject(None))
-    py_setitem(fields, "n_restarts_optimizer", 0)
-    py_setitem(fields, "max_iter_predict", max_iter)
-    py_setitem(fields, "warm_start", False)
-    py_setitem(fields, "copy_X_train", True)
-    py_setitem(fields, "random_state", PythonObject(None))
-    py_setitem(fields, "multi_class", "one_vs_rest")
-    py_setitem(fields, "n_jobs", PythonObject(None))
-    py_setitem(fields, "numeric_mode", mode)
-    py_setitem(fields, "_kernel", kernel)
-    py_setitem(fields, "_max_iter_predict", max_iter)
+    py_setitem(fields, nk[].k_kernel, kernel)
+    py_setitem(fields, nk[].k_optimizer, PythonObject(None))
+    py_setitem(fields, nk[].k_n_restarts_optimizer, 0)
+    py_setitem(fields, nk[].k_max_iter_predict, max_iter)
+    py_setitem(fields, nk[].k_warm_start, False)
+    py_setitem(fields, nk[].k_copy_X_train, True)
+    py_setitem(fields, nk[].k_random_state, PythonObject(None))
+    py_setitem(fields, nk[].k_multi_class, "one_vs_rest")
+    py_setitem(fields, nk[].k_n_jobs, PythonObject(None))
+    py_setitem(fields, nk[].k_numeric_mode, mode)
+    py_setitem(fields, nk[].k__kernel, kernel)
+    py_setitem(fields, nk[].k__max_iter_predict, max_iter)
     var x = _archive_exact(arrays, "x", "<f4", context)
     if Bool(py=x.shape != Python.tuple(n_train, n_features)):
         raise Error(where + " x has shape " + _archive_builtin_repr(x.shape) + ", meta says ("
                     + String(n_train) + ", " + String(n_features) + ")")
-    if not py_contains(arrays, "classes"):
+    if not py_contains(arrays, nk[].k_classes):
         raise Error(where + " has no classes member")
-    var classes = host_archive_class_values(arrays["classes"], context)
+    var classes = host_archive_class_values(py_item(arrays, nk[].k_classes), context)
     var want = 1 if n_classes == 2 else n_classes
     if len(classes) != n_classes or n_classes < 2 or n_est != want:
         raise Error(where + " holds " + String(len(classes)) + " classes and " + String(n_est)
@@ -1915,31 +1947,31 @@ def host_archive_gpc(cls: PythonObject, arrays: PythonObject, path: PythonObject
     var fits = Python.list()
     var counts = Python.list()
     for i in range(n_est):  # driver-loop: saved per-class Laplace state reconstruction
-        var fit = host_archive_allocate(context["host_archive_binary_laplace"], context)
+        var fit = host_archive_allocate(py_item(context, nk[].k_host_archive_binary_laplace), context)
         var state = sequential_fields(fit)
-        py_setitem(state, "y_train_", host_archive_gp_row(ys, i, n, Python.tuple(n), context))
-        py_setitem(state, "L_", host_archive_gp_row(factors, i, n * n, Python.tuple(n, n), context))
-        py_setitem(state, "pi_", host_archive_gp_row(pis, i, n, Python.tuple(n), context))
-        py_setitem(state, "W_sr_", host_archive_gp_row(wsrs, i, n, Python.tuple(n), context))
-        py_setitem(state, "log_marginal_likelihood_value_", classical_f64(likelihoods, i))
-        py_setitem(state, "n_iter_", classical_i64(iterations, i))
-        py_setitem(state, "nb_", classical_i64(panels, i))
+        py_setitem(state, nk[].k_y_train_, host_archive_gp_row(ys, i, n, Python.tuple(n), context))
+        py_setitem(state, nk[].k_L_, host_archive_gp_row(factors, i, n * n, Python.tuple(n, n), context))
+        py_setitem(state, nk[].k_pi_, host_archive_gp_row(pis, i, n, Python.tuple(n), context))
+        py_setitem(state, nk[].k_W_sr_, host_archive_gp_row(wsrs, i, n, Python.tuple(n), context))
+        py_setitem(state, nk[].k_log_marginal_likelihood_value_, classical_f64(likelihoods, i))
+        py_setitem(state, nk[].k_n_iter_, classical_i64(iterations, i))
+        py_setitem(state, nk[].k_nb_, classical_i64(panels, i))
         _ = py_call(fits.append, fit)
         _ = py_call(counts.append, classical_i64(iterations, i))
-    py_setitem(fields, "X_train_", x)
-    py_setitem(fields, "n_features_in_", n_features)
-    py_setitem(fields, "classes_", classes)
-    py_setitem(fields, "n_classes_", n_classes)
-    py_setitem(fields, "estimators_", fits)
-    py_setitem(fields, "kernel_", kernel)
+    py_setitem(fields, nk[].k_X_train_, x)
+    py_setitem(fields, nk[].k_n_features_in_, n_features)
+    py_setitem(fields, nk[].k_classes_, classes)
+    py_setitem(fields, nk[].k_n_classes_, n_classes)
+    py_setitem(fields, nk[].k_estimators_, fits)
+    py_setitem(fields, nk[].k_kernel_, kernel)
     if n_classes == 2:
         var only = sequential_fields(fits[0])
         var aliases = Python.tuple("y_train_", "L_", "pi_", "W_sr_", "n_iter_", "log_marginal_likelihood_value_")
         for j in range(len(aliases)):  # driver-loop: public binary fit aliases
             py_setitem(fields, aliases[j], only[aliases[j]])
     else:
-        py_setitem(fields, "n_iter_", counts)
-        py_setitem(fields, "log_marginal_likelihood_value_", host_archive_mean_f64(Int(py=classical_address(likelihoods)), n_est))
+        py_setitem(fields, nk[].k_n_iter_, counts)
+        py_setitem(fields, nk[].k_log_marginal_likelihood_value_, host_archive_mean_f64(Int(py=classical_address(likelihoods)), n_est))
         _ = likelihoods  # keep the Python object alive through the native call above
     return model
 
@@ -1971,11 +2003,12 @@ def host_archive_svm_check(fields: PythonObject, classifier: Bool, context: Pyth
     """`SVC._validate_params` / `SVR._validate_params` on the constructor
     values a load restored: the same refusals, in the same order, then the
     checked `_hp_*` working values."""
+    var nk = host_tree_archive_keys()
     var b = native_loaded_module("builtins")
     var head = String("mojolearn SVC: ") if classifier else String("mojolearn SVR: ")
-    var kernels = context["host_archive_svm_kernels"]
+    var kernels = py_item(context, nk[].k_host_archive_svm_kernels)
     var refused = context["host_archive_svm_refused" if classifier else "host_archive_svr_refused"]
-    var kernel = fields["kernel"]
+    var kernel = py_item(fields, nk[].k_kernel)
     if py_type(kernel) is not b.str:
         raise Error(head + "kernel is a name")
     var lower = py_call(kernel.lower)
@@ -1988,7 +2021,7 @@ def host_archive_svm_check(fields: PythonObject, classifier: Bool, context: Pyth
         raise Error(head + "kernel=" + _archive_builtin_repr(kernel) + " is not a kernel name; "
                     + "this implementation carries " + _archive_builtin_repr(py_call(b.sorted, kernels)) + " and refuses "
                     + "the others by name (" + _archive_builtin_repr(py_call(b.sorted, refused)) + ")")
-    var gamma = fields["gamma"]
+    var gamma = py_item(fields, nk[].k_gamma)
     if py_type(gamma) is b.str:
         var folded = py_call(gamma.lower)
         var g = gamma if Bool(py=gamma == folded) else folded
@@ -2003,8 +2036,8 @@ def host_archive_svm_check(fields: PythonObject, classifier: Bool, context: Pyth
             raise Error(head + "gamma must be finite and >= 0 for the RBF "
                         + "kernel, got " + host_archive_float_repr(value) + " (DEVIATION 636; scikit-learn's own "
                         + "constraint is gamma >= 0)")
-    var degree = fields["degree"]
-    var coef0 = fields["coef0"]
+    var degree = py_item(fields, nk[].k_degree)
+    var coef0 = py_item(fields, nk[].k_coef0)
     var shown_degree = _archive_builtin_repr(degree)
     var polynomial = name == "poly"
     var tanh = name == "sigmoid"
@@ -2028,12 +2061,12 @@ def host_archive_svm_check(fields: PythonObject, classifier: Bool, context: Pyth
     elif Bool(py=coef0 != 0.0):
         raise Error("NotImplementedError: " + head + "coef0=" + _archive_builtin_repr(coef0) + " is refused with kernel="
                     + _archive_builtin_repr(k) + "; it is read only by kernel='poly' and kernel='sigmoid'")
-    var penalty = Float64(py=fields["C"])
+    var penalty = Float64(py=py_item(fields, nk[].k_C))
     if not isfinite(penalty):
         raise Error(head + "C must be finite, got " + host_archive_float_repr(penalty) + " (DEVIATION 636)")
     if penalty <= 0.0:
         raise Error(head + "C must be positive, got " + host_archive_float_repr(penalty))
-    var tolerance = Float64(py=fields["tol"])
+    var tolerance = Float64(py=py_item(fields, nk[].k_tol))
     if not isfinite(tolerance):
         raise Error(head + "tol must be finite, got " + host_archive_float_repr(tolerance) + " (DEVIATION 636)")
     if tolerance <= 0.0:
@@ -2042,35 +2075,35 @@ def host_archive_svm_check(fields: PythonObject, classifier: Bool, context: Pyth
     if not classifier:
         # Epsilon is converted, not refused: the Mojo fit's own refusals
         # stay the ones a caller reaches.
-        epsilon = Float64(py=fields["epsilon"])
-    var cache = Float64(py=fields["cache_size"])
+        epsilon = Float64(py=py_item(fields, nk[].k_epsilon))
+    var cache = Float64(py=py_item(fields, nk[].k_cache_size))
     if not (cache > 0.0) or not isfinite(cache):
         raise Error(head + "cache_size is the prediction buffer here "
                     + "(DEVIATION 871) and must be a positive finite MiB, got " + host_archive_float_repr(cache))
-    var maximum = Int(py=fields["max_iter"])
+    var maximum = Int(py=py_item(fields, nk[].k_max_iter))
     if maximum == 0 or maximum < -1:
         raise Error(head + "max_iter is a positive cap or -1 for no "
                     + "limit (cuML's default), got " + String(maximum))
-    var unchanged = Int(py=fields["nochange_steps"])
+    var unchanged = Int(py=py_item(fields, nk[].k_nochange_steps))
     if unchanged < 0:
         raise Error(head + "nochange_steps cannot be negative, got " + String(unchanged))
     if classifier:
-        py_setitem(fields, "_hp_C", penalty)
-    py_setitem(fields, "_hp_kernel", k)
-    py_setitem(fields, "_hp_degree", degree)
-    py_setitem(fields, "_hp_gamma", gamma)
-    py_setitem(fields, "_hp_coef0", coef0)
-    py_setitem(fields, "_hp_tol", tolerance)
+        py_setitem(fields, nk[].k__hp_C, penalty)
+    py_setitem(fields, nk[].k__hp_kernel, k)
+    py_setitem(fields, nk[].k__hp_degree, degree)
+    py_setitem(fields, nk[].k__hp_gamma, gamma)
+    py_setitem(fields, nk[].k__hp_coef0, coef0)
+    py_setitem(fields, nk[].k__hp_tol, tolerance)
     if not classifier:
-        py_setitem(fields, "_hp_C", penalty)
-        py_setitem(fields, "_hp_epsilon", epsilon)
-    py_setitem(fields, "_hp_cache_size", cache)
-    py_setitem(fields, "_hp_max_iter", maximum)
-    py_setitem(fields, "_hp_nochange_steps", unchanged)
+        py_setitem(fields, nk[].k__hp_C, penalty)
+        py_setitem(fields, nk[].k__hp_epsilon, epsilon)
+    py_setitem(fields, nk[].k__hp_cache_size, cache)
+    py_setitem(fields, nk[].k__hp_max_iter, maximum)
+    py_setitem(fields, nk[].k__hp_nochange_steps, unchanged)
     if classifier:
-        py_setitem(fields, "_hp_random_state", PythonObject(None))
-        py_setitem(fields, "_hp_probability", False)
-        py_setitem(fields, "_hp_break_ties", False)
+        py_setitem(fields, nk[].k__hp_random_state, PythonObject(None))
+        py_setitem(fields, nk[].k__hp_probability, False)
+        py_setitem(fields, nk[].k__hp_break_ties, False)
 
 
 def host_archive_svc_layout(support: PythonObject, dual: PythonObject, meta: PythonObject, k: Int, rows: Int,
@@ -2132,8 +2165,9 @@ def host_archive_svm_ovo(fields: PythonObject, arrays: PythonObject, features: I
                         context: PythonObject) raises:
     """`SVC._load_ovo`: the per-pair machines, then the public attributes
     `_set_ovo` builds, with its refusals and messages."""
+    var nk = host_tree_archive_keys()
     var where = host_archive_where(path, context)
-    var classes = host_archive_class_values(arrays["classes"], context)
+    var classes = host_archive_class_values(py_item(arrays, nk[].k_classes), context)
     var k = len(classes)
     var pair_count = k * (k - 1) // 2
     var meta = _archive_exact(arrays, "pair_meta", "<i8", context)
@@ -2143,7 +2177,7 @@ def host_archive_svm_ovo(fields: PythonObject, arrays: PythonObject, features: I
     var raw_support = _archive_exact(arrays, "pair_support", "<i4", context)
     var support = host_archive_reshape_words(raw_support, Python.tuple(Int(py=raw_support.size)), "<i4", context)
     _ = raw_support  # keep the Python object alive through the native call above
-    if String(fields["_hp_kernel"]) == "precomputed":
+    if String(py_item(fields, nk[].k__hp_kernel)) == "precomputed":
         host_archive_support_check(support, Int(py=raw_support.size), features, path, context)
     var raw_dual = _archive_exact(arrays, "pair_dual", "<f4", context)
     var raw_vectors = _archive_exact(arrays, "pair_sv", "<f4", context)
@@ -2189,17 +2223,17 @@ def host_archive_svm_ovo(fields: PythonObject, arrays: PythonObject, features: I
             _ = raw_support  # keep the Python object alive through the native call above
             var bias_value = Float64(saved_bias[q])
             _ = bias_flat  # keep the Python object alive through the native call above
-            py_setitem(pair, "i", i)
-            py_setitem(pair, "j", j)
-            py_setitem(pair, "dual", pd)
+            py_setitem(pair, nk[].k_i, i)
+            py_setitem(pair, nk[].k_j, j)
+            py_setitem(pair, nk[].k_dual, pd)
             _ = dual  # keep the Python object alive through the native call above
-            py_setitem(pair, "sv", pv)
+            py_setitem(pair, nk[].k_sv, pv)
             _ = vectors  # keep the Python object alive through the native call above
-            py_setitem(pair, "support", ps)
+            py_setitem(pair, nk[].k_support, ps)
             _ = support  # keep the Python object alive through the native call above
             _ = raw_support  # keep the Python object alive through the native call above
-            py_setitem(pair, "b", bias_value)
-            py_setitem(pair, "n_iter", iterations)
+            py_setitem(pair, nk[].k_b, bias_value)
+            py_setitem(pair, nk[].k_n_iter, iterations)
             _ = py_call(pairs.append, pair)
             bias_words[q] = -Float32(bias_value)
             _ = out_bias  # keep the Python object alive through the native call above
@@ -2212,9 +2246,9 @@ def host_archive_svm_ovo(fields: PythonObject, arrays: PythonObject, features: I
     if Int(py=ties.size) < 1:
         raise Error("mojolearn: " + _archive_read_repr(path, context) + " break_ties holds no value")
     var ovr = shape != "ovo"
-    py_setitem(fields, "decision_function_shape", "ovr" if ovr else "ovo")
-    py_setitem(fields, "break_ties", classical_i64(ties, 0) != 0 and ovr)
-    py_setitem(fields, "_hp_break_ties", fields["break_ties"])
+    py_setitem(fields, nk[].k_decision_function_shape, "ovr" if ovr else "ovo")
+    py_setitem(fields, nk[].k_break_ties, classical_i64(ties, 0) != 0 and ovr)
+    py_setitem(fields, nk[].k__hp_break_ties, py_item(fields, nk[].k_break_ties))
     # `_set_ovo`: the layout `fit` builds, with the row bound max(support) + 1.
     var rows = host_archive_support_bound(Int(py=classical_address(support)), total, -1)
     _ = support  # keep the Python object alive through the native call above
@@ -2242,23 +2276,24 @@ def host_archive_svm_ovo(fields: PythonObject, arrays: PythonObject, features: I
     _ = result_vectors  # keep the Python object alive through the native call above
     _ = result_support  # keep the Python object alive through the native call above
     _ = public_support  # keep the Python object alive through the native call above
-    py_setitem(fields, "classes_", classes)
-    py_setitem(fields, "n_features_in_", features)
-    py_setitem(fields, "_pairs", pairs)
-    py_setitem(fields, "support_", result_support)
+    py_setitem(fields, nk[].k_classes_, classes)
+    py_setitem(fields, nk[].k_n_features_in_, features)
+    py_setitem(fields, nk[].k__pairs, pairs)
+    py_setitem(fields, nk[].k_support_, result_support)
     _ = public_support  # keep the Python object alive through the native call above
-    py_setitem(fields, "support_vectors_", result_vectors)
-    py_setitem(fields, "dual_coef_", result_dual)
+    py_setitem(fields, nk[].k_support_vectors_, result_vectors)
+    py_setitem(fields, nk[].k_dual_coef_, result_dual)
     _ = public_dual  # keep the Python object alive through the native call above
-    py_setitem(fields, "intercept_", out_bias)
-    py_setitem(fields, "n_support_", public_counts)
-    py_setitem(fields, "n_iter_", out_iterations)
+    py_setitem(fields, nk[].k_intercept_, out_bias)
+    py_setitem(fields, nk[].k_n_support_, public_counts)
+    py_setitem(fields, nk[].k_n_iter_, out_iterations)
 
 
 def host_archive_svm(cls: PythonObject, arrays: PythonObject, classifier: Bool, path: PythonObject,
                      context: PythonObject) raises -> PythonObject:
     """SVC.load / SVR.load: the object, attributes and refusals (wording
     and order) of the Python loaders they replaced."""
+    var nk = host_tree_archive_keys()
     var b = native_loaded_module("builtins")
     var where = host_archive_where(path, context)
     var meta = host_archive_meta(arrays, "meta", 6 if classifier else 5, path, context)
@@ -2309,7 +2344,7 @@ def host_archive_svm(cls: PythonObject, arrays: PythonObject, classifier: Bool, 
     var nf = classical_i64(meta, 0)
     var n = classical_i64(meta, 1)
     if classifier:
-        if py_contains(arrays, "prob_ab"):
+        if py_contains(arrays, nk[].k_prob_ab):
             var probability = _archive_exact(arrays, "prob_ab", "<f8", context)
             if Int(py=probability.ndim) != 1:
                 raise Error(where + " prob_ab must be a vector")
@@ -2332,16 +2367,16 @@ def host_archive_svm(cls: PythonObject, arrays: PythonObject, classifier: Bool, 
             if count % 2:
                 ap[count // 2] = classical_f64(probability, count - 1)
                 _ = a  # keep the Python object alive through the native call above
-            py_setitem(fields, "probability", True)
-            py_setitem(fields, "_hp_probability", True)
-            py_setitem(fields, "_prob_ab", pairs)
-            py_setitem(fields, "probA_", a)
-            py_setitem(fields, "probB_", bb)
-        if py_contains(arrays, "pair_meta"):
+            py_setitem(fields, nk[].k_probability, True)
+            py_setitem(fields, nk[].k__hp_probability, True)
+            py_setitem(fields, nk[].k__prob_ab, pairs)
+            py_setitem(fields, nk[].k_probA_, a)
+            py_setitem(fields, nk[].k_probB_, bb)
+        if py_contains(arrays, nk[].k_pair_meta):
             host_archive_svm_ovo(fields, arrays, nf, path, context)
-            py_setitem(fields, "_gamma", classical_f64(hyper, 3))
-            py_setitem(fields, "_label0", 0.0)
-            py_setitem(fields, "_label1", 1.0)
+            py_setitem(fields, nk[].k__gamma, classical_f64(hyper, 3))
+            py_setitem(fields, nk[].k__label0, 0.0)
+            py_setitem(fields, nk[].k__label1, 1.0)
             return model
     var dual = host_archive_matrix(arrays, "dual_coef", "<f4", 1, n, path, context)
     var vectors = host_archive_matrix(arrays, "support_vectors", "<f4", n, nf, path, context)
@@ -2358,28 +2393,29 @@ def host_archive_svm(cls: PythonObject, arrays: PythonObject, classifier: Bool, 
         labels = _archive_exact(arrays, "labels", "<f8", context)
         if Int(py=labels.size) != 2:
             raise Error(where + " labels must hold the two solver labels")
-        var classes = host_archive_class_values(arrays["classes"], context)
+        var classes = host_archive_class_values(py_item(arrays, nk[].k_classes), context)
         if len(classes) != 2:
             raise Error(where + " must carry exactly two classes")
-        py_setitem(fields, "classes_", classes)
-    py_setitem(fields, "n_features_in_", nf)
-    py_setitem(fields, "n_support_", n)
-    py_setitem(fields, "n_iter_", classical_i64(meta, 2))
-    py_setitem(fields, "intercept_", intercept)
-    py_setitem(fields, "support_", support)
-    py_setitem(fields, "support_vectors_", vectors)
-    py_setitem(fields, "dual_coef_", dual)
-    py_setitem(fields, "_gamma", classical_f64(hyper, 3 if classifier else 4))
+        py_setitem(fields, nk[].k_classes_, classes)
+    py_setitem(fields, nk[].k_n_features_in_, nf)
+    py_setitem(fields, nk[].k_n_support_, n)
+    py_setitem(fields, nk[].k_n_iter_, classical_i64(meta, 2))
+    py_setitem(fields, nk[].k_intercept_, intercept)
+    py_setitem(fields, nk[].k_support_, support)
+    py_setitem(fields, nk[].k_support_vectors_, vectors)
+    py_setitem(fields, nk[].k_dual_coef_, dual)
+    py_setitem(fields, nk[].k__gamma, classical_f64(hyper, 3 if classifier else 4))
     if classifier:
-        py_setitem(fields, "_label0", classical_f64(labels, 0))
-        py_setitem(fields, "_label1", classical_f64(labels, 1))
+        py_setitem(fields, nk[].k__label0, classical_f64(labels, 0))
+        py_setitem(fields, nk[].k__label1, classical_f64(labels, 1))
     return model
 
 
 def host_archive_forest(cls: PythonObject, arrays: PythonObject, fmt: String,
                         context: PythonObject) raises -> PythonObject:
+    var nk = host_tree_archive_keys()
     var estimator = _archive_string(arrays, "estimator", context)
-    var metadata = context["host_archive_forest_estimators"][estimator]
+    var metadata = py_item(context, nk[].k_host_archive_forest_estimators)[estimator]
     var groves = fmt.endswith("-parallel-groves-1")
     if groves:
         var mode = _archive_string(arrays, "numeric_mode", context)
@@ -2408,37 +2444,37 @@ def host_archive_forest(cls: PythonObject, arrays: PythonObject, fmt: String,
     var classifier = Bool(py=metadata[1])
     # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
     var classes = Optional[PythonObject]()
-    if py_contains(arrays, "classes"):
-        classes = host_archive_class_values(arrays["classes"], context)
+    if py_contains(arrays, nk[].k_classes):
+        classes = host_archive_class_values(py_item(arrays, nk[].k_classes), context)
     if classifier and (not classes or len(classes.value()) != outputs):
         raise Error("saved forest classifier must carry num_outputs classes")
     if not classifier and outputs != 1:
         raise Error("saved forest regressor must carry one output")
-    var module = context["host_archive_forest_binding"]
+    var module = py_item(context, nk[].k_host_archive_forest_binding)
     if module is None:
-        raise Error("ImportError: " + String(context["host_archive_forest_binding_error"]))
-    if groves and not Bool(py=context["host_archive_forest_has_groves"]):
+        raise Error("ImportError: " + String(py_item(context, nk[].k_host_archive_forest_binding_error)))
+    if groves and not Bool(py=py_item(context, nk[].k_host_archive_forest_has_groves)):
         raise Error("RuntimeError: forest host binding predates the parallel_groves engine")
     var model = host_archive_allocate(cls, context)
     var fields = sequential_fields(model)
-    py_setitem(fields, "estimator", estimator)
-    py_setitem(fields, "family", metadata[0])
-    py_setitem(fields, "is_classifier", classifier)
-    py_setitem(fields, "device", _archive_string(arrays, "device", context) if py_contains(arrays, "device") else PythonObject(None))
-    py_setitem(fields, "_inference_engine", "parallel_groves" if groves else "sequential")
-    py_setitem(fields, "_groves", PythonObject(None))
-    py_setitem(fields, "_offsets", offsets)
-    py_setitem(fields, "_colid", colid)
-    py_setitem(fields, "_quesval", thresholds)
-    py_setitem(fields, "_left_child", left)
-    py_setitem(fields, "_leaves", leaves)
-    py_setitem(fields, "n_features_in_", features)
-    py_setitem(fields, "_n_trees", trees)
-    py_setitem(fields, "_num_outputs", outputs)
-    py_setitem(fields, "_binding", module)
+    py_setitem(fields, nk[].k_estimator, estimator)
+    py_setitem(fields, nk[].k_family, metadata[0])
+    py_setitem(fields, nk[].k_is_classifier, classifier)
+    py_setitem(fields, nk[].k_device, _archive_string(arrays, "device", context) if py_contains(arrays, nk[].k_device) else PythonObject(None))
+    py_setitem(fields, nk[].k__inference_engine, "parallel_groves" if groves else "sequential")
+    py_setitem(fields, nk[].k__groves, PythonObject(None))
+    py_setitem(fields, nk[].k__offsets, offsets)
+    py_setitem(fields, nk[].k__colid, colid)
+    py_setitem(fields, nk[].k__quesval, thresholds)
+    py_setitem(fields, nk[].k__left_child, left)
+    py_setitem(fields, nk[].k__leaves, leaves)
+    py_setitem(fields, nk[].k_n_features_in_, features)
+    py_setitem(fields, nk[].k__n_trees, trees)
+    py_setitem(fields, nk[].k__num_outputs, outputs)
+    py_setitem(fields, nk[].k__binding, module)
     if classifier:
-        py_setitem(fields, "classes_", classes.value())
-        py_setitem(fields, "n_classes_", len(classes.value()))
+        py_setitem(fields, nk[].k_classes_, classes.value())
+        py_setitem(fields, nk[].k_n_classes_, len(classes.value()))
     return model
 
 
@@ -2457,58 +2493,60 @@ def host_archive_public_forest(cls: PythonObject, arrays: PythonObject, fmt: Str
     the public estimator exactly as the Python loader built it from
     `cls.__new__(cls)`, with its refusals in its order. `extra` reads the
     three extra-trees meta fields."""
+    var nk = host_tree_archive_keys()
     var saved = _archive_string(arrays, "estimator", context)
     if String(py=saved) != String(py=cls.__name__):
         raise Error(host_archive_where(path, context) + " was saved by " + String(saved) + ", not " + String(cls.__name__))
     var model = host_archive_allocate(cls, context)
     var fields = sequential_fields(model)
-    py_setitem(fields, "device", _archive_string(arrays, "device", context))
+    py_setitem(fields, nk[].k_device, _archive_string(arrays, "device", context))
     # The 0.8.55 `ForestProtocol._restore_inference_metadata`.
     if fmt.endswith("-parallel-groves-1"):
-        py_setitem(fields, "inference_engine", "parallel_groves")
-        py_setitem(fields, "inference_engine_", "parallel_groves")
+        py_setitem(fields, nk[].k_inference_engine, "parallel_groves")
+        py_setitem(fields, nk[].k_inference_engine_, "parallel_groves")
         var mode = py_call(py_call(_archive_string(arrays, "numeric_mode", context).strip).lower)
         if String(py=mode) != "fast" and String(py=mode) != "identical":
             raise Error("numeric_mode must be fast, identical or None")
-        py_setitem(fields, "numeric_mode", mode)
-        py_setitem(fields, "_fit_numeric_mode", mode)
+        py_setitem(fields, nk[].k_numeric_mode, mode)
+        py_setitem(fields, nk[].k__fit_numeric_mode, mode)
     else:
-        py_setitem(fields, "inference_engine", "sequential")
-        py_setitem(fields, "inference_engine_", "sequential")
-    py_setitem(fields, "_offsets", _archive_exact(arrays, "offsets", "<i4", context))
-    py_setitem(fields, "_colid", _archive_exact(arrays, "colid", "<i4", context))
-    py_setitem(fields, "_quesval", _archive_exact(arrays, "quesval", "<f4", context))
-    py_setitem(fields, "_left_child", _archive_exact(arrays, "left_child", "<i4", context))
-    py_setitem(fields, "_leaves", _archive_exact(arrays, "leaves", "<f4", context))
+        py_setitem(fields, nk[].k_inference_engine, "sequential")
+        py_setitem(fields, nk[].k_inference_engine_, "sequential")
+    py_setitem(fields, nk[].k__offsets, _archive_exact(arrays, "offsets", "<i4", context))
+    py_setitem(fields, nk[].k__colid, _archive_exact(arrays, "colid", "<i4", context))
+    py_setitem(fields, nk[].k__quesval, _archive_exact(arrays, "quesval", "<f4", context))
+    py_setitem(fields, nk[].k__left_child, _archive_exact(arrays, "left_child", "<i4", context))
+    py_setitem(fields, nk[].k__leaves, _archive_exact(arrays, "leaves", "<f4", context))
     var meta = _archive_exact(arrays, "meta", "<i8", context)
-    py_setitem(fields, "n_features_in_", host_archive_meta_word(meta, 0))
-    py_setitem(fields, "_n_trees", host_archive_meta_word(meta, 1))
-    py_setitem(fields, "_num_outputs", host_archive_meta_word(meta, 2))
+    py_setitem(fields, nk[].k_n_features_in_, host_archive_meta_word(meta, 0))
+    py_setitem(fields, nk[].k__n_trees, host_archive_meta_word(meta, 1))
+    py_setitem(fields, nk[].k__num_outputs, host_archive_meta_word(meta, 2))
     if extra:
-        py_setitem(fields, "depth_cap_bound_", host_archive_meta_word(meta, 3) != 0)
-        py_setitem(fields, "max_depth_resolved_", host_archive_meta_word(meta, 4))
-        py_setitem(fields, "max_features_", host_archive_meta_word(meta, 5))
-    if py_contains(arrays, "classes"):
-        var classes = host_archive_class_values(arrays["classes"], context)
-        py_setitem(fields, "classes_", classes)
-        py_setitem(fields, "n_classes_", len(classes))
+        py_setitem(fields, nk[].k_depth_cap_bound_, host_archive_meta_word(meta, 3) != 0)
+        py_setitem(fields, nk[].k_max_depth_resolved_, host_archive_meta_word(meta, 4))
+        py_setitem(fields, nk[].k_max_features_, host_archive_meta_word(meta, 5))
+    if py_contains(arrays, nk[].k_classes):
+        var classes = host_archive_class_values(py_item(arrays, nk[].k_classes), context)
+        py_setitem(fields, nk[].k_classes_, classes)
+        py_setitem(fields, nk[].k_n_classes_, len(classes))
     # The former `_mojolearn_after_fit` after a load: the five model arrays
     # frozen (the loaded Arrays are the archive's own fresh storage) and an
     # empty resident snapshot holder.
     var model_names = Python.tuple("_offsets", "_colid", "_quesval", "_left_child", "_leaves")
     for i in range(5):  # small-loop(model_names): the five model array names
         py_setattr(fields[model_names[i]], "_readonly", PythonObject(True))
-    py_setitem(fields, "_resident_holder", Python.dict())
+    py_setitem(fields, nk[].k__resident_holder, Python.dict())
     # The former Python `_mode._loader` wrapper's mark (lane py-mode-wrappers,
     # 2026-11-15): a loaded forest is fitted. RF/ET register their archive
     # under the base class name, so `host_archive_load`'s registered-name mark
     # does not reach RandomForest*/ExtraTrees*; without it every predict on a
     # loaded forest would scan the instance dictionary for a fitted attribute.
-    py_setitem(fields, "_mojolearn_fitted", PythonObject(True))
+    py_setitem(fields, nk[].k__mojolearn_fitted, PythonObject(True))
     return model
 
 
 def host_archive_gbdt_state(text: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = host_tree_archive_keys()
     var parsed = host_archive_gbdt_text(String(text))
     var state = Python.dict()
     for entry in parsed.metadata.items():  # driver-loop: native parsed model dimensions
@@ -2529,15 +2567,16 @@ def host_archive_gbdt_state(text: PythonObject, context: PythonObject) raises ->
             out[i] = entry.value[i]
             _ = array  # keep the Python object alive through the native call above
         py_setitem(state, entry.key, array)
-    py_setitem(state, "bias", parsed.bias)
-    py_setitem(state, "non_symmetric", parsed.non_symmetric)
+    py_setitem(state, nk[].k_bias, parsed.bias)
+    py_setitem(state, nk[].k_non_symmetric, parsed.non_symmetric)
     return state
 
 
 def host_archive_gbdt(cls: PythonObject, arrays: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = host_tree_archive_keys()
     var estimator = _archive_string(arrays, "estimator", context)
     var loss = _archive_string(arrays, "loss", context)
-    var losses = context["host_archive_gbdt_estimators"][estimator]
+    var losses = py_item(context, nk[].k_host_archive_gbdt_estimators)[estimator]
     if losses is not None and not py_contains(losses, loss):
         raise Error("mojolearn: a " + String(estimator) + " archive with loss " + String(loss) + "; that class saves " + String(py=py_call(PythonObject(", ").join, losses)) + " only, the file is corrupt")
     var meta = _archive_exact(arrays, "meta", "<i8", context)
@@ -2550,33 +2589,33 @@ def host_archive_gbdt(cls: PythonObject, arrays: PythonObject, context: PythonOb
     var raw = py_call(native_loaded_module("builtins").bytes, stored._mv)
     var text = py_call(raw.decode, "utf-8")
     var state = host_archive_gbdt_state(text, context)
-    if classical_i64(meta, 0) != Int(py=state["n_input_features"]) or classical_i64(meta, 1) != Int(py=state["dim"]):
+    if classical_i64(meta, 0) != Int(py=py_item(state, nk[].k_n_input_features)) or classical_i64(meta, 1) != Int(py=py_item(state, nk[].k_dim)):
         raise Error("saved gradient boosting metadata disagrees with its model text")
-    if classical_f64(bias, 0) != Float64(py=state["bias"]):
+    if classical_f64(bias, 0) != Float64(py=py_item(state, nk[].k_bias)):
         raise Error("saved gradient boosting bias disagrees with its model text")
-    var module = context["host_archive_forest_binding"]
+    var module = py_item(context, nk[].k_host_archive_forest_binding)
     if module is None:
-        raise Error("ImportError: " + String(context["host_archive_forest_binding_error"]))
+        raise Error("ImportError: " + String(py_item(context, nk[].k_host_archive_forest_binding_error)))
     var mode = PythonObject(None)
-    if py_contains(arrays, "numeric_mode"):
+    if py_contains(arrays, nk[].k_numeric_mode):
         mode = _archive_string(arrays, "numeric_mode", context)
         if String(mode) != "fast" and String(mode) != "identical":
             raise Error("invalid saved numeric_mode")
     var model = host_archive_allocate(cls, context)
     var fields = sequential_fields(model)
-    py_setitem(fields, "estimator", estimator)
-    py_setitem(fields, "loss", loss)
-    py_setitem(fields, "numeric_mode", mode)
-    py_setitem(fields, "model_", text)
-    py_setitem(fields, "_arrays", state)
-    py_setitem(fields, "n_features_in_", state["n_input_features"])
-    py_setitem(fields, "n_model_columns_", state["n_features"])
-    py_setitem(fields, "approx_dim_", state["dim"])
-    py_setitem(fields, "bias_", state["bias"])
-    py_setitem(fields, "n_classes_", PythonObject(None) if classical_i64(meta, 2) < 0 else PythonObject(classical_i64(meta, 2)))
-    py_setitem(fields, "is_classifier", py_contains(context["host_archive_gbdt_classification_losses"], loss))
-    py_setitem(fields, "has_proba", py_contains(context["host_archive_gbdt_proba_losses"], loss))
-    py_setitem(fields, "_binding", module)
+    py_setitem(fields, nk[].k_estimator, estimator)
+    py_setitem(fields, nk[].k_loss, loss)
+    py_setitem(fields, nk[].k_numeric_mode, mode)
+    py_setitem(fields, nk[].k_model_, text)
+    py_setitem(fields, nk[].k__arrays, state)
+    py_setitem(fields, nk[].k_n_features_in_, py_item(state, nk[].k_n_input_features))
+    py_setitem(fields, nk[].k_n_model_columns_, py_item(state, nk[].k_n_features))
+    py_setitem(fields, nk[].k_approx_dim_, py_item(state, nk[].k_dim))
+    py_setitem(fields, nk[].k_bias_, py_item(state, nk[].k_bias))
+    py_setitem(fields, nk[].k_n_classes_, PythonObject(None) if classical_i64(meta, 2) < 0 else PythonObject(classical_i64(meta, 2)))
+    py_setitem(fields, nk[].k_is_classifier, py_contains(py_item(context, nk[].k_host_archive_gbdt_classification_losses), loss))
+    py_setitem(fields, nk[].k_has_proba, py_contains(py_item(context, nk[].k_host_archive_gbdt_proba_losses), loss))
+    py_setitem(fields, nk[].k__binding, module)
     return model
 
 
@@ -2602,31 +2641,32 @@ def host_archive_public_gbdt(cls: PythonObject, arrays: PythonObject, path: Pyth
     dimension comes from the model text through the GBDT binding's
     `gbdt_model_dim` (or, for a CTR text on the CPU binding, the native
     text reader), as the loader read it."""
+    var nk = host_tree_archive_keys()
     var b = native_loaded_module("builtins")
     var saved = _archive_string(arrays, "estimator", context)
     if String(py=saved) != String(py=cls.__name__):
         raise Error(host_archive_where(path, context) + " was saved by " + String(saved) + ", not " + String(cls.__name__))
     var model = host_archive_allocate(cls, context)
     var fields = sequential_fields(model)
-    py_setitem(fields, "numeric_mode", PythonObject(None))
-    if py_contains(arrays, "numeric_mode"):
-        var mode = _archive_one_string(arrays["numeric_mode"])
+    py_setitem(fields, nk[].k_numeric_mode, PythonObject(None))
+    if py_contains(arrays, nk[].k_numeric_mode):
+        var mode = _archive_one_string(py_item(arrays, nk[].k_numeric_mode))
         if mode is None:
             raise Error("mojolearn: saved numeric_mode must be one string")
         if String(mode) != "fast" and String(mode) != "identical":
             raise Error("mojolearn: invalid saved numeric_mode " + _archive_builtin_repr(mode))
-        py_setitem(fields, "numeric_mode", mode)
-    py_setitem(fields, "loss", _archive_string(arrays, "loss", context))
+        py_setitem(fields, nk[].k_numeric_mode, mode)
+    py_setitem(fields, nk[].k_loss, _archive_string(arrays, "loss", context))
     var stored = _archive_exact(arrays, "model", "<u1", context)
     var text = py_call(py_call(b.bytes, stored._mv).decode, "utf-8")
-    py_setitem(fields, "model_", text)
+    py_setitem(fields, nk[].k_model_, text)
     var meta = _archive_exact(arrays, "meta", "<i8", context)
-    py_setitem(fields, "n_features_in_", host_archive_meta_word(meta, 0))
+    py_setitem(fields, nk[].k_n_features_in_, host_archive_meta_word(meta, 0))
     # `obj._bind("_mojolearn_gbdt")`: the saved mode, else the process default.
-    var mode = fields["numeric_mode"]
+    var mode = py_item(fields, nk[].k_numeric_mode)
     if mode is None:
-        mode = context["backend_fields"]["_DEFAULT_MODE"]
-    var tables = py_get(context, "host_archive_gbdt_bindings")
+        mode = py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)
+    var tables = py_get(context, nk[].k_host_archive_gbdt_bindings)
     if tables is None:
         raise Error("ImportError: mojolearn: the GBDT binding is not connected to the archive owner")
     var table = py_get(tables, PythonObject(String(py_call(py_call(mode.strip).lower))))
@@ -2641,33 +2681,33 @@ def host_archive_public_gbdt(cls: PythonObject, arrays: PythonObject, path: Pyth
     # images' exports; their native entry is the gbdt table of lane
     # calltable-gbdt-forest-dart (core/gbdt_entry_table.mojo, which publishes
     # the model dimension), not on this base. Convert both sites after merge.
-    var vendor = py_get(table, "gbdt_vendor")
+    var vendor = py_get(table, nk[].k_gbdt_vendor)
     var cpu = vendor is not None and String(py_call(b.str, py_call(vendor))) == "cpu"
     var dim = 0
     if ctr and cpu:
-        dim = Int(py=host_archive_gbdt_state(text, context)["dim"])
+        dim = Int(py=py_item(host_archive_gbdt_state(text, context), nk[].k_dim))
     else:
-        var entry = py_get(table, "gbdt_model_dim")
+        var entry = py_get(table, nk[].k_gbdt_model_dim)
         if entry is None:
             raise Error("AttributeError: the GBDT binding has no gbdt_model_dim")
         dim = Int(py=py_call(entry, text))  # call-table: sibling entry (gbdt table, see above)
-    py_setitem(fields, "approx_dim_", PythonObject(dim))
+    py_setitem(fields, nk[].k_approx_dim_, PythonObject(dim))
     var saved_dim = host_archive_meta_word(meta, 1)
     if dim != saved_dim:
         raise Error(host_archive_where(path, context) + " stores approx_dim " + String(saved_dim) + " but "
                     + "its model text holds " + String(dim) + "; the file is "
                     + "corrupt")
     var classes = host_archive_meta_word(meta, 2)
-    py_setitem(fields, "n_classes_", PythonObject(None) if classes < 0 else PythonObject(classes))
+    py_setitem(fields, nk[].k_n_classes_, PythonObject(None) if classes < 0 else PythonObject(classes))
     var best = host_archive_meta_word(meta, 3)
-    py_setitem(fields, "best_iteration_", PythonObject(None) if best < 0 else PythonObject(best))
-    py_setitem(fields, "stopped_early_", PythonObject(host_archive_meta_word(meta, 4) != 0))
+    py_setitem(fields, nk[].k_best_iteration_, PythonObject(None) if best < 0 else PythonObject(best))
+    py_setitem(fields, nk[].k_stopped_early_, PythonObject(host_archive_meta_word(meta, 4) != 0))
     var bias = _archive_exact(arrays, "bias", "<f8", context)
     if Int(py=bias.size) < 1:
         raise Error("IndexError: list index out of range")
-    py_setitem(fields, "bias_", PythonObject(classical_f64(bias, 0)))
-    py_setitem(fields, "loss_curve_", PythonObject(None))
-    py_setitem(fields, "test_loss_curve_", PythonObject(None))
+    py_setitem(fields, nk[].k_bias_, PythonObject(classical_f64(bias, 0)))
+    py_setitem(fields, nk[].k_loss_curve_, PythonObject(None))
+    py_setitem(fields, nk[].k_test_loss_curve_, PythonObject(None))
     return model
 
 
@@ -2677,11 +2717,12 @@ def host_archive_public_owner(path: PythonObject, members: List[NativeArchiveDec
     saving estimator are checked with the refusals `_serialize.read_npz` and
     `linear_model._check_saved_by` gave, and the nearest connected ancestor
     (the class whose schema the file holds) is returned."""
+    var nk = host_tree_archive_keys()
     var b = native_loaded_module("builtins")
     if py_type(cls) is not b.type:
         raise Error("TypeError: native archive loading requires an ordinary class")
-    var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
-    var connected = context["archive_class_formats"]
+    var mro = py_call(py_item(b.type.__dict__, nk[].k___mro__).__get__, cls)
+    var connected = py_item(context, nk[].k_archive_class_formats)
     # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
     var format_owner = Optional[PythonObject]()
     for i in range(len(mro)):  # driver-loop: loading class ancestry metadata
@@ -2691,16 +2732,16 @@ def host_archive_public_owner(path: PythonObject, members: List[NativeArchiveDec
     if not format_owner:
         raise Error("TypeError: " + _archive_class_name_unpack(cls) + " has no connected saved format")
     var owner = format_owner.value()
-    var native_hooks = py_get(context, "host_archive_native_loader_hooks")
+    var native_hooks = py_get(context, nk[].k_host_archive_native_loader_hooks)
     if native_hooks is not None and py_contains(native_hooks, owner):
         # These native loaders publish the vetted package hook's state in
         # the builder. Never silently skip or execute a replacement callback.
         var admitted = native_hooks[owner]
         var current = admitted[1]
         for i in range(len(mro)):  # driver-loop: resolve the native loader's connected hook without descriptors
-            var fields = py_call(b.type.__dict__["__dict__"].__get__, mro[i])
-            if py_contains(fields, "_mojolearn_after_fit"):
-                current = fields["_mojolearn_after_fit"]
+            var fields = py_call(py_item(b.type.__dict__, nk[].k___dict__).__get__, mro[i])
+            if py_contains(fields, nk[].k__mojolearn_after_fit):
+                current = py_item(fields, nk[].k__mojolearn_after_fit)
                 break
         if current is not admitted[0]:
             raise Error("TypeError: native archive loading refuses replaced after-fit hooks")
@@ -2749,13 +2790,14 @@ struct HostArchivePacked(Movable):
 
 def host_archive_unpack(path: PythonObject, context: PythonObject,
                         requested_class: PythonObject, classical_only: Bool) raises -> HostArchivePacked:
+    var nk = host_tree_archive_keys()
     # Keep source and decoded members through final PACK, then release them
     # before any legacy builder runs. This avoids retaining both compressed
     # native payloads and published arrays during those unchanged builders.
     var admitted = _archive_read_input(path, context)
     try:
         var members = native_archive_read_status(admitted.span,
-            Int(py=context["archive_python_minor"]), Int(py=context["archive_python_micro"]))
+            Int(py=py_item(context, nk[].k_archive_python_minor)), Int(py=py_item(context, nk[].k_archive_python_micro)))
         archive_events_pack(members, context)
         return host_archive_select_pack(path, context, requested_class, classical_only, members)
     finally:
@@ -2764,16 +2806,17 @@ def host_archive_unpack(path: PythonObject, context: PythonObject,
 
 def host_archive_select_pack(path: PythonObject, context: PythonObject, requested_class: PythonObject,
                               classical_only: Bool, members: List[NativeArchiveDecoded]) raises -> HostArchivePacked:
+    var nk = host_tree_archive_keys()
     var numpy = classical_numpy(context)
     var print_mode = archive_print_mode_unpack(members, context)
     # A public class's own `load` (the context _native_archive_bridge
     # connects) keys the schema on the class, not on the saved name: a
     # subclass loads its base's file, as the Python loaders did.
     var public_owner = Optional[PythonObject]()
-    if requested_class is not None and py_get(context, "archive_class_formats") is not None:
+    if requested_class is not None and py_get(context, nk[].k_archive_class_formats) is not None:
         public_owner = host_archive_public_owner(path, members, requested_class, context, numpy, print_mode)
     var fmt = native_archive_string(members, "format", numpy, print_mode)
-    if classical_only and not py_contains(context["host_archive_classical_formats"], fmt):
+    if classical_only and not py_contains(py_item(context, nk[].k_host_archive_classical_formats), fmt):
         raise Error("model archive format does not name a classical host model")
     var estimator = native_archive_string(members, "estimator", numpy, print_mode)
     if public_owner:
@@ -2784,7 +2827,7 @@ def host_archive_select_pack(path: PythonObject, context: PythonObject, requeste
         estimator = "KernelDensity"
     elif fmt == "mojolearn-iforest-1" and estimator == "HostIsolationForest":
         estimator = "IsolationForest"
-    var formats = context["host_archive_formats"]
+    var formats = py_item(context, nk[].k_host_archive_formats)
     var classes = py_get(formats, fmt)
     if classes is None:
         raise Error("native host archive builder has no supported schema for " + fmt)
@@ -2797,7 +2840,7 @@ def host_archive_select_pack(path: PythonObject, context: PythonObject, requeste
         var b = native_loaded_module("builtins")
         if py_type(requested_class) is not b.type:
             raise Error("TypeError: native archive loading requires an ordinary class")
-        var mro = py_call(b.type.__dict__["__mro__"].__get__, requested_class)
+        var mro = py_call(py_item(b.type.__dict__, nk[].k___mro__).__get__, requested_class)
         var matched = False
         for i in range(len(mro)):  # driver-loop: requested loading class ancestry
             matched = matched or mro[i] is cls
@@ -2826,6 +2869,7 @@ def host_archive_select_pack(path: PythonObject, context: PythonObject, requeste
 
 def host_archive_build(path: PythonObject, context: PythonObject,
                        requested_class: PythonObject, classical_only: Bool = False) raises -> PythonObject:
+    var nk = host_tree_archive_keys()
     var decoded = host_archive_unpack(path, context, requested_class, classical_only)
     var cls = decoded.cls
     var public_owner = decoded.public_owner.copy()
@@ -2860,7 +2904,7 @@ def host_archive_build(path: PythonObject, context: PythonObject,
         model = host_archive_holtwinters(cls, arrays, path, context)
     elif fmt == "mojolearn-ivf-flat-1":
         model = host_archive_ivf(cls, arrays, context)
-    elif py_contains(py_get(context, "host_archive_ann_layouts", Python.dict()), fmt):
+    elif py_contains(py_get(context, nk[].k_host_archive_ann_layouts, Python.dict()), fmt):
         model = host_archive_ann(cls, arrays, fmt, path, context)
     elif fmt == "mojolearn-hdbscan-2":
         model = host_archive_hdbscan(cls, arrays, path, context)
@@ -2872,14 +2916,14 @@ def host_archive_build(path: PythonObject, context: PythonObject,
         # a newly restored CPU neighbor model owns an empty query holder. A
         # public class's own `load` also set `used_query_tile_ = None`.
         var holder = Python.dict()
-        var native_hooks = py_get(context, "host_archive_native_loader_hooks")
+        var native_hooks = py_get(context, nk[].k_host_archive_native_loader_hooks)
         if Bool(public_owner) and (native_hooks is None or not py_contains(native_hooks, public_owner.value())):
-            py_setitem(holder, "used_query_tile_", PythonObject(None))
+            py_setitem(holder, nk[].k_used_query_tile_, PythonObject(None))
         # The admitted native public loaders replace the former post-load
         # NearestNeighbors._mojolearn_after_fit wrapper, whose final state was
         # an empty holder. Build that final state once, without a callback or
         # a second dictionary allocation that discards used_query_tile_.
-        py_setitem(sequential_fields(model), "_resident_holder", holder)
+        py_setitem(sequential_fields(model), nk[].k__resident_holder, holder)
     elif fmt == "mojolearn-iforest-1" and Bool(public_owner):
         model = host_archive_public_iforest(cls, arrays, path, context)
     elif fmt == "mojolearn-iforest-2":
@@ -2902,22 +2946,22 @@ def host_archive_build(path: PythonObject, context: PythonObject,
         model = host_archive_public_gbdt(cls, arrays, path, context)
     elif fmt == "mojolearn-gbdt-1":
         model = host_archive_gbdt(cls, arrays, context)
-    elif py_contains(context["host_archive_forest_formats"], fmt):
+    elif py_contains(py_item(context, nk[].k_host_archive_forest_formats), fmt):
         model = host_archive_forest(cls, arrays, fmt, context)
     else:
         raise Error("native host archive schema has not been implemented: " + fmt + "/" + estimator)
-    if py_contains(context["host_archive_fitted_estimators"], estimator):
-        py_setitem(sequential_fields(model), "_mojolearn_fitted", True)
+    if py_contains(py_item(context, nk[].k_host_archive_fitted_estimators), estimator):
+        py_setitem(sequential_fields(model), nk[].k__mojolearn_fitted, True)
     if requested_class is None:
         var fields = sequential_fields(model)
         if fmt == "mojolearn-kernel-ridge-1" or fmt == "mojolearn-nystroem-1":
-            var kernel = Int(py=fields["_kernel_params"][0])
+            var kernel = Int(py=py_item(fields, nk[].k__kernel_params)[0])
             if kernel != 0 and kernel != 1 and kernel != 2 and kernel != 3 and kernel != 5:
                 raise Error("ImportError: unsupported saved kernel code " + String(kernel))
-        if fmt == "mojolearn-logistic-1" and len(fields["classes_"]) > 2:
-            if String(fields["numeric_mode"]) != "identical":
+        if fmt == "mojolearn-logistic-1" and len(py_item(fields, nk[].k_classes_)) > 2:
+            if String(py_item(fields, nk[].k_numeric_mode)) != "identical":
                 raise Error("saved multiclass LogisticRegression runs identical only on the host")
-            if not Bool(py=context["host_archive_has_softmax"]):
+            if not Bool(py=py_item(context, nk[].k_host_archive_has_softmax)):
                 raise Error("ImportError: host LogisticRegression binding does not export qn_softmax")
-        py_setitem(fields, "estimator", estimator)
+        py_setitem(fields, nk[].k_estimator, estimator)
     return model

@@ -21,6 +21,8 @@ from bindings.host_archive_predict_native_unpack import (
     _class_name,
     _unavailable,
 )
+from bindings.host_tree_archive_keys_unpack import host_tree_archive_keys
+from bindings.py_balanced import py_item
 
 
 # Per class state and method: the verdict that the class ancestry is the
@@ -32,11 +34,12 @@ comptime _ARCHIVE_PREDICT_SLOT = "host_archive_predict_descriptor_v1_"
 
 
 def _archive_prediction_record(model: PythonObject, method: Int, context: PythonObject) raises -> PythonObject:
+    var nk = host_tree_archive_keys()
     var b = native_loaded_module("builtins")
     var cls = py_type(model)
     if py_type(cls) is not b.type:
         raise Error("TypeError: saved host prediction requires an ordinary native class")
-    var records = context["host_archive_predict_records"]
+    var records = py_item(context, nk[].k_host_archive_predict_records)
     for i in range(len(records)):  # driver-loop: over the fixed saved-model class inventory
         var record = records[i]
         if cls is not record[0]:
@@ -46,13 +49,13 @@ def _archive_prediction_record(model: PythonObject, method: Int, context: Python
         var mods = NativeModules()
         var slot = String(_ARCHIVE_PREDICT_SLOT) + String(method)
         if class_record(mods, slot, cls) is None:
-            var ancestry = py_call(b.type.__dict__["__mro__"].__get__, cls)
+            var ancestry = py_call(py_item(b.type.__dict__, nk[].k___mro__).__get__, cls)
             if ancestry is not record[1]:
                 raise Error("TypeError: saved host prediction class ancestry changed")
             # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
             var descriptor = Optional[PythonObject]()
             for k in range(len(ancestry)):  # driver-loop: over the class's method resolution order, without descriptors
-                var fields = py_call(b.type.__dict__["__dict__"].__get__, ancestry[k])
+                var fields = py_call(py_item(b.type.__dict__, nk[].k___dict__).__get__, ancestry[k])
                 var keys = py_call(b.list, fields)
                 for j in range(len(keys)):  # driver-loop: over class field names, admitted before any keyed lookup
                     if py_type(keys[j]) is not b.str:
@@ -73,18 +76,18 @@ def _archive_prediction_record(model: PythonObject, method: Int, context: Python
         var fields = py_fields(model)
         var cls_name = _class_name(record)
         if cls_name == "HostDBSCAN":
-            var data = py_get(fields, "prediction_data")
+            var data = py_get(fields, nk[].k_prediction_data)
             if data is None or not Bool(py=data):
                 var unavailable = _unavailable(record, name)
                 raise unavailable
         elif cls_name == "HostAgglomerativeClustering" or cls_name == "HostSpectralClustering":
-            var data = py_get(fields, "prediction_data")
-            var fit_x = py_get(fields, "_fit_X")
+            var data = py_get(fields, nk[].k_prediction_data)
+            var fit_x = py_get(fields, nk[].k__fit_X)
             if (data is None or not Bool(py=data)) and fit_x is None:
                 var unavailable = _unavailable(record, name)
                 raise unavailable
         elif cls_name == "HostSVC" and method == 1:
-            var svc = context["host_archive_predict_svc_context"]
+            var svc = py_item(context, nk[].k_host_archive_predict_svc_context)
             host_svc_probability(model, fields, key, svc)
         return record
     raise Error("TypeError: saved host class has no connected native prediction schema")
@@ -92,20 +95,21 @@ def _archive_prediction_record(model: PythonObject, method: Int, context: Python
 
 def host_archive_predict(path: PythonObject, source: PythonObject, probability: Bool,
                          context: PythonObject) raises -> PythonObject:
+    var nk = host_tree_archive_keys()
     var model = host_archive_build(path, context, PythonObject(None), False)
     var method = 1 if probability else 0
     var record = _archive_prediction_record(model, method, context)
     var recipe = record[4][method]
     var b = native_loaded_module("builtins")
-    if py_contains(context["host_archive_predict_mode_checked"], record[2]):
+    if py_contains(py_item(context, nk[].k_host_archive_predict_mode_checked), record[2]):
         # _HostBound._bind's numeric-mode refusal, which the saved class's
         # public method reached before reading X.
-        var mode = py_get(py_fields(model), "numeric_mode")
+        var mode = py_get(py_fields(model), nk[].k_numeric_mode)
         if mode is not None and (py_type(mode) is not b.str or String(mode) != "identical"):
             raise Error("mojolearn: " + _class_name(record) + " runs IDENTICAL only on the host; this model was saved " + family_repr(mode))
     if py_type(recipe[0]) is b.str:
         raise Error(String(recipe[0]))
-    if py_type(recipe[0]) is not context["host_archive_predict_entry_type"]:
+    if py_type(recipe[0]) is not py_item(context, nk[].k_host_archive_predict_entry_type):
         raise Error("TypeError: saved host prediction requires a compiled native owner")
     var arguments = Python.list()
     var words = recipe[3]
@@ -120,13 +124,13 @@ def host_archive_predict(path: PythonObject, source: PythonObject, probability: 
                 # A host binding that is not built or failed its read-back
                 # at import: the refusal the old lazy `_bind` raised.
                 raise Error(String(value))
-            if py_type(value) is context["host_archive_predict_module_type"]:
+            if py_type(value) is py_item(context, nk[].k_host_archive_predict_module_type):
                 _check_module(value, context)
             _ = py_call(arguments.append, value)
         else:
             raise Error("TypeError: malformed saved host prediction recipe")
-    var knn = py_get(context, "host_archive_predict_knn_binding")
-    if String(recipe[1]).startswith("archive_knn_") and py_type(knn) is context["host_archive_predict_module_type"]:
+    var knn = py_get(context, nk[].k_host_archive_predict_knn_binding)
+    if String(recipe[1]).startswith("archive_knn_") and py_type(knn) is py_item(context, nk[].k_host_archive_predict_module_type):
         _check_module(knn, context)
     var result = family_call(recipe[0], model, recipe[1], py_call(b.tuple, arguments), recipe[2])
     _ = model^
