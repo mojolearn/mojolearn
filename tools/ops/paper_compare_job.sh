@@ -969,8 +969,7 @@ if part tg-install || part tg-prep || part tg-smoke || part tg-board || part tg-
                 fi
                 # a resumed submit: a unit whose arm board holds every race and whose base board every base race
                 # is done needs no process and no venv
-                st="${ids%.txt}.stored.txt"
-                if [ -s "$st" ]; then grep -vFx -f "$st" "$use" > "$use.base" || true; else cp "$use" "$use.base"; fi
+                cp "$use" "$use.base"
                 if [ "$(races_left "$use" "$RES/board-tg-ab-$arm-$rows/board.json")" -eq 0 ] 2> /dev/null \
                         && [ "$(races_left "$use.base" "$RES/board-tg-ab-$arm-base-$rows/board.json")" -eq 0 ] 2> /dev/null; then
                     if [ "$(nlines "$use")" -eq 0 ]; then say "owed $arm $rows: NOT TIMED, none of its races passed its smoke (logs/pass-ids-tg-ab-$arm.log; timed-check names it)"
@@ -990,14 +989,20 @@ if part tg-install || part tg-prep || part tg-smoke || part tg-board || part tg-
                 fi
                 $PY tools/ops/targeted_rows.py chunks --ids "$use" --chunk-s "${PC_TG_CHUNK_S:-600}" \
                     --out-dir "$TGO/chunks-$arm-$rows" | tail -n 1
-                # STORED BASE (measure_owed.py; Andrew, 2026-11-17): the unit's races with a stored base time run
-                # the arm only, its rounds capped at that time; the base (the candidate) runs the others
-                sb="${ids%.txt}.base.json"; st="${ids%.txt}.stored.txt"; cap=()
-                [ -f "$sb" ] && cap=(--race-round-seconds "$sb")
+                # IN-JOB BASE CAP (measure_owed.py; lane fx-same-pod-prior, 2026-11-19, replacing the 2026-11-17
+                # STORED BASE from another host): base and arm back to back on every race; a race of the unit's
+                # .cap.txt has the arm's rounds capped at the time the base just took for it in this job
+                capf="${ids%.txt}.cap.txt"
                 for c in "$TGO/chunks-$arm-$rows"/chunk-*.txt; do
                     [ -f "$c" ] || continue
-                    if [ -s "$st" ]; then grep -vFx -f "$st" "$c" > "$c.base" || true; else cp "$c" "$c.base"; fi
+                    cp "$c" "$c.base"
                     tg_board candidate "$c.base" "$RES/board-tg-ab-$arm-base-$rows" "$abrows" "${SJT[@]}"; r=$?; [ $r -gt $rc ] && rc=$r
+                    cap=()
+                    if [ -s "$capf" ]; then
+                        $PY tools/measure_owed.py base-caps --board "$RES/board-tg-ab-$arm-base-$rows/board.json" \
+                            --ids "$c" --cap-ids "$capf" --out "$c.caps.json" | tail -n 1
+                        [ -s "$c.caps.json" ] && cap=(--race-round-seconds "$c.caps.json")
+                    fi
                     tg_board "$arm" "$c" "$RES/board-tg-ab-$arm-$rows" "$abrows" "${SJT[@]}" ${cap[@]+"${cap[@]}"}; r=$?; [ $r -gt $rc ] && rc=$r
                 done
                 EV_LEFT_MB=$(( EV_LEFT_MB - 2 * $(nlines "$use") * ${PC_EVIDENCE_MB_PER_RACE:-40} ))
@@ -1248,8 +1253,16 @@ if [ "$OWED" = 1 ] && part owed && [ -s "$RES/plan-owed/units.tsv" ]; then
         [ "$arm" = candidate ] && [ "$rows" = full ] && continue   # timed with the paper races (part board)
         [ "$arm" = prior ] && [ "$rows" = full ] && continue       # timed in board-prior-$LAST_PRIOR (part prior)
         [ -n "${PC_OWED_ARMS:-}" ] && [[ ",$PC_OWED_ARMS," != *",$arm,"* ]] && continue   # a split submit
-        # a stored-base unit (measure_owed.py STORED BASE): its races' rounds capped at the stored base time
-        cap=(); [ -f "${ids%.txt}.base.json" ] && cap=(--race-round-seconds "${ids%.txt}.base.json")
+        # IN-JOB BASE CAP (measure_owed.py, 2026-11-19): a B unit's capped races stop at the time this job's base
+        # (the candidate's board, timed before: part board for full rows, its own unit first in units.tsv otherwise)
+        # took for them
+        cap=()
+        if [ -s "${ids%.txt}.cap.txt" ]; then
+            bb="$RES/board-candidate-$rows/board.json"; [ "$rows" = full ] && bb="$RES/board/board.json"
+            $PY tools/measure_owed.py base-caps --board "$bb" --ids "$ids" --cap-ids "${ids%.txt}.cap.txt" \
+                --out "${ids%.txt}.caps.json" | tail -n 1
+            [ -s "${ids%.txt}.caps.json" ] && cap=(--race-round-seconds "${ids%.txt}.caps.json")
+        fi
         if [ "$rows" = full ]; then
             # full rows: only the races whose smoke passed (the gate keys on family/lane/dataset, any venv)
             grep -Fx -f "$PASS_IDS" "$ids" > "$ids.pass" 2> /dev/null || true
