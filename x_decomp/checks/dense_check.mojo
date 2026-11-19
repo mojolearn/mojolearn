@@ -213,9 +213,12 @@ def run_checks() raises:
     require_separates("5309 orth route (TSQR vs two passes)", count_diff_f32(wq, want2[0]))
     var qd = q.copy()
     DevExec.orth(ptr(qd), mm, l)
-    same("5309 orth device", count_diff_f32(qd, wq))
     var qh = q.copy()
     HostExec.orth(ptr(qh), mm, l)
+    # the two columns against each other first, so a failure of the lines
+    # after it is the oracle's restatement and not a column
+    same("5309 orth device vs host replay", count_diff_f32(qd, qh))
+    same("5309 orth device", count_diff_f32(qd, wq))
     same("5309 orth host", count_diff_f32(qh, wq))
     tr.record_list_f32("x_decomp.orth", qd)
     # The TSQR orth beyond what the oracle restates (three leaf blocks, the
