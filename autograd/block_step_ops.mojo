@@ -980,6 +980,31 @@ struct BlockStepScratch(Movable):
     def count(self) -> Int:
         return len(self.m1) + len(self.m2) + len(self.m3) + len(self.attn)
 
+    def park_arenas_m1(mut self, i: Int):
+        """Entry `i` is about to be dropped: its arena moves to
+        `parked_arena`, which `release_parked` frees after every parked view.
+        fx-leftovers-product (2026-11-19): dropping the entry freed the arena
+        while a parked run's views of it (and, under
+        MAMBA_FAST_DECODE_STAGE_ARENA, every parked decode token's stages)
+        were still parked: storage freed before its views, and before the
+        stream that reads them drained."""
+        if self.m1[i].held_arena:
+            self.parked_arena.append(self.m1[i].held_arena.take())
+
+    def park_arenas_m2(mut self, i: Int):
+        """`park_arenas_m1` for a Mamba-2 entry (held and decode arenas)."""
+        if self.m2[i].held_arena:
+            self.parked_arena.append(self.m2[i].held_arena.take())
+        if self.m2[i].dec_arena:
+            self.parked_arena.append(self.m2[i].dec_arena.take())
+
+    def park_arenas_m3(mut self, i: Int):
+        """`park_arenas_m1` for a Mamba-3 entry (held and decode arenas)."""
+        if self.m3[i].held_arena:
+            self.parked_arena.append(self.m3[i].held_arena.take())
+        if self.m3[i].dec_arena:
+            self.parked_arena.append(self.m3[i].dec_arena.take())
+
     def forget(mut self, addr: Int):
         """Drop every entry built over the session buffer at `addr` (its
         weights or its state were written from outside a step, or freed)."""
@@ -990,16 +1015,19 @@ struct BlockStepScratch(Movable):
         var i = len(self.m1) - 1
         while i >= 0:  # driver-loop: over resident Mamba-1 blocks
             if self.m1[i].w_addr == addr or self.m1[i].s_addr == addr:
+                self.park_arenas_m1(i)
                 _ = self.m1.pop(i)
             i -= 1
         i = len(self.m2) - 1
         while i >= 0:  # driver-loop: over resident Mamba-2 blocks
             if self.m2[i].w_addr == addr or self.m2[i].s_addr == addr or self.m2[i].q_addr == addr:
+                self.park_arenas_m2(i)
                 _ = self.m2.pop(i)
             i -= 1
         i = len(self.m3) - 1
         while i >= 0:  # driver-loop: over resident Mamba-3 blocks
             if self.m3[i].w_addr == addr or self.m3[i].s_addr == addr or self.m3[i].q_addr == addr:
+                self.park_arenas_m3(i)
                 _ = self.m3.pop(i)
             i -= 1
         i = len(self.attn) - 1
@@ -1009,6 +1037,13 @@ struct BlockStepScratch(Movable):
             i -= 1
 
     def clear(mut self):
+        # the arenas outlive the parked views of them (`park_arenas_m1`)
+        for i in range(len(self.m1)):  # driver-loop: over resident Mamba-1 blocks
+            self.park_arenas_m1(i)
+        for i in range(len(self.m2)):  # driver-loop: over resident Mamba-2 blocks
+            self.park_arenas_m2(i)
+        for i in range(len(self.m3)):  # driver-loop: over resident Mamba-3 blocks
+            self.park_arenas_m3(i)
         self.m1.clear()
         self.m2.clear()
         self.m3.clear()
