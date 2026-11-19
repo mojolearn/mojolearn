@@ -22,12 +22,8 @@ from x_decomp.checks.seam_util import (
     seam_fixture,
     zeros,
 )
-from decomposition.host.pca_full_oracle import host_one_sided_jacobi_svd, host_qr_factor
-from x_decomp.cells import X_DECOMP_SVD_SWEEPS, X_DECOMP_SVD_TOL
+from decomposition.host.pca_full_oracle import host_qr_factor
 from x_decomp.qr_sliced import QS_ROWS
-from x_decomp.host_jacobi import fast_jacobi_eigh, fast_one_sided_jacobi_svd
-from decomposition.host.pca_oracle import host_jacobi_eigh
-from decomposition.checks.jacobi_eigh_device import JACOBI_SWEEPS, JACOBI_TOL
 from x_decomp.device import DevExec
 from x_decomp.host_qr import fast_qr_factor
 from x_decomp.host import HostExec
@@ -82,40 +78,15 @@ def run_checks() raises:
         var want_r = host_qr_factor(qa2, qm, qn)
         var got_r = fast_qr_factor(ptr(qa), qm, qn)
         same("host QR slices " + String(qm) + " x " + String(qn), count_diff_f32(got_r, want_r))
-    # ---- the host's transposed one-sided Jacobi SVD (x_decomp/host_jacobi.mojo)
-    # == host_one_sided_jacobi_svd: values, V and the sweep count
-    var svd_ns = [9, 40, 300]
-    for sh in range(len(svd_ns)):
-        var sn = svd_ns[sh]
-        var sa = seam_fixture(sn, sn, UInt64(70 + sh))
-        var sa2 = sa.copy()
-        var want = host_one_sided_jacobi_svd(sa2, sn, X_DECOMP_SVD_SWEEPS, X_DECOMP_SVD_TOL)
-        var got = fast_one_sided_jacobi_svd(sa, sn, X_DECOMP_SVD_SWEEPS, X_DECOMP_SVD_TOL)
-        same("host Jacobi SVD values n " + String(sn), count_diff_f32(got.s, want.s))
-        same("host Jacobi SVD vectors n " + String(sn), count_diff_f32(got.v, want.v))
-        if got.executed != want.executed or got.converged != want.converged:
-            raise Error("host Jacobi SVD sweep count differs at n " + String(sn))
-    # ---- the host's two-sided Jacobi eigh (x_decomp/host_jacobi.mojo) ==
-    # host_jacobi_eigh: the consumed matrix (eigenvalues on its diagonal),
-    # the vectors and the sweep count; symmetric fixtures (a Gram matrix)
-    for sh in range(len(svd_ns)):
-        var en = svd_ns[sh]
-        var g = seam_fixture(en + 3, en, UInt64(80 + sh))
-        var sym = List[Float32](length=en * en, fill=Float32(0))
-        for i in range(en):
-            for j in range(en):
-                var acc = Float32(0)
-                for r in range(en + 3):
-                    acc += g[r * en + i] * g[r * en + j] * Float32(1e-4)
-                sym[i * en + j] = acc
-        var ea = sym.copy()
-        var eb = sym.copy()
-        var we = host_jacobi_eigh(ea, en, JACOBI_SWEEPS, Float32(JACOBI_TOL))
-        var ge = fast_jacobi_eigh(eb, en, JACOBI_SWEEPS, Float32(JACOBI_TOL))
-        same("host Jacobi eigh matrix n " + String(en), count_diff_f32(eb, ea))
-        same("host Jacobi eigh vectors n " + String(en), count_diff_f32(ge.vectors, we.vectors))
-        if ge.executed != we.executed or ge.converged != we.converged:
-            raise Error("host Jacobi eigh sweep count differs at n " + String(en))
+    # (2026-11-19, lane fx-gpu-checks-xfam) The two cases that held
+    # x_decomp/host_jacobi.mojo (fast_one_sided_jacobi_svd, fast_jacobi_eigh)
+    # to the serial oracles are gone with that module: no product path had
+    # called it since the host column took the round-robin order
+    # (x_decomp/rr_svd.mojo, rr_eigh; e07c50c348 and c2f2a2ae86, 2026-10-02),
+    # and its SVD case compared a replay that skips insignificant rotations
+    # with host_one_sided_jacobi_svd at its default skip_insignificant=False
+    # (a switch since 1d5708ba86), so it could not pass. The host column's
+    # SVD is held to the device below ("bounded device svd").
     # ---- the host LU's SIMD row eliminations (x_decomp/host_simd.mojo) at a
     # size past the vector width, against the oracle
     var ln = 100
