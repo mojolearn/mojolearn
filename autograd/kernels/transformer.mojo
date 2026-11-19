@@ -2561,13 +2561,14 @@ struct LlamaBackwardStages(Movable):
         self.attn_bwd_fused_off = False
         self.fanin_joined = False
         # lane fx-gemm-dx-concat: allocated at size only under the arm.
-        var cat_d_n = 1
-        var cat_w_n = 1
+        # Without it they are one-element views of `tmp0` (the form
+        # `d_o_proj_out` takes above): no allocation, no fill, no launch.
         comptime if BWD_GEMM_DX_CONCAT:
-            cat_d_n = m * (qw + 2 * kw)
-            cat_w_n = (qw + 2 * kw) * dm
-        self.dx_cat_d = _zeros[False](ctx, cat_d_n)
-        self.dx_cat_w = _zeros[False](ctx, cat_w_n)
+            self.dx_cat_d = _zeros[False](ctx, m * (qw + 2 * kw))
+            self.dx_cat_w = _zeros[False](ctx, (qw + 2 * kw) * dm)
+        else:
+            self.dx_cat_d = self.tmp0.create_sub_buffer[DType.float32](0, 1)
+            self.dx_cat_w = self.tmp0.create_sub_buffer[DType.float32](0, 1)
         self.dx_cat_dq = 0
         self.dx_cat_wq = 0
         self.dx_cat_nq = 0
