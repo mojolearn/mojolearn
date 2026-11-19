@@ -71,9 +71,14 @@ comptime PROGRAM_PARAM_STATE_WORDS = 2
 # RMSNorm, rotary, projection and ascending-key softmax; 81..84 the block step
 # ops (autograd/block_step_ops.mojo), 85..86 the generation pick and decode
 # condition (autograd/generation_ops.mojo, lane x45c), version 3 records
-# only. Code 47 stays reserved.
+# only. Code 47 stays reserved. 87..88 (lane fx-ops-session-blocks,
+# 2026-11-18): the chunked LM head loss and the small MLP, now public
+# Session operations (`lm_head_loss`, `small_mlp`), so a program captured
+# from them and saved loads again; `program_words` already wrote them as
+# version 3 records (any code above PROGRAM_MAX_CODE_V2) and the loader
+# refused them. Codes 90, 91 and 93 have no public name and stay refused.
 comptime PROGRAM_MAX_CODE_V2 = 80
-comptime PROGRAM_MAX_CODE = 86
+comptime PROGRAM_MAX_CODE = 88
 
 
 struct OpsLog(Movable):

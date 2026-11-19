@@ -61,9 +61,18 @@ cross-row fold inside the bodies is a gemm v1 call and every per-row stage
 runs over host tasks, so a run uses every core; consecutive layers are
 dependent and run in order.
 
-Recording: the ops run in an inference session; a family lane that trains through a step op
-records it with `Tape.custom_nd` over the stage buffers its rule reads
-(`rules_mamba`, `rules_mamba3`, `rules_transformer`), see the API note.
+Recording: in a recording session (`OpsSession._block_step`, lanes x7 and
+x56d) every step op is the zero-state prefill with its stages kept in the
+pair's entry, recorded as ONE custom node over [x, weights]
+(`attn_step_train_run`, `mamba_step_train_run` below); `OpsSession.backward`
+differentiates it through StepOpRules (autograd/rules_step_ops.mojo). The
+packed weights take a gradient when made with
+`OpsSession.upload_block_grad(..., requires_grad=True)`.
+
+Public names (lane fx-ops-session-blocks, 2026-11-18): `Session.mamba_block`
+/ `Session.mamba_step` (codes 81-83) and `Session.attention_block` /
+`Session.attention_step` (code 84, the default block options), through
+autograd/ops_block_frontend.mojo.
 """
 from std.memory import bitcast
 from std.sys.compile import is_defined
