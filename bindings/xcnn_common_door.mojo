@@ -252,7 +252,7 @@ def xcnn_at(sequence: PythonObject, index: Int) raises -> PythonObject:
     """`sequence[index]`: a borrowed read of an exact tuple's item; anything
     else (and an index out of range) takes the subscript and raises what it
     raised."""
-    if index >= 0 and _xcnn_exact_ptr(sequence._obj_ptr, XT_TUPLE):
+    if index >= 0 and xcnn_exact(sequence, XT_TUPLE):
         var t = cpython_table()
         if index < t[].PyTuple_Size(sequence._obj_ptr):
             return PythonObject(from_borrowed=t[].PyTuple_GetItem(sequence._obj_ptr, index))
