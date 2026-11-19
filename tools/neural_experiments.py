@@ -55,7 +55,6 @@ EXPERIMENTS = {
     "speculative_attn": {"MOJOLEARN_ATTN_SPECULATIVE": "1"},
     "no_layer_sync": {"MOJOLEARN_BYTE_LM_LAYER_SYNC": "0"},
     "mamba3_no_retain_stages": {"MOJOLEARN_MAMBA3_RETAIN_STAGES": "0"},
-    "norm_dw_own_ws": {"MOJOLEARN_TRANSFORMER_NORM_DW_OWN_WS": "1"},
     # the S16 q/k backward arms (lane/neural-net-experiment, the S16 pass):
     # the default is `regs` since lane/neural-pass4 (`regs2` before); each
     # arm is the same chains in the same order
@@ -75,7 +74,7 @@ EXPERIMENTS = {
                "MOJOLEARN_BYTE_LM_LAYER_SYNC": "0"},
 }
 SETS = {
-    "priority": ["baseline", "mamba3_no_retain_stages", "norm_dw_own_ws"],
+    "priority": ["baseline", "mamba3_no_retain_stages"],
     # the S16 arms on the Mamba lanes (run with --lane mamba3-forward --lane
     # samba-train-step, or the timing tool for the per-kernel walls)
     "s16": ["baseline", "s16_naive", "s16_shared", "s16_regs2", "s16_smem48"],
