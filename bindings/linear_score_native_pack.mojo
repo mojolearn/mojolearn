@@ -8,6 +8,7 @@
 # as the Python path it replaces, so the score keeps its bits.
 # The PACK half of the former `bindings/linear_score_native.mojo` (fence-flip-2 split, 2026-11-12);
 # the UNPACK half is `bindings/linear_score_native_unpack.mojo`.
+from core.mode_answer import answer_mode_word
 from std.math import isfinite
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
@@ -33,6 +34,7 @@ def _linear_mode(fields: PythonObject, context: PythonObject) raises -> PythonOb
         mode_name = String(py_call(py_call(mode.strip).lower))
     if mode_name != "identical" and mode_name != "fast":
         raise Error("numeric_mode must be fast, identical or None")
+    answer_mode_word(mode_name)
     return PythonObject(mode_name)
 
 

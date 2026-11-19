@@ -11,6 +11,8 @@ layer methods are one call each into `xcnn_native_call`, which runs the same
 compiled entries with the same argument words and residency bits as the
 Python bodies it replaces.
 """
+from core.mode_answer import answer_mode_word
+from bindings.mode_answer_door import answer_mode_object
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_fields, py_contains, py_item
 from bindings.py_cpython_table import cpython_table, CPythonTable
@@ -375,6 +377,8 @@ def xcnn_entries(fields: PythonObject, context: PythonObject) raises -> PythonOb
         key = PythonObject(text)
     if text != "identical" and text != "fast":
         raise Error("numeric_mode must be fast, identical or None")
+    answer_mode_object(key, text)
+    answer_mode_word(text)
     var entries = py_item(xcnn_item(context, XK_BINDINGS), key)
     if xcnn_exact(entries, XT_STR):
         raise Error(String(py=entries))

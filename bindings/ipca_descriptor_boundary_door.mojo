@@ -3,6 +3,7 @@
 
 The typed connection records are in `x_decomp/ipca_descriptor_boundary_run.mojo`; this door admits
 the provider, keeps its pin and releases the GIL around each typed driver call."""
+from core.mode_answer import answer_mode_word
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from core.shared_slot import SharedSlot
@@ -35,6 +36,7 @@ def ipca_connection(model: PythonObject, fields: PythonObject, context: PythonOb
         name = String(py_call(py_call(mode.strip).lower))
     if name != "identical" and name != "fast":
         raise Error("numeric_mode must be fast, identical or None")
+    answer_mode_word(name)
     var table = context["ipca_bindings"]
     if py_type(table) is not py_type(Python.dict()):
         raise Error("TypeError: IPCA binding tables require native dictionaries")

@@ -10,6 +10,7 @@ from core.sha256_file import sha256_file
 from bindings.optimizer_public_words_unpack import stash_python_error, optimizer_python_error
 from bindings.py_cpython_table import cpython_table
 from bindings.py_optional import py_or_none, py_present
+from bindings.mode_answer_door import connect_mode_answer_words
 
 
 def _text(value: PythonObject, name: String, optional: Bool = False) raises -> PythonObject:
@@ -468,6 +469,11 @@ def backend_public_operation(operation: String, args: PythonObject, context: Pyt
     var fields = context["backend_fields"]
     if operation == "gpu_arch" or operation == "gpu_arch_how":
         return _gpu_arch(fields, operation == "gpu_arch_how")
+    if operation == "connect_mode_answer":
+        # Import only: hand the selector's one decision to every door's mode
+        # admission (core/mode_answer.mojo).
+        connect_mode_answer_words(py_get(fields, "_FAST_ANSWER") is not None, PythonObject("identical"))
+        return PythonObject(None)
     var mode = _mode(fields)
     if operation == "set_default_mode":
         if len(args) != 1:

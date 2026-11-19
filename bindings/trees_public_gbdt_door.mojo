@@ -18,6 +18,7 @@
 # binary fallback keeps the raw scores in the call and widens them for
 # `gbdt_sigmoid_pair` without a Python `astype`; the adapters' margins go
 # from the predict entry to the binary output kernel without a Python step.
+from core.mode_answer import answer_mode_word
 from std.python import Python, PythonObject
 from bindings.base_helpers_key_unpack import base_helpers_key
 from bindings.base_helpers_released_unpack import base_reduce_stat, base_check_indices_i64, base_bincount_i64
@@ -81,10 +82,13 @@ def gbdt_mode(fields: PythonObject, context: PythonObject) raises -> String:
         # (p3-trees).
         var exact = String(py=mode)
         if exact == "fast" or exact == "identical":
+            answer_mode_word(exact)
             return exact
     if not Bool(py=py_call(b.isinstance, mode, b.str)):
         raise Error("numeric_mode must be fast, identical or None")
-    return gbdt_mode_checked(String(py_call(py_call(mode.strip).lower)))
+    var checked = gbdt_mode_checked(String(py_call(py_call(mode.strip).lower)))
+    answer_mode_word(checked)
+    return checked
 
 
 def gbdt_table(fields: PythonObject, context: PythonObject) raises -> PythonObject:

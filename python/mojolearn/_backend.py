@@ -437,10 +437,15 @@ _CODE_MODE = {v: k for k, v in _MODE_CODE.items()}
 #
 # What does NOT change: Apple (its `fast` set, or its refusal when none is
 # built); a non-Apple install that does carry fast binaries (the historical
-# 'fast identical' layout, kept for reproduction) still loads them; a
-# per-estimator `numeric_mode='fast'` still names the fast set and is refused
-# where none is built, because that word is read by each family's compiled
-# door (about 300 sites) and is not a selection.
+# 'fast identical' layout, kept for reproduction) still loads them.
+#
+# A PER-ESTIMATOR `numeric_mode='fast'` is answered in the compiled doors, not
+# here: each door admits the word and then calls core/mode_answer.mojo, which
+# replaces an admitted `fast` by `identical` where `_FAST_ANSWER` says so
+# (stored once at import by `_native_backend_public.connect`). The estimator's
+# attribute and `get_params()` keep reading 'fast'. `binding()`, `load_set()`
+# and the mode-keyed tables are untouched: their 'fast' entries still hold
+# this install's refusal, which a door that is not converted yet raises.
 #
 # THE SECOND STEP (inert today). When a relaxation is measured on a vendor, a
 # second set is built for it with `-D MOJOLEARN_MODE_FAST_ROWS`

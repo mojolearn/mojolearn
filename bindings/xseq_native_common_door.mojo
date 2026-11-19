@@ -9,6 +9,7 @@ Python connects the compiled `_mojolearn_x_sequence` entries once, at import
 into `xseq_native_call`, which runs the same compiled entries, in the same
 order and with the same arguments, as the Python bodies it replaces.
 """
+from bindings.mode_answer_door import answer_mode_object
 from std.ffi import c_int
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
@@ -50,12 +51,15 @@ def xseq_mode(fields: PythonObject, context: PythonObject) raises -> PythonObjec
     if py_type(mode) is b.str:
         var text = String(py=mode)
         if text == "identical" or text == "fast":
+            answer_mode_object(mode, text)
             return mode
     if not Bool(py=py_call(b.isinstance, mode, b.str)):
         raise Error("numeric_mode must be fast, identical or None")
     mode = py_call(py_call(b.getattr, py_call(py_call(b.getattr, mode, "strip")), "lower"))
-    if String(py=mode) != "identical" and String(py=mode) != "fast":
+    var mode_word = String(py=mode)
+    if mode_word != "identical" and mode_word != "fast":
         raise Error("numeric_mode must be fast, identical or None")
+    answer_mode_object(mode, mode_word)
     return mode
 
 

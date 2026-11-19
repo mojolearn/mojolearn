@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Whole catalog operation over exported artifacts and retained native inputs."""
+from bindings.mode_answer_door import answer_mode_object
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
@@ -218,8 +219,10 @@ def _catalog_mode(value: PythonObject, context: PythonObject) raises -> PythonOb
             mode = context["default_mode"]
     _ = model_string(mode)
     var normalized = py_call(py_call(mode.strip).lower)
-    if String(normalized) != "identical" and String(normalized) != "fast":
+    var normalized_word = String(normalized)
+    if normalized_word != "identical" and normalized_word != "fast":
         raise Error("ValueError: numeric_mode must be fast, identical or None")
+    answer_mode_object(normalized, normalized_word)
     return normalized
 
 

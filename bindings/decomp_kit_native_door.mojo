@@ -8,6 +8,7 @@
 # (decomp_kit_publish / decomp_kit_out_shape) and the model's resident records.
 # The RUN half, python/mojolearn/_expansion_decomp.py's `_Kit` / `_M` with no
 # Python, is bindings/decomp_kit_run.mojo (DKit).
+from core.mode_answer import answer_mode_word
 from std.python import Python, PythonObject
 from core.resident_upload_count import RUC_DECOMP_KIT, resident_upload_note
 from bindings.py_cpython_table import cpython_table
@@ -124,6 +125,7 @@ def decomp_entries(mode_value: PythonObject, context: PythonObject) raises -> Py
         name = String(py=py_call(py_call(mode.strip).lower))
     if name != "identical" and name != "fast":
         raise Error("numeric_mode must be fast, identical or None")
+    answer_mode_word(name)
     var entries = context["decomp_bindings"][name]
     if py_type(entries) is b.str:
         raise Error(String(py=entries))

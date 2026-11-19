@@ -12,6 +12,7 @@
 # The fitted centering state is kept as float32 vectors (`_x_mean`,
 # `_x_std`, `_y_mean`, `_y_std`, scikit-learn's names), the values the
 # Python shell held as device matrices.
+from core.mode_answer import answer_mode_word
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
 from std.python._cpython import PyObjectPtr
@@ -406,6 +407,7 @@ def _score_binding(fields: PythonObject, context: PythonObject) raises -> Python
         if py_type(mode) is not b.str:
             raise Error("numeric_mode must be 'fast' or 'identical'")
         expected = String(py=py_call(py_call(mode.strip).lower))
+    answer_mode_word(expected)
     var module = estimator_binding_mode(mode, "_mojolearn_metrics", context, False)
     var reader = neural_descriptor_entry(module, "metrics_numeric_mode", False)
     if reader is None:

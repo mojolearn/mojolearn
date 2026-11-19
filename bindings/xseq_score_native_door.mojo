@@ -12,6 +12,8 @@ against y on the metrics binding of the model's numeric mode, the kernel
 
 The same kernels in the same order, so the score keeps its bits.
 """
+from core.mode_answer import answer_mode_word
+from bindings.mode_answer_door import answer_mode_object
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_contains
@@ -76,6 +78,9 @@ def _metrics_key(model: PythonObject, context: PythonObject) raises -> MetricsEn
             raise Error("ValueError: numeric_mode must be 'fast' or 'identical'")
     var expected = context["backend_fields"]["_DEFAULT_MODE"] if mode is None else mode
     expected = py_call(py_call(expected.strip).lower)
+    var expected_word = String(py=expected)
+    answer_mode_object(expected, expected_word)
+    answer_mode_word(expected_word)
     var table = context["xseq_metrics"]
     var record = table[expected]
     if py_type(record) is b.str:
@@ -83,7 +88,7 @@ def _metrics_key(model: PythonObject, context: PythonObject) raises -> MetricsEn
     # The compiled-mode word the bridge read once at import replaced the
     # per-call `metrics_numeric_mode` Python call (lane calltable-xseq).
     var actual = Int(py=record[0])
-    xseq_run_metrics_mode(String(py=expected), actual)
+    xseq_run_metrics_mode(expected_word, actual)
     return MetricsEntryKey(actual, Int(py=record[1]))
 
 

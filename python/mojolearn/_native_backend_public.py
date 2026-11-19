@@ -167,6 +167,8 @@ def connect(package):
                     native_function_type=BuiltinFunctionType,
                     readback_skip_errors=(ImportError, AttributeError),
                     **_report_context(package))
+    # Once, at import: every door's mode admission reads this stored answer.
+    _NATIVE("connect_mode_answer", (), _CONTEXT)
     package.runtime_report = runtime_report
     for name in ("gpu_arch", "gpu_arch_how", "numeric_mode", "vendor", "set_default_mode"):  # glue: install one-call public metadata wrappers after provider setup
         fn = globals()[name]

@@ -40,6 +40,17 @@ def test_capture_default_refit_reset_pickle(cls):
     assert restored._fit_numeric_mode == default
     np.testing.assert_array_equal(np.asarray(restored.predict(X)), first)
     model.numeric_mode = _other(default)
+    if _backend._FAST_ANSWER == default and _other(default) == 'fast':
+        # Off Apple with no fast set, the identical set answers the word
+        # `fast` (core/mode_answer.mojo): the same set fitted this forest, so
+        # it predicts and refits, and the parameter reads back 'fast'.
+        np.testing.assert_array_equal(np.asarray(model.predict(X)), first)
+        model.fit(X, y)
+        assert model._fit_numeric_mode == default
+        assert model.get_params()['numeric_mode'] == 'fast'
+        np.testing.assert_array_equal(np.asarray(model.predict(X)), first)
+        model.set_params(numeric_mode='identical')
+        return
     with pytest.raises(ValueError, match='was fitted'):
         model.predict(X)
     if _backend._CPU_ONLY is not None and _other(default) != 'identical':

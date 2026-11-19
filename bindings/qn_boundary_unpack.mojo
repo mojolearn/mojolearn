@@ -6,6 +6,7 @@
 # buffer alive; PACK publishes the fitted attributes. The registered door,
 # bindings/qn_native.mojo, calls UNPACK, releases the GIL for RUN, then PACK
 # (lane doorsplit-linear, 2026-11-11).
+from core.mode_answer import answer_mode_word
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
@@ -38,6 +39,7 @@ def _qn_key(fields: PythonObject, context: PythonObject) raises -> EstimatorsEnt
         mode_name = String(py_call(py_call(mode.strip).lower))
     if mode_name != "identical" and mode_name != "fast":
         raise Error("numeric_mode must be fast, identical or None")
+    answer_mode_word(mode_name)
     var entries = context["qn_bindings"][PythonObject(mode_name)]
     if py_type(entries) is b.str:
         raise Error("ImportError: " + String(entries))
