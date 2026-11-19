@@ -79,10 +79,13 @@ def test_subset_matches_existing_native_constructor_plans_and_inheritance():
 
 def test_owned_fitted_state_covers_all_linear_owner_writes():
     owner = (ROOT / 'bindings/x_linear_native_door.mojo').read_text()
-    writes = set(re.findall(r'py_setitem\(fields, "([^"]+)"', owner))
+    # The owner writes through its held name keys (bindings/py_keys.mojo):
+    # `nk[].k_<name>` is the key of the field `<name>`.
+    writes = set(re.findall(r'py_setitem\(fields, nk\[\]\.k_(\w+)', owner))
+    assert writes
     assert writes <= set(constants()['_FITTED_FIELDS'])
     assert not [line for line in owner.splitlines() if 'py_setitem(fields,' in line
-                and not re.search(r'py_setitem\(fields, "', line)]
+                and not re.search(r'py_setitem\(fields, nk\[\]\.k_\w+', line)]
 
 
 def test_connection_never_constructs_or_calls_estimators():
