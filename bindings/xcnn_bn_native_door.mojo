@@ -30,7 +30,11 @@ from x_cnn.bn_run import (
     bn_run_host_dims, bn_run_check_saved, bn_run_check_nonneg, bn_run_forward, bn_run_forward_m, bn_run_backward,
     bn_run_flags, bn_run_dx_shape_check,
 )
-from bindings.xcnn_keys_unpack import xcnn_keys
+from bindings.xcnn_keys_unpack import (
+    xcnn_keys, XCNN_OPN_BN_BACKWARD, XCNN_OPN_BN_FIT, XCNN_OPN_BN_FORWARD, XCNN_OPN_BN_GRAD_GET,
+    XCNN_OPN_BN_GRAD_SET, XCNN_OPN_BN_INIT, XCNN_OPN_BN_RUNNING_GET, XCNN_OPN_BN_RUNNING_SET, XCNN_OPN_BN_TRAIN,
+    XCNN_OPN_BN_TRANSFORM,
+)
 from bindings.py_balanced import py_item
 
 
@@ -467,49 +471,49 @@ def _bn_backward_admitted(layer: PythonObject, fields: PythonObject, gradient: P
     return result
 
 
-def xcnn_bn_layers(layer: PythonObject, operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    if operation == "bn_init":
+def xcnn_bn_layers(layer: PythonObject, operation: Int, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    if operation == XCNN_OPN_BN_INIT:
         return _bn_init(layer, args, context)
     var fields = _bn_admit(layer, context)
-    if operation == "bn_train":
+    if operation == XCNN_OPN_BN_TRAIN:
         neural_plain_value(args[0], 0, context)
         _set(fields, "training", PythonObject(Bool(py=args[0])))
         return layer
-    if operation == "bn_running_get" or operation == "bn_running_set":
+    if operation == XCNN_OPN_BN_RUNNING_GET or operation == XCNN_OPN_BN_RUNNING_SET:
         var name = String(args[0])
         if name != "running_mean_" and name != "running_var_":
             raise Error("ValueError: invalid batch normalization running field")
         _sync_running(fields, context)
-        if operation == "bn_running_set":
+        if operation == XCNN_OPN_BN_RUNNING_SET:
             sequential_admit_value(args[1], context)
             _set(fields, name, args[1])
             _set(fields, "_run_dev", PythonObject(None))
             return PythonObject(None)
         return py_get(fields, PythonObject(name))
-    if operation == "bn_grad_get" or operation == "bn_grad_set":
+    if operation == XCNN_OPN_BN_GRAD_GET or operation == XCNN_OPN_BN_GRAD_SET:
         var name = String(args[0])
         if name != "grad_weight_" and name != "grad_bias_":
             raise Error("ValueError: invalid batch normalization gradient field")
         _grads_host(fields, context)
-        if operation == "bn_grad_set":
+        if operation == XCNN_OPN_BN_GRAD_SET:
             sequential_admit_value(args[1], context)
             _set(fields, name, args[1])
             return PythonObject(None)
         if not py_contains(fields, PythonObject(name)):
             raise Error("AttributeError: " + name)
         return fields[PythonObject(name)]
-    if operation == "bn_backward":
+    if operation == XCNN_OPN_BN_BACKWARD:
         return _bn_backward_admitted(layer, fields, args[0], context)
-    if operation == "bn_forward":
+    if operation == XCNN_OPN_BN_FORWARD:
         return _bn_forward_admitted(layer, fields, args[0], context)
-    if operation == "bn_transform":
+    if operation == XCNN_OPN_BN_TRANSFORM:
         var out = _bn_forward_admitted(layer, fields, _bn_rows(fields, args[0], context), context)
         var s = xcnn_shape(out)
         var rest = 1
         for i in range(1, len(s)):  # driver-loop: over shape words
             rest *= s[i]
         return xcnn_reshape(out, [s[0], rest], context)
-    if operation == "bn_fit":
+    if operation == XCNN_OPN_BN_FIT:
         var nk = xcnn_keys()
         var was = py_item(fields, nk[].k_training)
         _set(fields, "training", PythonObject(True))

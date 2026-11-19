@@ -62,7 +62,12 @@ from x_cnn.graph_run import (
     graph_run_gcn_norm, graph_run_gemm_m, graph_run_spmm_m, graph_run_bias_m, graph_run_add_m, graph_run_graph_op,
     graph_run_graph_op_m, graph_run_gcn_backward, graph_run_sage_backward,
 )
-from bindings.xcnn_keys_unpack import xcnn_keys
+from bindings.xcnn_keys_unpack import (
+    xcnn_keys, XCNN_OPN_GCN_BACKWARD, XCNN_OPN_GCN_CACHED, XCNN_OPN_GCN_CACHED_SET, XCNN_OPN_GCN_FORWARD,
+    XCNN_OPN_GCN_INIT, XCNN_OPN_LINEAR_BACKWARD, XCNN_OPN_LINEAR_FORWARD, XCNN_OPN_LINEAR_INIT,
+    XCNN_OPN_RELU_BACKWARD, XCNN_OPN_RELU_FORWARD, XCNN_OPN_RELU_INIT, XCNN_OPN_SAGE_BACKWARD, XCNN_OPN_SAGE_CACHED,
+    XCNN_OPN_SAGE_CACHED_SET, XCNN_OPN_SAGE_FORWARD, XCNN_OPN_SAGE_INIT,
+)
 from bindings.py_balanced import py_item
 
 
@@ -1482,34 +1487,34 @@ def _sage_backward_host(fields: PythonObject, entries: PythonObject, g: PythonOb
     return dx
 
 
-def xcnn_graph_layers(layer: PythonObject, operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    if operation == "gcn_init" or operation == "sage_init":
-        return _graph_init(layer, args, operation == "sage_init", context)
-    if operation == "gcn_cached" or operation == "sage_cached":
+def xcnn_graph_layers(layer: PythonObject, operation: Int, name: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    if operation == XCNN_OPN_GCN_INIT or operation == XCNN_OPN_SAGE_INIT:
+        return _graph_init(layer, args, operation == XCNN_OPN_SAGE_INIT, context)
+    if operation == XCNN_OPN_GCN_CACHED or operation == XCNN_OPN_SAGE_CACHED:
         return PythonObject(_graph_cached(_fields(layer)))
-    if operation == "gcn_cached_set" or operation == "sage_cached_set":
+    if operation == XCNN_OPN_GCN_CACHED_SET or operation == XCNN_OPN_SAGE_CACHED_SET:
         return _graph_cached_set(layer, args[0], context)
-    if operation == "gcn_forward":
+    if operation == XCNN_OPN_GCN_FORWARD:
         return xcnn_gcn_forward(layer, args, context)
-    if operation == "sage_forward":
+    if operation == XCNN_OPN_SAGE_FORWARD:
         return xcnn_sage_forward(layer, args, context)
-    if operation == "gcn_backward":
+    if operation == XCNN_OPN_GCN_BACKWARD:
         return _gcn_backward(layer, args[0], context)
-    if operation == "sage_backward":
+    if operation == XCNN_OPN_SAGE_BACKWARD:
         return _sage_backward(layer, args[0], context)
-    if operation == "linear_init":
+    if operation == XCNN_OPN_LINEAR_INIT:
         return _linear_init(layer, args, context)
-    if operation == "linear_forward":
+    if operation == XCNN_OPN_LINEAR_FORWARD:
         return _linear_forward(layer, args[0], context)
-    if operation == "linear_backward":
+    if operation == XCNN_OPN_LINEAR_BACKWARD:
         return _linear_backward(layer, args[0], context)
-    if operation == "relu_init":
+    if operation == XCNN_OPN_RELU_INIT:
         neural_plain_value(args, 0, Python.dict(admission_context=context))
         var nk = xcnn_keys()
         py_setitem(_fields(layer), nk[].k_numeric_mode, args[0])
         return PythonObject(None)
-    if operation == "relu_forward":
+    if operation == XCNN_OPN_RELU_FORWARD:
         return xcnn_relu_forward(layer, args[0], context)
-    if operation == "relu_backward":
+    if operation == XCNN_OPN_RELU_BACKWARD:
         return _relu_backward(layer, args[0], context)
-    raise Error("RuntimeError: unknown native graph layer operation " + operation)
+    raise Error("RuntimeError: unknown native graph layer operation " + String(py=name))

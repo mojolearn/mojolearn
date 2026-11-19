@@ -52,7 +52,14 @@ from x_cnn.pool_run import (
     pool_run_avg_backward_m, pool_run_dropout, pool_run_dropout_m, pool_run_adaptive, pool_run_adaptive_m,
     pool_run_download, pool_run_mask_m, pool_run_mul,
 )
-from bindings.xcnn_keys_unpack import xcnn_keys
+from bindings.xcnn_keys_unpack import (
+    xcnn_keys, XCNN_OPN_ADAPTIVE_BACKWARD, XCNN_OPN_ADAPTIVE_DEVICE_IO, XCNN_OPN_ADAPTIVE_FORWARD,
+    XCNN_OPN_ADAPTIVE_INDICES_GET, XCNN_OPN_ADAPTIVE_INIT, XCNN_OPN_ADAPTIVE_TRANSFORM, XCNN_OPN_DROPOUT_BACKWARD,
+    XCNN_OPN_DROPOUT_FORWARD, XCNN_OPN_DROPOUT_INIT, XCNN_OPN_DROPOUT_MASK_GET, XCNN_OPN_DROPOUT_MASK_SET,
+    XCNN_OPN_DROPOUT_TRAIN, XCNN_OPN_DROPOUT_TRANSFORM, XCNN_OPN_POOL_BACKWARD, XCNN_OPN_POOL_FIT,
+    XCNN_OPN_POOL_FORWARD, XCNN_OPN_POOL_INDICES_GET, XCNN_OPN_POOL_INDICES_SET, XCNN_OPN_POOL_INIT,
+    XCNN_OPN_POOL_TRANSFORM,
+)
 from bindings.py_balanced import py_item
 
 
@@ -569,14 +576,6 @@ def _flat_rows(out_buf: PythonObject, context: PythonObject) raises -> PythonObj
     if xcnn_is_t(out_buf, context):
         return xcnn_reshape_t(out_buf, [s[0], rest], context)
     return xcnn_reshape(out_buf, [s[0], rest], context)
-
-
-def xcnn_conv_fit(model: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`Conv2d.fit(X)`: the row input's sample size, recorded."""
-    var rows = xcnn_rows(model, source, True, context)
-    var n = pool_run_flat_rest(xcnn_shape(rows))
-    _set(_fields(model), "n_features_in_", PythonObject(n))
-    return model
 
 
 # ---------------------------------------------------------------- Dropout2d
@@ -1107,57 +1106,55 @@ def xcnn_adaptive_backward(model: PythonObject, source: PythonObject, context: P
 
 # ---------------------------------------------------------------- dispatch
 
-def xcnn_pool_layers(model: PythonObject, operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    if operation == "dropout_init":
+def xcnn_pool_layers(model: PythonObject, operation: Int, name: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    if operation == XCNN_OPN_DROPOUT_INIT:
         return xcnn_dropout_init(model, args, context)
-    if operation == "dropout_train":
+    if operation == XCNN_OPN_DROPOUT_TRAIN:
         _set(_fields(model), "training", PythonObject(_pool_bool(args[0], context)))
         return model
-    if operation == "dropout_mask_get":
+    if operation == XCNN_OPN_DROPOUT_MASK_GET:
         return xcnn_dropout_mask(model, context)
-    if operation == "dropout_mask_set":
+    if operation == XCNN_OPN_DROPOUT_MASK_SET:
         var fields = _fields(model)
         _set(fields, "_mask_host", args[0])
         _set(fields, "_mask_dev", PythonObject(None))
         return PythonObject(None)
-    if operation == "dropout_backward":
+    if operation == XCNN_OPN_DROPOUT_BACKWARD:
         return xcnn_dropout_backward(model, args[0], context)
-    if operation == "adaptive_init":
+    if operation == XCNN_OPN_ADAPTIVE_INIT:
         return xcnn_adaptive_init(model, args, context)
-    if operation == "adaptive_indices_get":
+    if operation == XCNN_OPN_ADAPTIVE_INDICES_GET:
         return xcnn_adaptive_indices(model, context)
-    if operation == "adaptive_backward":
+    if operation == XCNN_OPN_ADAPTIVE_BACKWARD:
         return xcnn_adaptive_backward(model, xcnn_at(args, 0), context)
-    if operation == "adaptive_device_io":
+    if operation == XCNN_OPN_ADAPTIVE_DEVICE_IO:
         try:
             return PythonObject(xcnn_resident(xcnn_entries(_fields(model), context), context))
         except:
             return PythonObject(False)
-    if operation == "pool_init":
+    if operation == XCNN_OPN_POOL_INIT:
         return xcnn_pool_init(model, args, context)
-    if operation == "pool_backward":
+    if operation == XCNN_OPN_POOL_BACKWARD:
         return xcnn_pool_backward(model, xcnn_at(args, 0), context)
-    if operation == "pool_fit":
+    if operation == XCNN_OPN_POOL_FIT:
         return model
-    if operation == "pool_indices_get":
+    if operation == XCNN_OPN_POOL_INDICES_GET:
         return _layer_indices(model, context)
-    if operation == "pool_indices_set":
+    if operation == XCNN_OPN_POOL_INDICES_SET:
         var fields = _fields(model)
         _set(fields, "_idx_host", args[0])
         _set(fields, "_idx_dev", PythonObject(None))
         return PythonObject(None)
-    if operation == "pool_forward":
+    if operation == XCNN_OPN_POOL_FORWARD:
         return xcnn_pool_forward(model, xcnn_at(args, 0), context)
-    if operation == "pool_transform":
+    if operation == XCNN_OPN_POOL_TRANSFORM:
         return _flat_rows(xcnn_pool_forward(model, xcnn_rows(model, args[0], True, context), context), context)
-    if operation == "dropout_forward":
+    if operation == XCNN_OPN_DROPOUT_FORWARD:
         return xcnn_dropout_forward(model, args[0], context)
-    if operation == "dropout_transform":
+    if operation == XCNN_OPN_DROPOUT_TRANSFORM:
         return _flat_rows(xcnn_dropout_forward(model, xcnn_rows(model, args[0], False, context), context), context)
-    if operation == "adaptive_forward":
+    if operation == XCNN_OPN_ADAPTIVE_FORWARD:
         return xcnn_adaptive_forward(model, xcnn_at(args, 0), context)
-    if operation == "adaptive_transform":
+    if operation == XCNN_OPN_ADAPTIVE_TRANSFORM:
         return _flat_rows(xcnn_adaptive_forward(model, xcnn_rows(model, args[0], False, context), context), context)
-    if operation == "conv_fit":
-        return xcnn_conv_fit(model, args[0], context)
-    raise Error("RuntimeError: unknown CNN layer operation " + operation)
+    raise Error("RuntimeError: unknown CNN layer operation " + String(py=name))

@@ -2,10 +2,12 @@
 from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
+from bindings.xcnn_keys_unpack import xcnn_keys
+from bindings.py_keys import py_op_code
 from bindings.xcnn_conv_native_door import xcnn_conv_layers
 
 def convolution_public_call(layer: PythonObject, operation: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    return xcnn_conv_layers(layer, String(operation), args, context)
+    return xcnn_conv_layers(layer, py_op_code(xcnn_keys()[].ops, operation), operation, args, context)
 
 @export
 def PyInit__mojolearn_cnn_conv_compile() abi("C") -> PythonObject:

@@ -34,7 +34,14 @@ from x_cnn.conv_run import (
 )
 from bindings.sequential_inputs_door import sequential_input
 from bindings.py_optional import py_present
-from bindings.xcnn_keys_unpack import xcnn_keys
+from bindings.xcnn_keys_unpack import (
+    xcnn_keys, XCNN_OPN_BN_INIT, XCNN_OPN_BN_TRAIN, XCNN_OPN_BLOCK_BACKWARD, XCNN_OPN_BLOCK_FIT, XCNN_OPN_BLOCK_FORWARD, XCNN_OPN_BLOCK_INIT,
+    XCNN_OPN_BLOCK_PARAMETERS, XCNN_OPN_BLOCK_TRAIN, XCNN_OPN_BLOCK_TRANSFORM, XCNN_OPN_CONV_BACKWARD,
+    XCNN_OPN_CONV_FIT, XCNN_OPN_CONV_FORWARD, XCNN_OPN_CONV_GRAD_BIAS, XCNN_OPN_CONV_GRAD_BIAS_SET,
+    XCNN_OPN_CONV_GRAD_WEIGHT, XCNN_OPN_CONV_GRAD_WEIGHT_SET, XCNN_OPN_CONV_INIT, XCNN_OPN_CONV_INIT1D,
+    XCNN_OPN_CONV_PIN, XCNN_OPN_CONV_SET_WEIGHTS, XCNN_OPN_CONV_SET_WEIGHTS1D, XCNN_OPN_CONV_TRANSFORM,
+    XCNN_OPN_CONV_UNPIN, XCNN_OPN_CONV_WEIGHT1D,
+)
 from bindings.py_balanced import py_item
 
 
@@ -923,7 +930,7 @@ def _block_conv(inc: PythonObject, outc: PythonObject, kernel: Int, stride: Pyth
 
 def _block_bn(channels: PythonObject, mode: PythonObject, context: PythonObject) raises -> PythonObject:
     var layer = _block_new("xcnn_bn_class", context)
-    _ = xcnn_bn_layers(layer, "bn_init", Python.tuple(channels, 1e-5, 0.1, True, True, PythonObject(None), mode), context)
+    _ = xcnn_bn_layers(layer, XCNN_OPN_BN_INIT, Python.tuple(channels, 1e-5, 0.1, True, True, PythonObject(None), mode), context)
     return layer
 
 
@@ -987,10 +994,10 @@ def _block_train(block: PythonObject, value: PythonObject, context: PythonObject
     var mode = PythonObject(Bool(py=py_call(xcnn_builtins().bool, value)))
     _set(fields, "training", mode)
     var nk = xcnn_keys()
-    _ = xcnn_bn_layers(py_item(fields, nk[].k_bn1), "bn_train", Python.tuple(mode), context)
-    _ = xcnn_bn_layers(py_item(fields, nk[].k_bn2), "bn_train", Python.tuple(mode), context)
+    _ = xcnn_bn_layers(py_item(fields, nk[].k_bn1), XCNN_OPN_BN_TRAIN, Python.tuple(mode), context)
+    _ = xcnn_bn_layers(py_item(fields, nk[].k_bn2), XCNN_OPN_BN_TRAIN, Python.tuple(mode), context)
     if py_item(fields, nk[].k_downsample) is not None:
-        _ = xcnn_bn_layers(py_item(fields, nk[].k_downsample)[1], "bn_train", Python.tuple(mode), context)
+        _ = xcnn_bn_layers(py_item(fields, nk[].k_downsample)[1], XCNN_OPN_BN_TRAIN, Python.tuple(mode), context)
     return block
 
 
@@ -1381,40 +1388,40 @@ def _rows(fields: PythonObject, source: PythonObject, required: Bool, context: P
     return a
 
 
-def xcnn_conv_layers(layer: PythonObject, operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    if operation == "block_init":
+def xcnn_conv_layers(layer: PythonObject, operation: Int, name: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    if operation == XCNN_OPN_BLOCK_INIT:
         return _block_init(layer, args, context)
-    if operation == "block_train":
+    if operation == XCNN_OPN_BLOCK_TRAIN:
         return _block_train(layer, args[0], context)
-    if operation == "block_backward":
+    if operation == XCNN_OPN_BLOCK_BACKWARD:
         return _block_backward(layer, args[0], context)
-    if operation == "block_parameters":
+    if operation == XCNN_OPN_BLOCK_PARAMETERS:
         return _block_parameters(layer, context)
-    if operation == "block_fit":
+    if operation == XCNN_OPN_BLOCK_FIT:
         _ = _block_fields(layer, context)
         return layer
-    if operation == "conv_init" or operation == "conv_init1d":
-        return _conv_init(layer, args, operation == "conv_init1d", context)
+    if operation == XCNN_OPN_CONV_INIT or operation == XCNN_OPN_CONV_INIT1D:
+        return _conv_init(layer, args, operation == XCNN_OPN_CONV_INIT1D, context)
     # p3-cnn-sequence-tsa: the BasicBlock operations come before the Conv2d
     # field admission (it admitted 15 conv fields of the block object, which
     # `_block_fields` then admitted again as a block)
-    if operation == "block_forward":
+    if operation == XCNN_OPN_BLOCK_FORWARD:
         return xcnn_block_forward(layer, args[0], context)
-    if operation == "block_transform":
+    if operation == XCNN_OPN_BLOCK_TRANSFORM:
         return _flat_rows(xcnn_block_forward(layer, _rows(_fields(layer), args[0], False, context), context), context)
     # One admission per call: every conv handler below takes these fields
     # (they re-admitted the same layer 2-4 times per call before). This line
     # stays first, so the first error a bad layer raises is unchanged.
     var fields = _conv_admit(layer, context)
-    if operation == "conv_backward":
+    if operation == XCNN_OPN_CONV_BACKWARD:
         return _conv_backward_fields(layer, fields, args, context)
-    if operation == "conv_set_weights" or operation == "conv_set_weights1d":
-        return _conv_set_weights(layer, fields, args, operation == "conv_set_weights1d", context)
-    if operation == "conv_pin":
+    if operation == XCNN_OPN_CONV_SET_WEIGHTS or operation == XCNN_OPN_CONV_SET_WEIGHTS1D:
+        return _conv_set_weights(layer, fields, args, operation == XCNN_OPN_CONV_SET_WEIGHTS1D, context)
+    if operation == XCNN_OPN_CONV_PIN:
         _pin_weights(layer, fields, xcnn_entries(fields, context), context)
         return layer
     var nk = xcnn_keys()
-    if operation == "conv_unpin":
+    if operation == XCNN_OPN_CONV_UNPIN:
         if py_get(fields, nk[].k__pins) is not None:
             # p3-cnn-sequence-tsa: no resident copy any more, so the host
             # weights are handed back writeable (fresh copies of the words).
@@ -1424,25 +1431,25 @@ def xcnn_conv_layers(layer: PythonObject, operation: String, args: PythonObject,
         _set(fields, "_pins", PythonObject(None))
         _set(fields, "_pin_src", PythonObject(None))
         return layer
-    if operation == "conv_grad_weight" or operation == "conv_grad_bias":
-        return _conv_gradient(fields, operation == "conv_grad_weight", context)
-    if operation == "conv_grad_weight_set" or operation == "conv_grad_bias_set":
-        var weight = operation == "conv_grad_weight_set"
+    if operation == XCNN_OPN_CONV_GRAD_WEIGHT or operation == XCNN_OPN_CONV_GRAD_BIAS:
+        return _conv_gradient(fields, operation == XCNN_OPN_CONV_GRAD_WEIGHT, context)
+    if operation == XCNN_OPN_CONV_GRAD_WEIGHT_SET or operation == XCNN_OPN_CONV_GRAD_BIAS_SET:
+        var weight = operation == XCNN_OPN_CONV_GRAD_WEIGHT_SET
         _set(fields, "grad_weight_" if weight else "grad_bias_", args[0])
         _set(fields, "_gw_dev" if weight else "_gb_dev", PythonObject(None))
         if weight:
             _set(fields, "_gw_1d", PythonObject(False))
         return PythonObject(None)
-    if operation == "conv_weight1d":
+    if operation == XCNN_OPN_CONV_WEIGHT1D:
         var w = xcnn_f32(py_item(fields, nk[].k_weight_), "weight_", context)
         var s = xcnn_shape(w)
         return xcnn_reshape(w, [s[0], s[1], s[3]], context)
-    if operation == "conv_fit":
+    if operation == XCNN_OPN_CONV_FIT:
         var a = _rows(fields, args[0], True, context)
         _set(fields, "n_features_in_", PythonObject(conv_run_tail_size(xcnn_shape(a))))
         return layer
-    if operation == "conv_forward":
+    if operation == XCNN_OPN_CONV_FORWARD:
         return xcnn_conv_forward(layer, fields, args[0], context)
-    if operation == "conv_transform":
+    if operation == XCNN_OPN_CONV_TRANSFORM:
         return _flat_rows(xcnn_conv_forward(layer, fields, _rows(fields, args[0], True, context), context), context)
-    raise Error("RuntimeError: unknown CNN layer operation " + operation)
+    raise Error("RuntimeError: unknown CNN layer operation " + String(py=name))
