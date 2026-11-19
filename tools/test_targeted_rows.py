@@ -200,25 +200,188 @@ class Summary(unittest.TestCase):
         self.assertIn("AB em-check-1 rows=full " + B, text)
         self.assertIn("ratio 0.80", text)
 
-    def test_ab_against_a_stored_base(self):
-        # STORED BASE (Andrew, 2026-11-17): no base board; the arm against the stored time, its host printed, and a
-        # run stopped at the cap reads NOT-FASTER-THAN-BASE
-        stored = {"round_seconds": {B: 10, C: 10}, "cells": {
-            B + " fit ours": {"ms": 10000.0, "host_id": "pod-old/GPU-1", "version": "wheel abc", "cap": True},
-            C + " fit ours": {"ms": 10000.0, "host_id": "pod-old/GPU-1", "version": "wheel abc", "cap": True}}}
+    def test_ab_capped_at_this_jobs_base(self):
+        # IN-JOB BASE CAP (lane fx-same-pod-prior, 2026-11-19; the STORED BASE from another host is gone): base and
+        # arm boards of this job; an arm run stopped at the cap reads NOT-FASTER-THAN-BASE, only for a capped race
         with tempfile.TemporaryDirectory() as res:
-            os.makedirs(os.path.join(res, "board-tg-ab-x-full"))
-            Path(res, "board-tg-ab-x-full", "board.json").write_text(json.dumps({
-                "box": {"host_probe": {"schema": "mojolearn-host-probe/1", "host_id": "pod-a/GPU-0"}},
-                "races": {B: {"cells": [{"arm": "ours", "status": "ok", "median_ms": 5000.0}]},
-                          C: {"cells": [{"arm": "ours", "status": "REFUSED(timeout: null)", "median_ms": None}]}}}))
-            text = TR.summary(compare_doc(), [], res, [], [("x", "full", [B, C], stored)])
-        self.assertIn("base STORED, not timed in this job: host pod-old/GPU-1 (wheel abc); the arm ran on pod-a/GPU-0 "
-                      "(ANOTHER HOST", text)
-        self.assertIn("AB x rows=full %s fit ours: base 10000 (stored) -> arm 5000 ms ratio 0.50 FASTER"
-                      % B, text)
-        self.assertIn(C + " fit ours: base", text)
-        self.assertIn("NOT-FASTER-THAN-BASE", text)
+            probe = {"host_probe": {"schema": "mojolearn-host-probe/1", "host_id": "pod-a/GPU-0"}}
+            for sub, races in (("board-tg-ab-x-base-full", {B: 10000.0, C: 10000.0, D: 10000.0}),
+                               ("board-tg-ab-x-full", {B: 5000.0, C: None, D: None})):
+                os.makedirs(os.path.join(res, sub))
+                Path(res, sub, "board.json").write_text(json.dumps({"box": probe, "races": {
+                    rid: {"cells": [{"arm": "ours", "status": "ok" if ms else "REFUSED(timeout: null)",
+                                     "median_ms": ms}]} for rid, ms in races.items()}}))
+            text = TR.summary(compare_doc(), [], res, [], [("x", "full", [B, C, D], {B, C})])
+        self.assertNotIn("STORED", text)
+        self.assertIn("AB x rows=full %s fit ours: base 10000 -> arm 5000 ms ratio 0.50 FASTER" % B, text)
+        self.assertIn("%s fit ours: base 10000 -> arm - ms ratio - NOT-FASTER-THAN-BASE" % C, text)
+        line_d = [ln for ln in text.splitlines() if ln.startswith("AB x rows=full %s" % D)][0]
+        self.assertNotIn("NOT-FASTER-THAN-BASE", line_d)          # not in the cap list: no verdict
+
+    def test_read_units_reads_the_cap_list(self):
+        with tempfile.TemporaryDirectory() as d:
+            ids = os.path.join(d, "ids-x-full.txt")
+            Path(ids).write_text(B + "\n" + C + "\n")
+            Path(d, "ids-x-full.cap.txt").write_text(B + "\n")
+            Path(d, "units.tsv").write_text("candidate\tfull\t%s\nx\tfull\t%s\n" % (ids, ids))
+            self.assertEqual(TR.read_units(os.path.join(d, "units.tsv")), [("x", "full", [B, C], {B})])
+
+
+class PriorWheel(unittest.TestCase):
+    """--prior-wheel (lane fx-same-pod-prior; Andrew, 2026-11-19: a speed verdict compares two wheels timed on the SAME
+    host in the SAME job; 0.8.55 is never installed or timed): one of our own earlier built wheels is one more arm of
+    the targeted job, installed as a B set, timed after the candidate per chunk, and the compare's verdict baseline."""
+
+    def rows(self, d):
+        f = os.path.join(d, "rows.tsv")
+        Path(f).write_text("%s\tr\t600\t500\n%s\tr\t300\t200\n" % (A, B))
+        return f
+
+    def test_estimate_counts_each_prior_wheel_as_an_arm(self):
+        rows = [{"id": A, "new_s": 600.0, "prior_s": 500.0}, {"id": B, "new_s": 300.0, "prior_s": 200.0}]
+        one = TR.estimate(rows, 600, one_arm=True)
+        two = TR.estimate(rows, 600, one_arm=True, prior_wheels=1)
+        self.assertEqual(two["wheels_s"], 900.0)
+        self.assertAlmostEqual(two["total_s"] - one["total_s"],
+                               900.0 + TR.SMOKE_S_PER_RACE * 2 + TR.PROC_S * one["chunks"])
+        self.assertIn("prior-wheels=15 (1)", TR.estimate_line(two))
+        self.assertIn("stored (screen)", TR.estimate_line(two))
+        self.assertNotIn("prior-wheels", TR.estimate_line(one))
+
+    def test_job_reads_a_prior_wheels_file(self):
+        text = Path(JOB).read_text()
+        block = text[text.index("# >>> b-arms"):text.index("# <<< b-arms")] + \
+            text[text.index("# >>> prior-wheels"):text.index("# <<< prior-wheels")]
+        with tempfile.TemporaryDirectory() as td:
+            d = os.path.join(td, "p-prev", "nvidia")
+            os.makedirs(d)
+            for dist in ("core", "nvidia"):
+                Path(d, "mojolearn_%s-0.8.67.dev0+d95f805cceba-py3-none-any.whl" % dist).write_text("")
+            f = os.path.join(td, "prior-wheels-nvidia.txt")
+            Path(f).write_text("# staged by measure_candidate\nprev %s %s\n" % (d, "d" * 40))
+            script = ("set -u\nsay() { echo \"SAY $*\"; }\nadd_arm() { echo \"ARM $*\"; }\nPRIOR_ARMS=()\n" + block
+                      + '\necho "PRIOR_ARMS=${PRIOR_ARMS[*]} NAMES=${PRIOR_WHEEL_NAMES[*]} '
+                        'VP=$(IFS=,; echo "${PRIOR_ARMS[*]#prior-}")"\n')
+            env = dict(os.environ, OWED="1", V="nvidia", PC_PRIOR_WHEELS=f, PARTS=",targeted,")
+            p = subprocess.run(["bash", "-c", script], env=env, capture_output=True, text=True, timeout=60)
+            self.assertEqual(p.returncode, 0, p.stderr)
+            self.assertIn("ARM prior-prev --mojolearn-version 0.8.67.dev0+d95f805cceba --candidate-source-commit "
+                          + "d" * 40 + " --candidate-wheel " + d, p.stdout)
+            self.assertIn("PRIOR_ARMS=prior-prev NAMES=prev VP=prev", p.stdout)
+            self.assertIn("SAY prior wheels (the verdict baseline: prev): prev", p.stdout)
+            # a set without its two wheels stops the job before anything is timed
+            Path(f).write_text("prev %s %s\n" % (td, "d" * 40))
+            p = subprocess.run(["bash", "-c", script], env=env, capture_output=True, text=True, timeout=60)
+            self.assertEqual(p.returncode, 2)
+            self.assertIn("must hold one core and one nvidia wheel", p.stdout + p.stderr)
+            # the paper job does not take one
+            p = subprocess.run(["bash", "-c", script], env=dict(env, PARTS=",plan,board,"), capture_output=True,
+                               text=True, timeout=60)
+            self.assertEqual(p.returncode, 2)
+            self.assertIn("PC_PRIOR_WHEELS is for the targeted job", p.stdout)
+
+    def test_job_wires_the_prior_wheel_through_install_board_and_compare(self):
+        text = Path(JOB).read_text()
+        # tg-install makes every non-B arm's venv: the candidate and the prior wheels
+        self.assertIn('[[ " ${B_NAMES[*]:-} " == *" $arm "* ]] && continue', text)
+        # the timed boards: the candidate then each prior arm on the same chunk
+        i = text.index('tg_board candidate "$c" "$RES/board-tg" "" "${SJT[@]}"')
+        self.assertLess(i, text.index('tg_board "$arm" "$c.$arm" "$RES/board-tg-$arm" "" "${psj[@]}"', i))
+        # the compare: the prior wheel's board, the stored board as a screen, the verdict from the pair
+        self.assertIn('[ -n "$BASELINE_BOARD" ] && PB+=(--stored-baseline-board "$BASELINE_BOARD")', text)
+        self.assertIn('PB+=(--verdict-prior "${PRIOR_WHEEL_NAMES[0]}")', text)
+        self.assertIn('--prior-wheels "$(IFS=,; echo "${PRIOR_WHEEL_NAMES[*]:-}")"', text)
+        self.assertIn('--prior-wheels "${#PRIOR_WHEEL_NAMES[@]}"', text)
+
+    def test_timed_check_names_an_untimed_prior_wheel(self):
+        with tempfile.TemporaryDirectory() as res:
+            os.makedirs(os.path.join(res, "board-tg"))
+            Path(res, "board-tg", "board.json").write_text(json.dumps({"races": {A: {"status": "done"}}}))
+            bad = TR.untimed(res, [A], None, None, ["prev"])
+            self.assertEqual([arm for arm, _ in bad], ["prior-prev"])
+            os.makedirs(os.path.join(res, "board-tg-prior-prev"))
+            Path(res, "board-tg-prior-prev", "board.json").write_text(json.dumps({"races": {A: {"status": "done"}}}))
+            self.assertEqual(TR.untimed(res, [A], None, None, ["prev"]), [])
+
+    def test_summary_reads_the_compares_baseline(self):
+        doc = dict(compare_doc(), baseline_version="prev", screen_stored=True,
+                   verdict_basis="same box h: our wheel prev timed in this job beside the candidate")
+        with tempfile.TemporaryDirectory() as res:
+            text = TR.summary(doc, [{"id": A, "reasons": ["r"]}], res, [A], [], ["prev"])
+        self.assertIn("verdict: same box h: our wheel prev", text)
+        self.assertIn("the stored 0.8.55 board is a screen column only", text)
+        self.assertIn("done/total prev 0/1", text)
+
+    def test_stage_dry_run_accepts_a_prior_wheel(self):
+        # the completion check of the brief: `stage nvidia ... --rows <file> --prior-wheel prev=DIR@SHA --dry-run`
+        import contextlib
+        import io
+        with tempfile.TemporaryDirectory() as d:
+            cver, pver = "0.8.67.dev0+aaaaaaaaaaaa", "0.8.67.dev0+d95f805cceba"
+            wd, pd = os.path.join(d, "cand"), os.path.join(d, "prev")
+            for wdir, ver in ((wd, cver), (pd, pver)):
+                os.makedirs(wdir)
+                for dist in ("core", "nvidia"):
+                    Path(wdir, "mojolearn_%s-%s-py3-none-any.whl" % (dist, ver)).write_text("w")
+            Path(pd, "candidate.json").write_text(json.dumps({"version": pver}))
+            tree = os.path.join(d, "tree")
+            os.makedirs(os.path.join(tree, "bench", "results", "paper_compare"))
+            os.makedirs(os.path.join(tree, "bench", "results", "dataset_store"))
+            Path(tree, "bench", "results", "paper_compare", "recipes-nvidia.json").write_text("{}")
+            Path(tree, "bench", "results", "dataset_store", "manifest.tsv").write_text("")
+            owed = os.path.join(d, "owed.json")
+            Path(owed).write_text(json.dumps({"b_arms": {}, "rows": []}))
+            argv = ["stage", "nvidia", "--version", cver, "--source-commit", "a" * 40, "--wheel-dir", wd,
+                    "--dry-run", "--state-dir", d, "--tree", tree, "--owed-file", owed, "--rows", self.rows(d),
+                    "--prior-wheel", "prev=%s@%s" % (pd, "d" * 40)]
+            seen = []
+
+            def manifest(version, vendor, wheels, commit):
+                seen.append((version, commit))
+                return {"files": [{"file": Path(w).name, "sha256": "0" * 64} for w in wheels]}
+            buf = io.StringIO()
+            with mock.patch.object(MC.C, "build_manifest", manifest), \
+                    mock.patch.object(MC, "dataset_keys", lambda *a, **k: ["k1"]), \
+                    contextlib.redirect_stdout(buf):
+                self.assertEqual(MC.main(argv + ["--baseline-board", "none"]), 0)
+            text = buf.getvalue()
+            self.assertEqual(seen, [(cver, "a" * 40), (pver, "d" * 40)])      # validated like a B set
+            self.assertIn("prior wheel prev: %s dddddddddddd" % pver, text)
+            self.assertIn("/root/pc-in/aaaaaaaaaaaa/p-prev/nvidia/mojolearn_core-%s-py3-none-any.whl" % pver, text)
+            self.assertIn("--env PC_PRIOR_WHEELS=/root/pc-in/aaaaaaaaaaaa/prior-wheels-nvidia.txt", text)
+            self.assertIn("prior-wheels=15 (1)", text)                        # the estimate counts it
+            self.assertIn("TG-DISK need=", text)
+            self.assertIn("3 venv(s) in tg-install", text)                   # candidate, 0.8.55 (none), prev
+            self.assertEqual(Path(d, "prior-wheels-aaaaaaaaaaaa-nvidia.txt").read_text(),
+                             "prev /root/pc-in/aaaaaaaaaaaa/p-prev/nvidia %s\n" % ("d" * 40))
+            # beside the stored board (the default): 0.8.55 is not timed, the stored board rides as a screen
+            board = os.path.join(d, "stored.json")
+            Path(board).write_text("{}")
+            buf = io.StringIO()
+            with mock.patch.object(MC.C, "build_manifest", manifest), \
+                    mock.patch.object(MC, "dataset_keys", lambda *a, **k: ["k1"]), \
+                    contextlib.redirect_stdout(buf):
+                self.assertEqual(MC.main(argv + ["--baseline-board", board]), 0)
+            text = buf.getvalue()
+            self.assertIn("2 venv(s) in tg-install", text)
+            self.assertIn("PC_BASELINE_BOARD=", text)
+            self.assertNotIn("PC_PRIOR_VERSIONS", text)
+            self.assertIn("PC_PRIOR_WHEELS=", text)
+            self.assertIn("stored (screen)", text)
+
+    def test_stage_refuses_a_prior_wheel_out_of_place(self):
+        with self.assertRaises(SystemExit) as e:
+            MC.check_prior_wheels(["prev"], [], ["0.8.55"], None)
+        self.assertIn("targeted job only", str(e.exception))
+        with self.assertRaises(SystemExit) as e:
+            MC.check_prior_wheels(["prev", "prev"], [], [], "rows.tsv")
+        self.assertIn("given twice", str(e.exception))
+        with self.assertRaises(SystemExit) as e:
+            MC.check_prior_wheels(["b1"], ["b1"], [], "rows.tsv")
+        self.assertIn("also a --b-arm", str(e.exception))
+        with self.assertRaises(SystemExit):
+            MC.parse_prior_wheel("prev=/x@abc")
+        self.assertEqual(MC.parse_prior_wheel("prev-d95f805cce=~/w@" + "d" * 40)[0], "prev-d95f805cce")
 
 
 class OwnOnly(unittest.TestCase):
@@ -344,7 +507,7 @@ class Wiring(unittest.TestCase):
         text = Path(JOB).read_text()
         self.assertIn('BASELINE_BOARD=${PC_BASELINE_BOARD:-}', text)
         self.assertIn('[ -n "$BASELINE_BOARD" ] && break', text)                 # no prior arm at all
-        self.assertIn('PB=(--stored-baseline-board "$BASELINE_BOARD")', text)
+        self.assertIn('PB+=(--stored-baseline-board "$BASELINE_BOARD")', text)
         self.assertIn('[ -n "${ARM_ENV[$arm]:-}" ] && continue', text)          # an env arm installs nothing
         self.assertIn('env ${envs[@]+"${envs[@]}"} $PY tools/bench_board.py', text)
 
@@ -500,7 +663,7 @@ class Wiring(unittest.TestCase):
 
     def test_stage_source_refuses_over_the_cap(self):
         src = Path(MC.__file__).read_text()
-        self.assertIn("TR.check_cap(a.rows, a.cap_min, a.chunk_s, one_arm=stored)", src)
+        self.assertIn("TR.check_cap(a.rows, a.cap_min, a.chunk_s, one_arm=stored, prior_wheels=len(pw_specs))", src)
         self.assertIn('env["PC_ROWS"]', src)
 
 
