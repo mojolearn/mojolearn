@@ -348,14 +348,18 @@ from transformer.checks.transformer_oracle import (
     transformer_block_oracle,
 )
 from transformer.checks.transformer_backward_oracle import (
+    BWD_HOST_DX_CONCAT,
     BWD_NEG_HALF,
     BWD_TWO,
     TRANSFORMER_BACKWARD_STAGE_COUNT,
+    _gemm_bwd_a,
     backward_oracle_dump,
     backward_stage_tag,
+    qkv_fanin_concat_host,
     softmax_backward_into,
     transformer_block_backward_oracle,
 )
+from gemm.contract import OP_NT
 from transformer.impl.llama.modeling_llama import (
     PLANT_AT_NONE,
     LlamaDeviceStages,
@@ -370,6 +374,7 @@ from transformer.impl.llama.modeling_llama import (
 )
 from autograd.kernels.transformer import (
     BWD_ANY_SABOTAGE,
+    BWD_GEMM_DX_CONCAT,
     LlamaBackwardStages,
     llama_backward_sabotage_name,
 )
@@ -1841,6 +1846,122 @@ def clause_a_case(
         diffs[20].n_diff,
         predicted,
     )
+
+
+# ===========================================================================
+# ARM MOJOLEARN_GEMM_FAST_DX_CONCAT (lane fx-gemm-dx-concat): the q/k/v
+# fan-in as one product. Device words against host words, under the arm.
+# ===========================================================================
+
+
+def clause_dx_concat(ctx: DeviceContext, cases: List[Int]) raises:
+    """The arm's own clause, over clause (a)'s cases. Under the define the
+    host oracle already follows the arm, so clause (a) is the 37-stage
+    device-against-host comparison; this adds what clause (a) cannot say:
+
+      1. LOCAL: the device's `bwd.d_norm1_out` equals, bit for bit, the
+         arm's formula (`qkv_fanin_concat_host`: one gemm v1 product over
+         `[dQ | dK | dV] . [Wq; Wk; Wv]`) evaluated on the host from the
+         DEVICE's own `d_q_proj_out`, `d_k_proj_out`, `d_v_proj_out` words.
+         That isolates the pack launch and the product from every stage
+         upstream of them.
+      2. END TO END: the device's `bwd.d_norm1_out` equals the oracle's.
+      3. NOT VACUOUS: the arm's words differ from the default order's
+         (`(q + k) + v` over three products, computed here from the same
+         device words) on at least one cell across the cases. Zero would
+         mean these fixtures cannot tell the arm from the default, and the
+         clause raises VACUOUS, not PASS.
+
+    Without the define it prints NOT RUN and returns."""
+    comptime if BWD_GEMM_DX_CONCAT and BWD_HOST_DX_CONCAT:
+        var iq = stage_index_of("bwd.d_q_proj_out")
+        var ik = stage_index_of("bwd.d_k_proj_out")
+        var iv = stage_index_of("bwd.d_v_proj_out")
+        var it = stage_index_of("bwd.d_norm1_out")
+        var cells = 0
+        var bad_local = 0
+        var bad_oracle = 0
+        var differs = 0
+        var first_bad = String("")
+        for ci in range(len(cases)):
+            var c = fixture_case(cases[ci])
+            var dims = fixture_dims(c)
+            var w = fixture_weights(c)
+            var x = fixture_x(c)
+            var d_out = bwd_d_out(c, dims, DOUT_PLANT_NONE)
+            var m = c.b * c.l
+            var dm = dims.d_model
+            var qw = dims.q_width()
+            var kw = dims.kv_width()
+            var host = run_host_backward(c, dims, w, x, d_out, c.b, c.l)
+            var off = IdentityTrace.disabled()
+            var dev = run_device_backward(
+                ctx, c, dims, w, x, d_out, c.b, c.l, off, "dxcat" + String(cases[ci])
+            )
+            var want = qkv_fanin_concat_host(
+                dev[iq], dev[ik], dev[iv], w.w_q, w.w_k, w.w_v, m, qw, kw, kw, dm
+            )
+            var t_q = _gemm_bwd_a(dev[iq], w.w_q, OP_NT, m, qw, dm)
+            var t_k = _gemm_bwd_a(dev[ik], w.w_k, OP_NT, m, kw, dm)
+            var t_v = _gemm_bwd_a(dev[iv], w.w_v, OP_NT, m, kw, dm)
+            if len(want) != m * dm or len(dev[it]) != m * dm or len(host[it]) != m * dm:
+                raise Error(
+                    String("transformer_backward_check: ARM DX_CONCAT, case ")
+                    + String(c.name)
+                    + ": bwd.d_norm1_out is not [M, d_model] on one side"
+                )
+            var case_bad = 0
+            for i in range(m * dm):
+                var got = bitcast[DType.uint32](dev[it][i])
+                if got != bitcast[DType.uint32](want[i]):
+                    bad_local += 1
+                    case_bad += 1
+                if got != bitcast[DType.uint32](host[it][i]):
+                    bad_oracle += 1
+                    case_bad += 1
+                var acc = ftz(ftz(t_q[i]) + ftz(t_k[i]))
+                var old = ftz(ftz(acc) + ftz(t_v[i]))
+                if bitcast[DType.uint32](old) != bitcast[DType.uint32](want[i]):
+                    differs += 1
+            cells += m * dm
+            if case_bad != 0 and first_bad == "":
+                first_bad = String(c.name)
+        if bad_local != 0 or bad_oracle != 0:
+            raise Error(
+                String("transformer_backward_check: ARM DX_CONCAT FAILED. Of ")
+                + String(cells)
+                + " cells of bwd.d_norm1_out, "
+                + String(bad_local)
+                + " differ from the one-product formula on the device's own"
+                + " dQ, dK, dV words and "
+                + String(bad_oracle)
+                + " differ from the oracle, first in case "
+                + first_bad
+            )
+        if differs == 0:
+            raise Error(
+                String("transformer_backward_check: ARM DX_CONCAT IS VACUOUS.")
+                + " On all "
+                + String(cells)
+                + " cells the one-product order and (q + k) + v give the same"
+                + " words, so these cases cannot tell the arm from the default."
+            )
+        print(
+            "arm dx-concat: PASS, "
+            + String(len(cases))
+            + " cases, "
+            + String(cells)
+            + " cells of bwd.d_norm1_out bit-identical to the one-product"
+            + " formula on the device's own operands and to the oracle; "
+            + String(differs)
+            + " cells differ from the default (q + k) + v order, so the arm"
+            + " is what ran"
+        )
+    else:
+        print(
+            "arm dx-concat: NOT RUN (build with"
+            " -D MOJOLEARN_GEMM_FAST_DX_CONCAT=1)"
+        )
 
 
 # ===========================================================================
@@ -4167,6 +4288,10 @@ def main() raises:
                 + String(TRANSFORMER_BACKWARD_STAGE_COUNT)
                 + " card tags"
             )
+
+        # lane fx-gemm-dx-concat: under its define, device against host
+        # words at the fan-in the arm rewrites (NOT RUN otherwise).
+        clause_dx_concat(ctx, cases)
 
         if env_on("MOJOLEARN_TFB_CHECK_CLAUSE_B"):
             clause_b(ctx, 0)
