@@ -118,6 +118,7 @@ from checks.kernel_matrix import (
     TARGET_COLUMN,
     column_name,
 )
+from checks.mode_policy import mode_policy_mask
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from gbdt.host.gbdt_oracle import GBDT_ORACLE_HOST_SABOTAGE
 
@@ -163,6 +164,14 @@ def gbdt_vendor_binding() raises -> PythonObject:
     """"cpu". On a CPU-only install `_backend.vendor()` is "cpu" and the
     read-back cross-check expects that string from every host binding."""
     return PythonObject(String("cpu"))
+
+
+def gbdt_mode_policy_mask_binding() raises -> PythonObject:
+    """The mode policy rows this binary was compiled with
+    (`checks/mode_policy.mojo`): bit i set = row i relaxed. 0 in every
+    identical build. Read by `python -m mojolearn verify`, which refuses an
+    identical set that reports anything else."""
+    return PythonObject(Int(mode_policy_mask()))
 
 
 def gbdt_numeric_mode_binding() raises -> PythonObject:
@@ -456,6 +465,7 @@ def build__mojolearn_gbdt_host() -> PythonObject:
         module.def_function[gbdt_host_sabotage_binding]("gbdt_host_sabotage")
         module.def_function[gbdt_vendor_binding]("gbdt_vendor")
         module.def_function[gbdt_numeric_mode_binding]("gbdt_numeric_mode")
+        module.def_function[gbdt_mode_policy_mask_binding]("gbdt_mode_policy_mask")
         module.def_function[gbdt_fit_binding]("gbdt_fit")
         module.def_function[gbdt_predict_binding]("gbdt_predict")
         module.def_function[gbdt_predict_multi_binding]("gbdt_predict_multi")
