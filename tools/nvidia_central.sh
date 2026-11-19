@@ -73,6 +73,11 @@
 # there. ~/mojolearn-evidence/nvidia_central/lanes/<lane>/pod names it. When a
 # pod goes down idle, the lane's next sync picks a live pod (and its first
 # `pixi install` there links from that pod's package cache).
+#
+# LIBRARY MODE (lane fx-cpu-box-checks, 2026-11-19): sourced (`. tools/nvidia_central.sh`), this file defines its
+# functions (the lease install, the Mac watcher, reconcile, submit, ...) and returns before the command dispatch.
+# tools/cpu_central.sh, the CPU check box, sources it so the lease, dead-man and persistence code has one copy; it
+# sets MOJOLEARN_NVC_HOME / MOJOLEARN_NVC_CONF first and overrides pod_keys, queue_slots, QUEUE_VENDOR, say and die.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 STATE_ROOT="${MOJOLEARN_DEVPOD_STATE:-$HOME/mojolearn-evidence/devpods}"
@@ -132,6 +137,10 @@ CURLRC="$TMPD/curlrc"
 mkdir -p "$NVC_HOME/lanes"
 
 pod_keys() { local i; for i in $(seq 1 $NVC_MAX_PODS); do echo nvc$i; done; }
+QUEUE_VENDOR=nvidia                                   # the queue's vendor file (tools/gpu_queue_box.sh)
+queue_slots() {  # <key>: the queue's slots on that pod (here: its GPUs)
+    BOX_TIMEOUT=120 box "nvidia-smi -L 2>/dev/null | grep -c '^GPU '" < /dev/null | tr -dc 0-9
+}
 live_pods() { local k; for k in $(pod_keys); do [ ! -f "$STATE_ROOT/$k/state.env" ] || echo $k; done; }
 pod_env() {  # <key>: SSH_TARGET POD_ID GPU GPU_COUNT COST_HR
     [ -f "$STATE_ROOT/$1/state.env" ] || die "shared pod $1 is not up"
@@ -155,7 +164,7 @@ need_lane_pod() {
 }
 split_id() {  # <pod>-<n> | <n> -> JOB_POD JOB_N
     case "$1" in
-        nvc[0-9]-[0-9]*) JOB_POD=${1%%-*}; JOB_N=${1#*-} ;;
+        [a-z][a-z][a-z][0-9]-[0-9]*) JOB_POD=${1%%-*}; JOB_N=${1#*-} ;;
         [0-9]*) JOB_N=$1; JOB_POD=$(live_pods)
                 [ "$(echo "$JOB_POD" | grep -c .)" = 1 ] || die "several pods are up: name the job as <pod>-$1 (e.g. nvc1-$1)" ;;
         *) die "a job id is <pod>-<n>, e.g. nvc1-0003" ;;
@@ -269,9 +278,9 @@ WATCH
 install_pod() {  # <key>
     local k=$1 n out
     pod_env $k
-    n=$(BOX_TIMEOUT=120 box "nvidia-smi -L 2>/dev/null | grep -c '^GPU '" < /dev/null | tr -dc 0-9)
-    [ -n "$n" ] && [ "$n" -ge 1 ] || die "$k: nvidia-smi shows no GPU"
-    [ "$n" = "$GPU_COUNT" ] || say "$k: nvidia-smi shows $n GPUs (state says $GPU_COUNT); the queue uses $n"
+    n=$(queue_slots "$k")
+    [ -n "$n" ] && [ "$n" -ge 1 ] || die "$k: no queue slots (nvidia-smi shows no GPU)"
+    [ "$QUEUE_VENDOR" != nvidia ] || [ "$n" = "$GPU_COUNT" ] || say "$k: nvidia-smi shows $n GPUs (state says $GPU_COUNT); the queue uses $n"
     # torch and its CUDA wheels from the PyTorch CDN (runpod_pod_lib.sh pod_pip_conf_script: the extra index only
     # adds a source; PyPI stays the index and every pin is unchanged)
     out=$(BOX_TIMEOUT=60 box "$(pod_pip_conf_script)" < /dev/null 2>&1 | tail -1) || true
@@ -279,7 +288,7 @@ install_pod() {  # <key>
     BOX_TIMEOUT=120 box "set -e; command -v flock setsid > /dev/null
 [ -s /tmp/mojolearn-lease.curlrc ] || { echo 'no RunPod key on the pod (/tmp/mojolearn-lease.curlrc); the queue lease could not delete it' >&2; exit 3; }
 mkdir -p $QD/bin $LOCKD && cat > $NVQ.new && chmod 755 $NVQ.new && mv -f $NVQ.new $NVQ
-cd $QD && echo $n > slots && echo nvidia > vendor && echo plain > mode && echo - > service && echo $NVC_CAP_MIN > default_cap && echo $NVC_CAP_MIN > max_cap
+cd $QD && echo $n > slots && echo $QUEUE_VENDOR > vendor && echo plain > mode && echo - > service && echo $NVC_CAP_MIN > default_cap && echo $NVC_CAP_MIN > max_cap
 printf 'POD_ID=%s\nIDLE_MIN=%s\nGRACE_MIN=%s\nCURLRC=/tmp/mojolearn-lease.curlrc\n' $(sq "$POD_ID") $NVC_IDLE_MIN $NVC_GRACE_MIN > lease.conf
 [ -s lease.last_busy ] || date +%s > lease.last_busy
 export GQ_DIR=$QD GQ_LOCKD=$LOCKD GQ_UNIT=nvq; $NVQ ensure; sleep 7; $NVQ lease-check" < "$ROOT/tools/gpu_queue_box.sh" > "$TMPD/install.out" 2>&1 \
@@ -314,6 +323,77 @@ pick_pod() {  # the live pod with the fewest assigned lanes per GPU
     echo "$best"
 }
 
+central_submit() {  # the `submit` command (a function so tools/cpu_central.sh check runs the same code)
+    lane="${1:-}"; lane_ok "$lane"; shift; n=1; cap=$NVC_CAP_MIN; note=''; results=''; persist=1; jobenv=''; preflight=1
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --gpus) n="${2:?--gpus N}"; shift 2 ;;
+            --cap) cap="${2:?--cap MIN}"; shift 2 ;;
+            --note) note="${2:?--note TEXT}"; shift 2 ;;
+            --results) results="${2:?--results DIR}"; shift 2 ;;
+            --no-persist) persist=0; shift ;;
+            --no-preflight) preflight=0; shift ;;
+            --env)
+                kv="${2:?--env K=V}"
+                [[ "$kv" =~ ^[A-Z_][A-Z0-9_]*=[A-Za-z0-9_.,:/@+=-]*$ ]] \
+                    || die "--env $kv: K must be upper case and V plain characters (no spaces or quotes)"
+                jobenv="$jobenv $kv"; shift 2 ;;
+            *) break ;;
+        esac
+    done
+    [ $# -eq 1 ] || die "submit <lane> [--gpus N] [--cap MIN] [--note TEXT] [--results DIR] [--env K=V]... [--no-persist] [--no-preflight] <script-on-box> (one script path; put arguments inside the script)"
+    [ -z "$jobenv" ] || [ "$persist" = 1 ] || die "--env applies to a persisted job only (drop --no-persist)"
+    need_lane_pod "$lane"
+    script=$1
+    # SUBMIT-TIME PREFLIGHT (lane fx-pod-job, 2026-11-18: a call-profile job failed three times in 90 s on inputs that
+    # were wrong when it was submitted, after 2 h 37 min in the queue): tools/ops/job_preflight.sh, streamed from this
+    # checkout, runs on the lane's pod before anything is queued: the script parses, every --env path exists there,
+    # and a script that declares `# job-preflight:` checks its own inputs (`<script> --preflight`, read only). Any
+    # FAIL refuses the submit. --no-preflight skips it.
+    if [ "$preflight" = 1 ]; then
+        ptree=/root/mojolearn-$lane
+        case "$script" in /*) pabs=$script ;; *) pabs=$ptree/$script ;; esac
+        pres=''
+        if [ -n "$results" ]; then case "$results" in /*) pres=$results ;; *) pres=$ptree/$results ;; esac; fi
+        # --env values are checked plain above, so they need no quoting here
+        prc=0
+        pf=$(BOX_TIMEOUT=300 box "bash -s -- $(sq "$ptree") $(sq "$pabs") $(sq "$pres")$jobenv" < "$ROOT/tools/ops/job_preflight.sh") || prc=$?
+        printf '%s\n' "$pf" | grep '^PREFLIGHT' | head -n 60 >&2 || true
+        [ "$prc" -eq 0 ] || die "the preflight refused $script (rc $prc); nothing was queued (fix the inputs above, or --no-preflight)"
+    fi
+    if [ "$persist" = 1 ]; then
+        # the queued script is a job.sh that runs <script> under tools/box_persist_run.sh (results to R2 from the pod)
+        bp_prepare "nvc-$lane" nvidia_central "$TMPD/persist.sh" --slots "$NVC_PERSIST_SLOTS" \
+            --every-min "$NVC_PERSIST_EVERY_MIN" --days "$NVC_PERSIST_DAYS" || die "$BP_MINT_FAILED"
+        tree=/root/mojolearn-$lane
+        case "$script" in /*) abs=$script ;; *) abs=$tree/$script ;; esac
+        res=${results:-box-out/$BP_TAG}; case "$res" in /*) ;; *) res=$tree/$res ;; esac
+        jobsh=$BP_BOX_ROOT/jobs/$BP_TAG/job.sh
+        {
+            printf '[ -f %s ] || { echo "nvidia_central: no script %s on the box" >&2; exit 4; }\n' "$(sq "$abs")" "$abs"
+            cat "$TMPD/persist.sh"
+            printf "cat > %s <<'BOX_PERSIST_JOB_EOF'\n" "$(sq "$jobsh")"
+            printf '#!/bin/bash\n# tools/nvidia_central.sh submit: %s under tools/box_persist_run.sh (results persist to R2 from the box)\n' "$abs"
+            # --env values are checked plain above, so they need no quoting here
+            printf 'exec env%s bash %s %s %s -- bash %s\n' "$jobenv" "$(sq "$BP_BOX_ROOT/bin/box_persist_run.sh")" "$(sq "$BP_JSON")" "$(sq "$res")" "$(sq "$abs")"
+            printf 'BOX_PERSIST_JOB_EOF\nchmod 700 %s\n' "$(sq "$jobsh")"
+        } > "$TMPD/stage.sh"
+        staged=$(BOX_TIMEOUT=120 box "bash -s" < "$TMPD/stage.sh") || true
+        printf '%s\n' "$staged" | grep -q '^BOX_PERSIST_STAGED ' || die "could not stage the job's persistence on $LANE_POD; nothing was queued"
+        note="${note:+$note }[persist $BP_TAG: $script -> $res]"
+        script=$jobsh
+    else
+        bp_opt_out nvidia_central "submit $lane $script" || exit 1
+    fi
+    id=$(box "$NVQ ensure > /dev/null && $NVQ submit $(sq "$lane") $(sq "$n") $(sq "$cap") $(sq "$script") $(sq "$note")" < /dev/null) || exit 1
+    if [ "$persist" = 1 ]; then
+        bp_note_job "$(printf '%s\t%s\t%s\t%s' "$LANE_POD-$id" "$lane" "$1" "$res")"
+    fi
+    echo "$LANE_POD-$id"
+}
+
+# sourced: the functions above only (tools/cpu_central.sh)
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
 cmd="${1:-}"; shift || true
 case "$cmd" in up|install|down)
     [ "${MOJOLEARN_ORCHESTRATOR:-0}" = 1 ] || die "only the orchestrator provisions machines: '$cmd' needs MOJOLEARN_ORCHESTRATOR=1. A lane reports that it needs NVIDIA and waits." ;;
@@ -389,74 +469,7 @@ sync)
     BOX_TIMEOUT=60 box "$NVQ hold true" < /dev/null || true
     say "lane $lane is on $k ($GPU_COUNT GPU slots, $GPU); submit with: tools/nvidia_central.sh submit $lane <script>"
     ;;
-submit)
-    lane="${1:-}"; lane_ok "$lane"; shift; n=1; cap=$NVC_CAP_MIN; note=''; results=''; persist=1; jobenv=''; preflight=1
-    while [ $# -gt 0 ]; do
-        case "$1" in
-            --gpus) n="${2:?--gpus N}"; shift 2 ;;
-            --cap) cap="${2:?--cap MIN}"; shift 2 ;;
-            --note) note="${2:?--note TEXT}"; shift 2 ;;
-            --results) results="${2:?--results DIR}"; shift 2 ;;
-            --no-persist) persist=0; shift ;;
-            --no-preflight) preflight=0; shift ;;
-            --env)
-                kv="${2:?--env K=V}"
-                [[ "$kv" =~ ^[A-Z_][A-Z0-9_]*=[A-Za-z0-9_.,:/@+=-]*$ ]] \
-                    || die "--env $kv: K must be upper case and V plain characters (no spaces or quotes)"
-                jobenv="$jobenv $kv"; shift 2 ;;
-            *) break ;;
-        esac
-    done
-    [ $# -eq 1 ] || die "submit <lane> [--gpus N] [--cap MIN] [--note TEXT] [--results DIR] [--env K=V]... [--no-persist] [--no-preflight] <script-on-box> (one script path; put arguments inside the script)"
-    [ -z "$jobenv" ] || [ "$persist" = 1 ] || die "--env applies to a persisted job only (drop --no-persist)"
-    need_lane_pod "$lane"
-    script=$1
-    # SUBMIT-TIME PREFLIGHT (lane fx-pod-job, 2026-11-18: a call-profile job failed three times in 90 s on inputs that
-    # were wrong when it was submitted, after 2 h 37 min in the queue): tools/ops/job_preflight.sh, streamed from this
-    # checkout, runs on the lane's pod before anything is queued: the script parses, every --env path exists there,
-    # and a script that declares `# job-preflight:` checks its own inputs (`<script> --preflight`, read only). Any
-    # FAIL refuses the submit. --no-preflight skips it.
-    if [ "$preflight" = 1 ]; then
-        ptree=/root/mojolearn-$lane
-        case "$script" in /*) pabs=$script ;; *) pabs=$ptree/$script ;; esac
-        pres=''
-        if [ -n "$results" ]; then case "$results" in /*) pres=$results ;; *) pres=$ptree/$results ;; esac; fi
-        # --env values are checked plain above, so they need no quoting here
-        prc=0
-        pf=$(BOX_TIMEOUT=300 box "bash -s -- $(sq "$ptree") $(sq "$pabs") $(sq "$pres")$jobenv" < "$ROOT/tools/ops/job_preflight.sh") || prc=$?
-        printf '%s\n' "$pf" | grep '^PREFLIGHT' | head -n 60 >&2 || true
-        [ "$prc" -eq 0 ] || die "the preflight refused $script (rc $prc); nothing was queued (fix the inputs above, or --no-preflight)"
-    fi
-    if [ "$persist" = 1 ]; then
-        # the queued script is a job.sh that runs <script> under tools/box_persist_run.sh (results to R2 from the pod)
-        bp_prepare "nvc-$lane" nvidia_central "$TMPD/persist.sh" --slots "$NVC_PERSIST_SLOTS" \
-            --every-min "$NVC_PERSIST_EVERY_MIN" --days "$NVC_PERSIST_DAYS" || die "$BP_MINT_FAILED"
-        tree=/root/mojolearn-$lane
-        case "$script" in /*) abs=$script ;; *) abs=$tree/$script ;; esac
-        res=${results:-box-out/$BP_TAG}; case "$res" in /*) ;; *) res=$tree/$res ;; esac
-        jobsh=$BP_BOX_ROOT/jobs/$BP_TAG/job.sh
-        {
-            printf '[ -f %s ] || { echo "nvidia_central: no script %s on the box" >&2; exit 4; }\n' "$(sq "$abs")" "$abs"
-            cat "$TMPD/persist.sh"
-            printf "cat > %s <<'BOX_PERSIST_JOB_EOF'\n" "$(sq "$jobsh")"
-            printf '#!/bin/bash\n# tools/nvidia_central.sh submit: %s under tools/box_persist_run.sh (results persist to R2 from the box)\n' "$abs"
-            # --env values are checked plain above, so they need no quoting here
-            printf 'exec env%s bash %s %s %s -- bash %s\n' "$jobenv" "$(sq "$BP_BOX_ROOT/bin/box_persist_run.sh")" "$(sq "$BP_JSON")" "$(sq "$res")" "$(sq "$abs")"
-            printf 'BOX_PERSIST_JOB_EOF\nchmod 700 %s\n' "$(sq "$jobsh")"
-        } > "$TMPD/stage.sh"
-        staged=$(BOX_TIMEOUT=120 box "bash -s" < "$TMPD/stage.sh") || true
-        printf '%s\n' "$staged" | grep -q '^BOX_PERSIST_STAGED ' || die "could not stage the job's persistence on $LANE_POD; nothing was queued"
-        note="${note:+$note }[persist $BP_TAG: $script -> $res]"
-        script=$jobsh
-    else
-        bp_opt_out nvidia_central "submit $lane $script" || exit 1
-    fi
-    id=$(box "$NVQ ensure > /dev/null && $NVQ submit $(sq "$lane") $(sq "$n") $(sq "$cap") $(sq "$script") $(sq "$note")" < /dev/null) || exit 1
-    if [ "$persist" = 1 ]; then
-        bp_note_job "$(printf '%s\t%s\t%s\t%s' "$LANE_POD-$id" "$lane" "$1" "$res")"
-    fi
-    echo "$LANE_POD-$id"
-    ;;
+submit) central_submit "$@" ;;
 queue)
     for k in $(live_pods); do
         pod_env $k; echo "== $k: pod $POD_ID, $GPU_COUNT GPU ($GPU), \$$COST_HR/hr"
