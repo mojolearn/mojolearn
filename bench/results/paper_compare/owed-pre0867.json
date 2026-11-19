@@ -640,7 +640,7 @@
   },
   "xcnn-typed-door": {
    "define": "MOJOLEARN_XCNN_FAST_TYPED_DOOR",
-   "status": "define in code (bindings/xcnn_native_pack.mojo xcnn_c; bindings/xcnn_pool_typed_door.mojo): B = the typed boundary tables of the average pools (one typed context per process, one typed record per layer, valid under the 3.12+ dictionary and type watchers; no by-name read, Python str or instance-dictionary write per resident call); A = the door, the default, unchanged. Host side only: the same entry and launch words. Pilot of design A (~/mojolearn-evidence/briefs-20261118/ideas-boundary-RESULT.md), lane fx-typed-pilot (2026-11-18)",
+   "status": "define in code (bindings/xcnn_native_pack.mojo xcnn_c; bindings/xcnn_pool_typed_door.mojo): B = the typed boundary tables of the pools (one typed context per process, one typed record per layer, valid under the 3.12+ dictionary and type watchers; no by-name read, Python str or instance-dictionary write per resident call); A = the door, the default, unchanged. Host side only: the same entry and launch words. Pilot of design A (~/mojolearn-evidence/briefs-20261118/ideas-boundary-RESULT.md), lane fx-typed-pilot (2026-11-18): average pools. Lane fx-maxpool (2026-11-19): MaxPool1d/2d, AdaptiveMaxPool2d and the adaptive kernel (an output size that does not divide the input, avg and max); the max record carries the resident winners handle and the watch epochs of the two dictionaries that name it, and a hit writes nothing because the winners' state depends only on the input shape (~/mojolearn-evidence/briefs-20261118/fx-maxpool-RESULT.md)",
    "owed": "RUN"
   },
   "mamba3-s17-tail-tree": {
@@ -3681,6 +3681,129 @@
     "xcnn-typed-door"
    ],
    "decides": "keep A (the door, the default) unless B is faster on the NVIDIA L40S (small rows: median of 20 consecutive calls); digests must not move in either arm (host side only); the verdict decides the rollout of design A to the other families, not only this switch; time also a neighbouring shape (another batch and spatial size) and a non-board input before a flip (no dimension targeting)"
+  },
+  {
+   "id": "xcnn-typed-door-global-maxpool",
+   "source": "lane fx-maxpool (2026-11-19): the typed boundary tables extended to the max pools and the adaptive kernel, opt-in arm, default off (~/mojolearn-evidence/briefs-20261118/fx-maxpool-RESULT.md)",
+   "kind": "ab",
+   "lane": "global-maxpool",
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "xcnn-typed-door"
+   ],
+   "decides": "keep A (the door, the default) unless B is faster on the NVIDIA L40S, fit and infer (small rows: median of 20 consecutive calls); digests must not move in either arm (host side only); the measured global-maxpool gap this arm is for: fit 0.108 ms and infer 0.057 ms on the door against 0.069 and 0.039 ms stored for 0.8.55"
+  },
+  {
+   "id": "xcnn-typed-door-maxpool2d",
+   "source": "lane fx-maxpool (2026-11-19): the typed boundary tables extended to the max pools and the adaptive kernel, opt-in arm, default off (~/mojolearn-evidence/briefs-20261118/fx-maxpool-RESULT.md)",
+   "kind": "ab",
+   "lane": "maxpool2d",
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "xcnn-typed-door"
+   ],
+   "decides": "keep A (the door, the default) unless B is faster on the NVIDIA L40S, fit and infer (small rows: median of 20 consecutive calls); digests must not move in either arm (host side only); the measured global-maxpool gap this arm is for: fit 0.108 ms and infer 0.057 ms on the door against 0.069 and 0.039 ms stored for 0.8.55"
+  },
+  {
+   "id": "xcnn-typed-door-maxpool1d",
+   "source": "lane fx-maxpool (2026-11-19): the typed boundary tables extended to the max pools and the adaptive kernel, opt-in arm, default off (~/mojolearn-evidence/briefs-20261118/fx-maxpool-RESULT.md)",
+   "kind": "ab",
+   "lane": "maxpool1d",
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "xcnn-typed-door"
+   ],
+   "decides": "keep A (the door, the default) unless B is faster on the NVIDIA L40S, fit and infer (small rows: median of 20 consecutive calls); digests must not move in either arm (host side only); the measured global-maxpool gap this arm is for: fit 0.108 ms and infer 0.057 ms on the door against 0.069 and 0.039 ms stored for 0.8.55"
+  },
+  {
+   "id": "xcnn-typed-door-max-sizes",
+   "source": "lane fx-maxpool (2026-11-19): the typed boundary tables extended to the max pools and the adaptive kernel, opt-in arm, default off (~/mojolearn-evidence/briefs-20261118/fx-maxpool-RESULT.md); the neighbouring shape, the non-board model and the adaptive kernel sizes of the arm (no dimension targeting)",
+   "kind": "ab",
+   "lane": [
+    "maxpool2d",
+    "global-maxpool",
+    "global-avgpool"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "xcnn-typed-door"
+   ],
+   "shape": {
+    "cases": [
+     {
+      "note": "neighbouring shape",
+      "layer": "MaxPool2d(3, 2)",
+      "x": [
+       4,
+       8,
+       33,
+       33
+      ],
+      "columns": [
+       "fit",
+       "infer"
+      ]
+     },
+     {
+      "note": "non-board model",
+      "layers": "Conv2d(3, 16, 3) -> BatchNorm2d(16) -> AdaptiveMaxPool2d(1)",
+      "x": [
+       8,
+       3,
+       32,
+       32
+      ],
+      "columns": [
+       "fit",
+       "infer"
+      ]
+     },
+     {
+      "note": "adaptive kernel, output size not dividing the input",
+      "layer": "AdaptiveMaxPool2d(3) and AdaptiveAvgPool2d(3)",
+      "x": [
+       8,
+       16,
+       14,
+       14
+      ],
+      "columns": [
+       "fit",
+       "infer"
+      ]
+     },
+     {
+      "note": "input shape changing every call (a record miss and refill per call: the arm's worst case)",
+      "layer": "MaxPool2d(3, 2)",
+      "x": [
+       [
+        4,
+        8,
+        33,
+        33
+       ],
+       [
+        4,
+        8,
+        35,
+        35
+       ]
+      ],
+      "columns": [
+       "infer"
+      ]
+     }
+    ]
+   },
+   "decides": "B at least as fast as the door at the first three cases, outputs and winners (indices_) equal in both arms, a backward after a typed forward equal to the door's; the fourth case states the cost of a miss and blocks nothing by itself. OWED TOOLING: the board harness has no driver for a caller-given CNN layer and input shape; until one exists these cases are timed with the layer recipe of the named lanes at the stated shapes"
   },
   {
    "id": "mamba3-s17-tail-tree-samba-train-step",
