@@ -1840,7 +1840,7 @@ def _ordered_device_leaves(
     formed on the device), from the `h_est` copy `_ordered_estimate_complete`
     enqueued. The caller has drained since. One memcpy: the host model's
     download."""
-    var leaves = List[Float32](length=n_leaves, fill=Float32(0.0))
+    var leaves = List[Float32](unsafe_uninit_length=n_leaves)
     unsafe_memcpy(
         dest=leaves.unsafe_ptr(),
         src=est_ws[0].h_est.unsafe_ptr(),
@@ -2372,7 +2372,7 @@ def _ord_fast_take_leaves(
 ) -> List[Float32]:
     """The estimation task's RESCALED leaves (`leaf * learning_rate`, formed
     on the device), after the drain that ran the copy; one memcpy."""
-    var out = List[Float32](length=n_leaves, fill=Float32(0.0))
+    var out = List[Float32](unsafe_uninit_length=n_leaves)
     unsafe_memcpy(dest=out.unsafe_ptr(), src=fast_h_leaves[0].unsafe_ptr(), count=n_leaves)
     return out^
 

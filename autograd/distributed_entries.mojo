@@ -150,7 +150,7 @@ def distributed_load_native[E: Exec & Movable & Deinitable, KIND: Int](
         fp.append(ck.ext_floats[k])
     for j in range(len(p.params)):  # driver-loop: checkpoint parameter bytes
         trainable.append(ck.ext_ints[DISTRIBUTED_HEADER_WORDS + j] != 0)
-        var data = List[Float32](length=p.param_shapes[j].count(), fill=Float32(0))
+        var data = List[Float32](unsafe_uninit_length=p.param_shapes[j].count())
         unsafe_memcpy(dest=data.unsafe_ptr(), src=ck.param.unsafe_ptr() + ck.offsets[j], count=len(data))
         values.append(data^)
     var cfg = distributed_optimizer_config(ip, fp)

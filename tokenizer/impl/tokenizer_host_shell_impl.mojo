@@ -134,7 +134,7 @@ def _i64_list(addr: Int, n: Int) raises -> List[Int]:
 
 
 def _u8_list(addr: Int, n: Int) raises -> List[UInt8]:
-    var out = List[UInt8](length=n, fill=UInt8(0))
+    var out = List[UInt8](unsafe_uninit_length=max(n, 0))
     if n > 0:
         unsafe_memcpy(dest=out.unsafe_ptr(), src=_u8_ptr(addr), count=n)
     return out^
@@ -187,7 +187,7 @@ def bpe_encode_into(
 ) raises -> Int:
     """`bpe_encode`'s work: encode `n` bytes, write the ids as int32."""
     var src = _u8_ptr(text_address)
-    var text = List[UInt8](length=n, fill=UInt8(0))
+    var text = List[UInt8](unsafe_uninit_length=n)
     unsafe_memcpy(dest=text.unsafe_ptr(), src=src, count=n)
     # THE ONE CALL THAT COMPUTES ANYTHING.
     var ids = handle.tok.value().encode_bytes(text, allow)
@@ -265,7 +265,7 @@ def bpe_encode_batch_into(
         for k in range(lo, hi):
             var a = Int(offs[k])
             var m = Int(offs[k + 1]) - a
-            var doc = List[UInt8](length=m, fill=UInt8(0))
+            var doc = List[UInt8](unsafe_uninit_length=max(m, 0))
             try:
                 if m > 0:
                     var src = _u8_ptr(text_address + a)
@@ -361,7 +361,7 @@ def bpe_train_fill(
     for k in range(n_docs):
         var a = Int(offs[k])
         var m = Int(offs[k + 1]) - a
-        var doc = List[UInt8](length=m, fill=UInt8(0))
+        var doc = List[UInt8](unsafe_uninit_length=max(m, 0))
         if m > 0:
             unsafe_memcpy(
                 dest=doc.unsafe_ptr(), src=_u8_ptr(text_address + a), count=m
@@ -717,7 +717,7 @@ def bpe_encode_corpus_into(
         for k in range(lo, hi):
             var a = startp[k]
             var m = stopp[k] - a
-            var doc = List[UInt8](length=m, fill=UInt8(0))
+            var doc = List[UInt8](unsafe_uninit_length=max(m, 0))
             try:
                 if m > 0:
                     unsafe_memcpy(dest=doc.unsafe_ptr(), src=_u8_ptr(data_address + a), count=m)

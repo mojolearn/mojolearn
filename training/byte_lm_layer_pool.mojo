@@ -247,7 +247,7 @@ struct ByteLayerPool(Movable):
         # place in the result (every layer has the same length), no host
         # element-by-element append.
         var per = len(self.layers[0].total) if len(self.layers) > 0 else 0
-        var result = List[Float32](length=per * len(self.layers), fill=Float32(0.0))
+        var result = List[Float32](unsafe_uninit_length=per * len(self.layers))
         for i in range(len(self.layers)):
             var owner = self.layers[i].owner
             if len(self.layers[i].total) != per:

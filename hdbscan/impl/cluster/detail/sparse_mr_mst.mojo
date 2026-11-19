@@ -1642,9 +1642,9 @@ def sparse_mr_mst(
     )
     # cpu3-neighbors: the three edge arrays are copied straight into the
     # returned lists (no staging buffers, no host copy walk).
-    var lo = List[Int32](length=m - 1, fill=Int32(0))
-    var hi = List[Int32](length=m - 1, fill=Int32(0))
-    var w = List[Float32](length=m - 1, fill=Float32(0.0))
+    var lo = List[Int32](unsafe_uninit_length=m - 1)
+    var hi = List[Int32](unsafe_uninit_length=m - 1)
+    var w = List[Float32](unsafe_uninit_length=m - 1)
     ctx.enqueue_copy(dst_ptr=lo.unsafe_ptr(), src_buf=rows)
     ctx.enqueue_copy(dst_ptr=hi.unsafe_ptr(), src_buf=cols)
     ctx.enqueue_copy(dst_ptr=w.unsafe_ptr(), src_buf=wts)

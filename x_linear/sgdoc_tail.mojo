@@ -111,7 +111,7 @@ def sgdoc_centered(ctx: DeviceContext, x: FP, n: Int, d: Int) raises -> Bool:
         dpart.unsafe_ptr(), Int32(n), Int32(d), Int32(g), dflag.unsafe_ptr(),
         grid_dim=(d + SGDOC_TAIL_TPB - 1) // SGDOC_TAIL_TPB, block_dim=SGDOC_TAIL_TPB,
     )
-    var h = List[Int32](length=1, fill=Int32(1))
+    var h = List[Int32](unsafe_uninit_length=1)
     ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=dflag)
     ctx.synchronize()
     var ok = h[0] == 0

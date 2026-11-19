@@ -349,7 +349,7 @@ def _ug_scan(
 
 
 def _ug_get_f32(ctx: DeviceContext, buf: DeviceBuffer[DType.float32], n: Int) raises -> List[Float32]:
-    var out = List[Float32](length=n, fill=Float32(0.0))
+    var out = List[Float32](unsafe_uninit_length=max(n, 0))
     if n > 0:
         var view = buf.create_sub_buffer[DType.float32](0, n)
         ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=view)
@@ -359,7 +359,7 @@ def _ug_get_f32(ctx: DeviceContext, buf: DeviceBuffer[DType.float32], n: Int) ra
 
 
 def _ug_get_u32(ctx: DeviceContext, buf: DeviceBuffer[DType.uint32], n: Int) raises -> List[UInt32]:
-    var out = List[UInt32](length=n, fill=UInt32(0))
+    var out = List[UInt32](unsafe_uninit_length=max(n, 0))
     if n > 0:
         var view = buf.create_sub_buffer[DType.uint32](0, n)
         ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=view)
@@ -369,7 +369,7 @@ def _ug_get_u32(ctx: DeviceContext, buf: DeviceBuffer[DType.uint32], n: Int) rai
 
 
 def _ug_get_i32(ctx: DeviceContext, buf: DeviceBuffer[DType.int32], at: Int, n: Int) raises -> List[Int32]:
-    var out = List[Int32](length=n, fill=Int32(0))
+    var out = List[Int32](unsafe_uninit_length=max(n, 0))
     if n > 0:
         var view = buf.create_sub_buffer[DType.int32](at, n)
         ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=view)

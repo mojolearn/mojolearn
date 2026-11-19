@@ -353,7 +353,7 @@ def nan_cells_device(x: Int, cells: Int, colmiss: Int, info: Int, n: Int, d: Int
         var threads = nrb * d
         ctx.enqueue_function[nan_colmiss_kernel](xp, d_cm.unsafe_ptr(), Int64(n), Int64(d),
                                                  grid_dim=(threads + NC_TPB - 1) // NC_TPB, block_dim=NC_TPB)
-    var hinfo = List[Int32](length=1, fill=Int32(0))
+    var hinfo = List[Int32](unsafe_uninit_length=1)
     ctx.enqueue_copy(dst_ptr=hinfo.unsafe_ptr(), src_buf=d_info)
     if d > 0:
         _down_i(ctx, d_cm, colmiss, d)

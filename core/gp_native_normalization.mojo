@@ -49,7 +49,7 @@ def _gp_nan_fill(source: GPNormF32P, n: Int, program_driver: PrepProgramDriver) 
     _stage(program, 24, n, 0, n, 1, stat, dest, keep, 1)
     _gp_prep_run(program_driver, arena, program)
     scaler_refuse_infinite_columns(ap, st, 1)
-    var values = List[Float32](length=n, fill=0)
+    var values = List[Float32](unsafe_uninit_length=n)
     unsafe_memcpy(dest=values.unsafe_ptr(), src=ap+dest, count=n)
     _ = arena
     return values^

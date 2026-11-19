@@ -19,7 +19,7 @@ def mamba_copy_f32(dst_addr: Int, src_addr: Int, count: Int) raises:
 
 def mamba_host_copy(src_addr: Int, count: Int) raises -> List[Float32]:
     """A new owned buffer holding the `count` float32 values at `src_addr`."""
-    var out = List[Float32](length=count, fill=0)
+    var out = List[Float32](unsafe_uninit_length=max(count, 0))
     if count > 0:
         unsafe_memcpy(dest=out.unsafe_ptr(), src=f32_ptr(src_addr), count=count)
     return out^

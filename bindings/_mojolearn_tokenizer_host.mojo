@@ -618,7 +618,7 @@ def _py_bytes_list(raw: PythonObject) raises -> List[UInt8]:
     `array('B')` buffer (no Python loop over the bytes)."""
     var arr = py_call(native_loaded_module("array").array, "B", raw)
     var n = len(arr)
-    var out = List[UInt8](length=n, fill=UInt8(0))
+    var out = List[UInt8](unsafe_uninit_length=max(n, 0))
     if n > 0:
         unsafe_memcpy(dest=out.unsafe_ptr(), src=_u8_ptr(Int(py=arr.buffer_info()[0])), count=n)
         _ = arr  # keep the Python object alive through the native call above

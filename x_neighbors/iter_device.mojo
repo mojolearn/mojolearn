@@ -299,7 +299,7 @@ def op_lp_iterate(
             d_g.unsafe_ptr(), Int64(n), d_cnt.unsafe_ptr(), d_stats.unsafe_ptr(),
             grid_dim=_grid(n), block_dim=(BLOCK if n > 1 else 1),
         )
-    var hst = List[Int32](length=2, fill=Int32(0))
+    var hst = List[Int32](unsafe_uninit_length=2)
     ctx.enqueue_copy(dst_ptr=hst.unsafe_ptr(), src_buf=d_stats)
     ctx.synchronize()
     var nnz = Int(hst[0])

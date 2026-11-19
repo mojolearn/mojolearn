@@ -114,7 +114,7 @@ def fast_doc_offsets(lens_address: Int, n_docs: Int, n: Int, who: String) raises
 def _document(text_address: Int, offs: List[Int], d: Int) raises -> List[UInt8]:
     var a = offs[d]
     var m = offs[d + 1] - a
-    var doc = List[UInt8](length=m, fill=UInt8(0))
+    var doc = List[UInt8](unsafe_uninit_length=max(m, 0))
     if m > 0:
         unsafe_memcpy(dest=doc.unsafe_ptr(), src=_u8_ptr(text_address + a), count=m)
     return doc^

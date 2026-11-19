@@ -1298,7 +1298,7 @@ def _finish(
     var dcnt = ctx.enqueue_create_buffer[DType.int32](1)
     enqueue_fill_n(ctx, dcnt, 1, Int32(0))
     ctx.enqueue_function[mf_count_kernel](_i(dsup), Int32(n), _i(dcnt), grid_dim=_blocks(n), block_dim=MF_TPB)
-    var hcnt = List[Int32](length=1, fill=Int32(-1))
+    var hcnt = List[Int32](unsafe_uninit_length=1)
     ctx.enqueue_copy(dst_ptr=hcnt.unsafe_ptr(), src_buf=dcnt)
     var herr = List[Int32](length=MF_ERR, fill=Int32(0))
     ctx.enqueue_copy(dst_ptr=herr.unsafe_ptr(), src_buf=err)

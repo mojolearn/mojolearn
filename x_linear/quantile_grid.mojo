@@ -714,7 +714,7 @@ def quantile_fit_grid(
     wp += 1
     if not wit.ok(ctx, wp, "QuantileRegressor polish setup"):
         wit.fail()
-    var hps = List[Float32](length=QP_WORDS, fill=Float32(0))
+    var hps = List[Float32](unsafe_uninit_length=QP_WORDS)
     ctx.enqueue_copy(dst_ptr=hps.unsafe_ptr(), src_buf=dps)
     ctx.synchronize()
     if hps[QP_DONE] == Float32(0):

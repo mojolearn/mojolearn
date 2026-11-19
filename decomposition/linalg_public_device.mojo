@@ -95,7 +95,7 @@ def _download(
     ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], n: Int
 ) raises -> List[Float32]:
     # the result lands straight in the list (no host copy loop)
-    var out = List[Float32](length=n, fill=Float32(0.0))
+    var out = List[Float32](unsafe_uninit_length=max(n, 0))
     if n > 0:
         var head = buf.create_sub_buffer[DType.float32](0, n)
         ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=head)

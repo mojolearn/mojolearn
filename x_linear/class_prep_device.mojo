@@ -124,7 +124,7 @@ def class_prep_device(var ctx: DeviceContext, codes: IP, sw: FP, has_sw: Bool, c
         tries += 1
         if tries >= WITNESS_TRIES:
             wit.fail()
-    var hlg = List[Int32](length=1, fill=Int32(0))
+    var hlg = List[Int32](unsafe_uninit_length=1)
     ctx.enqueue_copy(dst_ptr=hlg.unsafe_ptr(), src_buf=dlg)
     if balanced:
         ctx.enqueue_copy(dst_ptr=cw, src_buf=dcw.create_sub_buffer[DType.float32](0, k))

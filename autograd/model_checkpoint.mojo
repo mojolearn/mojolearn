@@ -111,7 +111,7 @@ def _check_layout(ck: Checkpoint, offsets: List[Int], names: List[String], path:
 
 
 def _floats_of(p: FP, n: Int) -> List[Float32]:
-    var out = List[Float32](length=n, fill=Float32(0))
+    var out = List[Float32](unsafe_uninit_length=max(n, 0))
     if n > 0:
         unsafe_memcpy(dest=out.unsafe_ptr(), src=p, count=n)
     return out^
