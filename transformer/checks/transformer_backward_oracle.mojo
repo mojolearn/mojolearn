@@ -138,7 +138,6 @@ RISK: WHAT IS LEAST LIKELY TO COMPILE
 from transformer.experiments.norm_fixed_lanes import IDN_NORM_FIXED_LANES, nfl_dot
 from std.math import min
 from std.memory import bitcast
-from std.sys.compile import is_defined
 
 from core.host_lanes import F32V, HOST_FW, ftz_lanes, host_row_tasks, lanes_are_identical
 from std.time import perf_counter_ns
@@ -264,131 +263,8 @@ def _gemm_bwd_b(
     return gemm_host_rows(other, dc, call[0], call[1], call[2], call[3])
 
 
-# lane fx-gemm-dx-concat (2026-11-19, `-D MOJOLEARN_GEMM_FAST_DX_CONCAT=1`,
-# default OFF, OPEN: no A/B yet). BITS CHANGE under the define, here and in
-# the device rules together (autograd/kernels/transformer.mojo
-# BWD_GEMM_DX_CONCAT, autograd/rules_transformer.mojo _dx_fanin_cat): the
-# three-term fan-in at `d(norm1.out)` is ONE gemm v1 product over the
-# concatenated contraction axis, and stage 29-32 below calls
-# `qkv_fanin_concat_host` in place of three products and `(q + k) + v`.
-comptime BWD_HOST_DX_CONCAT = is_defined["MOJOLEARN_GEMM_FAST_DX_CONCAT"]()
-
-
-def _qkv_concat_cols_into(
-    dq: List[Float32],
-    dk: List[Float32],
-    dv: List[Float32],
-    m: Int,
-    nq: Int,
-    nk: Int,
-    nv: Int,
-    mut output: List[Float32],
-):
-    """`output [m, nq + nk + nv]` = `[dq | dk | dv]`, bit copies, rows over
-    host tasks (a row reads its own three member rows and nothing else).
-    Sized once and every cell written (the form `rope_backward_into` uses)."""
-    var nt = nq + nk + nv
-    output = host_f32_uninit(m * nt)
-    var tasks = host_row_tasks(m, nt)
-    var chunk = (m + tasks - 1) // tasks
-    def _rows(task: Int) {imm dq, imm dk, imm dv, mut output, imm m, imm nq, imm nk, imm nv, imm nt, imm chunk}:
-        for r in range(task * chunk, min((task + 1) * chunk, m)):
-            var base = r * nt
-            for c in range(nq):
-                output[base + c] = dq[r * nq + c]
-            for c in range(nk):
-                output[base + nq + c] = dk[r * nk + c]
-            for c in range(nv):
-                output[base + nq + nk + c] = dv[r * nv + c]
-    if tasks <= 1:
-        _rows(0)
-    else:
-        host_parallelize(_rows, tasks)
-
-
-def _qkv_concat_rows_into(
-    wq: List[Float32],
-    wk: List[Float32],
-    wv: List[Float32],
-    nq: Int,
-    nk: Int,
-    nv: Int,
-    dm: Int,
-    mut output: List[Float32],
-):
-    """`output [nq + nk + nv, dm]` = `[wq; wk; wv]`, bit copies, rows over
-    host tasks."""
-    var nt = nq + nk + nv
-    output = host_f32_uninit(nt * dm)
-    var tasks = host_row_tasks(nt, dm)
-    var chunk = (nt + tasks - 1) // tasks
-    def _rows(task: Int) {imm wq, imm wk, imm wv, mut output, imm nq, imm nk, imm nt, imm dm, imm chunk}:
-        for p in range(task * chunk, min((task + 1) * chunk, nt)):
-            var base = p * dm
-            if p < nq:
-                for j in range(dm):
-                    output[base + j] = wq[p * dm + j]
-            elif p < nq + nk:
-                for j in range(dm):
-                    output[base + j] = wk[(p - nq) * dm + j]
-            else:
-                for j in range(dm):
-                    output[base + j] = wv[(p - nq - nk) * dm + j]
-    if tasks <= 1:
-        _rows(0)
-    else:
-        host_parallelize(_rows, tasks)
-
-
-def qkv_fanin_concat_host(
-    dq: List[Float32],
-    dk: List[Float32],
-    dv: List[Float32],
-    wq: List[Float32],
-    wk: List[Float32],
-    wv: List[Float32],
-    m: Int,
-    nq: Int,
-    nk: Int,
-    nv: Int,
-    dm: Int,
-) raises -> List[Float32]:
-    """`d(norm1.out) [m, dm]` as ONE routed product (the arm's order):
-
-        K  = nq + nk + nv
-        dP = [dq | dk | dv]   [m, K]    (member gradients `[m, n]`, by column)
-        Wc = [wq; wk; wv]     [K, dm]   (member weights `[n, dm]`, by row)
-        out[i, j] = gemm v1 (dP, Wc)[i, j] at contraction length K:
-            (L, P) = contract_partition(K)
-            s_t  = chain over p in [t L, min((t + 1) L, K)) ascending,
-                   seeded +0.0: acc = ftz(fma(ftz(dP[i, p]), ftz(Wc[p, j]), acc))
-            cell = ftz(T(s_0 .. s_{P-1})), the contract's balanced tree
-
-    in the forward-use order q, k, v. The call row is
-    `gemm_backward_a_call(OP_NT, m, K, dm)`, the row each member takes alone.
-    The two concatenations are bit copies (no flush: the product flushes at
-    its loads). It replaces `ftz(ftz(ftz(t_q + t_k)) + ftz(t_v))`; there is
-    no join, so no seed and no three-term association left to pin.
-
-    Compiled in every build (the device check calls it on device words);
-    the oracle reaches it only under the define. Parallel: the copies run
-    rows over host tasks, the product is `gemm_host_rows`' own tiling."""
-    var nt = nq + nk + nv
-    if m <= 0 or dm <= 0 or nq <= 0 or nk <= 0 or nv <= 0:
-        raise Error("transformer backward: the concatenated fan-in needs positive sizes")
-    if (
-        len(dq) != m * nq or len(dk) != m * nk or len(dv) != m * nv
-        or len(wq) != nq * dm or len(wk) != nk * dm or len(wv) != nv * dm
-    ):
-        raise Error("transformer backward: a member of the concatenated fan-in has the wrong length")
-    var dcat = List[Float32]()
-    var wcat = List[Float32]()
-    _qkv_concat_cols_into(dq, dk, dv, m, nq, nk, nv, dcat)
-    _qkv_concat_rows_into(wq, wk, wv, nq, nk, nv, dm, wcat)
-    var out = _gemm_bwd_a(dcat, wcat, OP_NT, m, nt, dm)
-    _ = dcat^
-    _ = wcat^
-    return out^
+# TOMBSTONE: MOJOLEARN_GEMM_FAST_DX_CONCAT (NOISE, A/B round 1 NVIDIA L40S, job nvc-ab-20261119T125554Z-6f7afc: lm-train-step 1.00, samba-train-step 0.99) the host oracle's one-product form (qkv_fanin_concat_host) deleted 2026-11-19 by lane/fx-verdicts3; code recoverable at 913fc44cfa.
+# Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_DX_CONCAT.patch
 
 
 def _ones(n: Int) -> List[Float32]:
@@ -1986,24 +1862,16 @@ def transformer_block_backward_oracle(
     st.dw_q = _gemm_bwd_b(st.d_q_proj_out, fwd.norm1_out, OP_NT, m, qw, dm)
     st.dw_k = _gemm_bwd_b(st.d_k_proj_out, fwd.norm1_out, OP_NT, m, kw, dm)
     st.dw_v = _gemm_bwd_b(st.d_v_proj_out, fwd.norm1_out, OP_NT, m, kw, dm)
-    comptime if BWD_HOST_DX_CONCAT:
-        # lane fx-gemm-dx-concat (arm, default off; BITS CHANGE): ONE product
-        # over [dQ | dK | dV] . [Wq; Wk; Wv], as the device rules run it.
-        st.d_norm1_out = qkv_fanin_concat_host(
-            st.d_q_proj_out, st.d_k_proj_out, st.d_v_proj_out,
-            w.w_q, w.w_k, w.w_v, m, qw, kw, kw, dm,
-        )
-    else:
-        var t_q = _gemm_bwd_a(st.d_q_proj_out, w.w_q, OP_NT, m, qw, dm)
-        var t_k = _gemm_bwd_a(st.d_k_proj_out, w.w_k, OP_NT, m, kw, dm)
-        var t_v = _gemm_bwd_a(st.d_v_proj_out, w.w_v, OP_NT, m, kw, dm)
-        st.d_norm1_out = host_f32_uninit(m * dm)
-        for i in range(m * dm):
-            var acc = ftz(ftz(t_q[i]) + ftz(t_k[i]))
-            st.d_norm1_out[i] = ftz(ftz(acc) + ftz(t_v[i]))
-        _ = t_q^
-        _ = t_k^
-        _ = t_v^
+    var t_q = _gemm_bwd_a(st.d_q_proj_out, w.w_q, OP_NT, m, qw, dm)
+    var t_k = _gemm_bwd_a(st.d_k_proj_out, w.w_k, OP_NT, m, kw, dm)
+    var t_v = _gemm_bwd_a(st.d_v_proj_out, w.w_v, OP_NT, m, kw, dm)
+    st.d_norm1_out = host_f32_uninit(m * dm)
+    for i in range(m * dm):
+        var acc = ftz(ftz(t_q[i]) + ftz(t_k[i]))
+        st.d_norm1_out[i] = ftz(ftz(acc) + ftz(t_v[i]))
+    _ = t_q^
+    _ = t_k^
+    _ = t_v^
     host_tick(hton, htk, "bwd.qkv_proj")
 
     # =====================================================================
