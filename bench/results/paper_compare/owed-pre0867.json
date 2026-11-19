@@ -638,7 +638,8 @@
   "llama-refuse-watermark": {
    "define": "MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK",
    "status": "define in code (transformer/impl/llama/modeling_llama.mojo LLAMA_FAST_REFUSE_WATERMARK, llama_refuse_bad_call; LlamaKVCache.wm_grant; autograd/block_step_ops.mojo _attn_watermark_grant; core/device_scan.mojo nonfinite_rows_partial_kernel): B = an attention decode step (L = 1, linear KV cache) of a resident entry whose owner vouches for the cache's writers (the transformer decode session's AttnStepArm, the CausalLM decode program, the Samba program) scans the hidden states and only the one key row and one value row the previous step appended, on scan scratch held by the entry (no allocation per step, three fixed lengths; inv_freq and the rows below were scanned by an earlier call); every other call (a prefill or chunk, the first step after an entry is built, a load, a restart, a zero fill, a ring cache, a generic ops session) takes A's scans; A = the default, the whole key cache, the whole value cache, the hidden states and inv_freq scanned on three buffers allocated per call. Same refusal name, order, flat index and call. Default off; lane fx-llama-refuse-watermark (2026-11-18)",
-   "owed": "RUN"
+   "owed": "DECIDED",
+   "evidence": "A/B round 1 2026-11-19, NVIDIA L40S host bd9c355c19c0 (14-core cgroup), wheel 0c68d6cd27 and its B set, base and arm back to back in one pod job (nvc1-0006, tag nvc-ab-20261119T125554Z-6f7afc; ~/mojolearn-evidence/measure-candidate/build-0c68d6cd27/ab1/x/, tables ~/mojolearn-evidence/briefs-20261118/fx-verdicts3/tab-<arm>.txt), one scored run per arm: digests and quality equal on all 4 cells; arm/base causal-lm-generate 0.91, samba-decode 0.92, transformer-decode 0.93, causal-lm-generate-smollm2 0.94 (this pair's base was the slowest base run of each row in the job; against the mean of the other bases 0.94, 0.98, 0.96, 0.96, the predicted size); PROMOTED to the IDENTICAL default (lane fx-verdicts3), MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK_OFF restores the whole scans; the old define is refused; the native refusal checks with the row scan are RUN OWED on the integration build"
   },
   "xcnn-typed-door": {
    "define": "MOJOLEARN_XCNN_FAST_TYPED_DOOR",
@@ -785,6 +786,11 @@
   "mamba3-s17-tail-tree-off": {
    "define": "MOJOLEARN_MAMBA3_FAST_S17_TAIL_TREE_OFF",
    "status": "define in code (autograd/kernels/mamba3.mojo M3_S17_TAIL_TREE; mamba/host/gen/mamba3_backward.mojo, the same source): B = the one serial chain of the S17 chunk-end tail (the pipe kernel, or the shared kernel where its page does not fit; the default before 2026-11-19); A = 128 lane chains and the contract 7.2 tree, default since 2026-11-19 (lane fx-verdicts3). Different bit versions for sequences longer than one chunk. Owed for the neighbouring and non-board sizes; when timed, the pipe and shared tail kernels are deleted with the four tombstone parts",
+   "owed": "RUN"
+  },
+  "llama-refuse-watermark-off": {
+   "define": "MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK_OFF",
+   "status": "define in code (transformer/impl/llama/modeling_llama.mojo LLAMA_FAST_REFUSE_WATERMARK): B = the whole key cache, the whole value cache, the hidden states and inv_freq scanned on three buffers allocated per call at every decode step (the default before 2026-11-19); A = the appended-row scan on held scratch for a granted cache, default since 2026-11-19 (lane fx-verdicts3). Same bits and the same refusals on both arms. Owed to re-time (the first pair's base was the slowest base of each row) and for the neighbouring and non-board shapes",
    "owed": "RUN"
   }
  },
@@ -3692,9 +3698,9 @@
    "rows": "full",
    "vendor": "nvidia",
    "b_arms": [
-    "llama-refuse-watermark"
+    "llama-refuse-watermark-off"
    ],
-   "decides": "keep A (the default, whole-cache scans on per-call scratch) unless B is faster at equal quality on the NVIDIA L40S, base and arm back to back in one job; then B becomes the default with a _OFF define. Digests must not move on any cell (a refusal scan produces no float). Expected from the arithmetic: transformer-decode -60 ms or more, causal-lm-generate-smollm2 -115 ms or more, causal-lm-generate -45 ms or more, samba-decode -30 ms or more. The refusal itself is not decided by timing: before a flip the native refusal checks run with the define on, including a non-finite loaded into a session's cache (refused at the next step, by name and flat index) and one produced by a step. Before a flip time also a neighbouring shape (a 4096-token decode, n_kv 2) and a non-board model (a 12-layer llama configuration) (no dimension targeting)"
+   "decides": "after the promotion of 2026-11-19 (lane fx-verdicts3; four decode rows 0.91-0.94 raw, 0.94-0.98 against the other pairs' bases): keep the appended-row scan (the candidate) unless the whole scans (B, MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK_OFF) are faster at equal digests on the NVIDIA L40S, base and arm back to back in one job. The refusal itself is not decided by timing: the native refusal checks (llama_refuse_row_scan, transformer_decode_door case 3) run on the default build, which now takes the row scan; a failure there is fixed or the switch goes to _OFF. Time also a neighbouring shape (a 4096-token decode, n_kv 2) and a non-board model (a 12-layer llama configuration) (no dimension targeting). When the candidate holds, the per-step whole scans of a granted cache are deleted with the four tombstone parts"
   },
   {
    "id": "xcnn-typed-door-global-avgpool",

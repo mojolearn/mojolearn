@@ -3,8 +3,8 @@
 scan, and a non-finite value PRODUCED by a step.
 
 Part 1, kernel level (cases 0 to 3). `_kv_rows_scan_enqueue`
-(transformer/impl/llama/modeling_llama.mojo, the scan the arm
-`-D MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK` runs on a granted cache) reads row
+(transformer/impl/llama/modeling_llama.mojo, the scan the default build
+runs on a granted cache; `-D MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK_OFF` is the whole scan at every step) reads row
 `s - 1` of every (batch, kv head) run of a key or value cache and reports a
 FLAT index of the buffer; the default refusal is `DeviceNonfiniteBatch`'s
 scan of the whole used prefix. On one device buffer laid out as the cache is,
@@ -34,9 +34,9 @@ overflowing step (it is not refused: its inputs are finite), then one more
 step, which MUST be refused naming the key (value) cache, the kind (NaN or
 infinity) and the flat index of the first non-finite float of the cache as
 this build lays it out; the expected index and kind are read from the device
-cache itself. The cache is granted (`wm_grant`), so under the watermark arm
+cache itself. The cache is granted (`wm_grant`), so in the default build
 the refusing scan is the row scan (the check requires the watermark to sit
-at `s - 1` there); in a default build it is the whole scan. The stride arm
+at `s - 1` there); under the watermark's _OFF define it is the whole scan. The stride arm
 moves the flat index, which the expectation follows.
 
 What a sabotage changes here: a row scan that reads row s - 2 or s, uses the
@@ -46,8 +46,9 @@ partials wrongly (part 1); a watermark advanced past a row nobody scanned, a
 refusal naming the other cache or another index, or no refusal at all for a
 value a step computed (part 2).
 
-pixi: check-llama-refuse-row-scan-watermark, -stride-cap and
--watermark-stride-cap build this check under the arm defines.
+pixi: check-llama-refuse-row-scan-watermark-off (the whole scan), -stride-cap
+(the fixed-stride arm with the row scan) and -watermark-off-stride-cap build
+this check under the other arms' defines.
 """
 from std.memory import bitcast
 

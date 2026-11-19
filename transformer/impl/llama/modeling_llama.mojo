@@ -1640,8 +1640,8 @@ struct LlamaKVCache(Movable):
     var fixed: Bool
     var k: DeviceBuffer[DType.float32]
     var v: DeviceBuffer[DType.float32]
-    #: MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK (default off; nothing reads
-    #: these four on a build without it). `wm_on`: the owner granted the
+    #: MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK (the IDENTICAL default; nothing reads
+    #: these four on a build with its _OFF define or in a FAST build). `wm_on`: the owner granted the
     #: watermark (`wm_grant`): every writer of `k` / `v` other than the block
     #: forward's append calls `wm_reset`. `wm_upto`: the cache rows `[0,
     #: wm_upto)` and the rotary inv_freq were scanned finite by a call's
@@ -4298,12 +4298,32 @@ kernel, same geometry, same integer first-index fold; the names are tested
 in the same order, so the refusal raised is the one the separate scans
 raised. No float is produced: no bit moves on any column. FAST builds keep the separate scans."""
 
+# MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK: PROMOTED 2026-11-19 (lane fx-verdicts3). The appended-row scan on a granted
+# cache is the IDENTICAL default; `-D MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK_OFF` restores the whole-cache scans on
+# per-call scratch at every step (the old opt-in name is refused, core/experiment_guards_neural.mojo; the constant
+# keeps its experiment name). Evidence: A/B round 1, NVIDIA L40S (host bd9c355c19c0, 14-core cgroup), wheel
+# 0c68d6cd27 and its B set, base and arm back to back in ONE pod job (nvc1-0006, tag nvc-ab-20261119T125554Z-6f7afc),
+# one scored run per arm; digests and quality equal on all 4 cells. Base -> arm ms: causal-lm-generate
+# (mojolearn-162m) 1019.7 -> 931.2 (0.91), samba-decode 1556.8 -> 1426.5 (0.92), transformer-decode 1173.3 -> 1093.6
+# (0.93), causal-lm-generate-smollm2 1593.9 -> 1504.7 (0.94). How to read it: this pair's base was the slowest base
+# run of each row in the job (the same rows' bases in the other pairs: 989.5; 1433.0, 1483.3; 1156.0, 1117.6;
+# 1566.2), so part of each ratio is drift; against the mean of those other bases the arm is 0.94, 0.98, 0.96, 0.96,
+# which is what the launch arithmetic predicted (-45, -30, -60, -115 ms: 0.955, 0.98, 0.95, 0.93), and the arm is
+# under every base run of every row. A gain of about 4 to 6 %, four rows of four, none slower.
+# A refusal scan produces no float: no bit moves. The refusal's name, order, flat index and call are unchanged by
+# design; that is decided by the native checks, not by timing: checks/native_tests/llama_refuse_row_scan.mojo (part 2
+# requires the row scan to be the refusing scan in this build) and transformer_decode_door.mojo case 3 (a non-finite
+# loaded into a stepped session). They had run only in a build without the arm when this was flipped: RUN OWED on
+# the integration build, and a failure there is fixed or this switch goes back to _OFF the same round.
+# General mechanism: the scan lengths come from the cache geometry (one row of every run), no shape key.
+# Limits: NVIDIA only (AGENTS.md part 8). OWED (does not hold the flip): a 4096-token decode at n_kv 2 and a
+# 12-layer llama configuration against the _OFF arm.
 comptime LLAMA_FAST_REFUSE_WATERMARK = (
-    is_defined["MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK"]() and GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    not is_defined["MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK_OFF"]() and GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 )
-"""lane/fx-llama-refuse-watermark (2026-11-18), EXPERIMENT ARM, default OFF
-(docs/apple-fast/EXPERIMENTS.md; A/B owed on transformer-decode,
-causal-lm-generate, causal-lm-generate-smollm2, samba-decode). A decode step
+"""lane/fx-llama-refuse-watermark (2026-11-18), the IDENTICAL default since
+2026-11-19 (A/B numbers in the comment above; `_OFF` restores the whole
+scans; docs/apple-fast/EXPERIMENTS.md). A decode step
 (L = 1, linear cache) of a cache whose owner granted it
 (`LlamaKVCache.wm_grant`) scans the hidden states and only the ONE key row
 and ONE value row the previous step appended, on scratch held by the cache

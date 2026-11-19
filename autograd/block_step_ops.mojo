@@ -912,7 +912,7 @@ struct BlockStepScratch(Movable):
     #: that caller; never set by a session that reads the words back.
     var skip_words: Bool
     #: lane fx-llama-refuse-watermark (MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK,
-    #: default off; read only by `_attn_watermark_grant` on a build with it):
+    #: the IDENTICAL default; read only by `_attn_watermark_grant`, never under its _OFF define):
     #: the owner of this scratch states that the state tensors of its
     #: attention entries are written only by the step runs of this file and
     #: by writers that reset the entry's watermark or drop the entry (the
