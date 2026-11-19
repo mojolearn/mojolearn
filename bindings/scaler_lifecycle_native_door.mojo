@@ -72,9 +72,17 @@ def _mode(fields: PythonObject, context: PythonObject) raises -> PythonObject:
     var mode = fields["numeric_mode"]
     if mode is None:
         mode = context["backend_fields"]["_DEFAULT_MODE"]
-    if py_type(mode) is not native_loaded_module("builtins").str:
+    return _answered_mode(mode)
+
+
+def _answered_mode(requested: PythonObject) raises -> PythonObject:
+    """Validate a requested mode word (a str, stripped and lower-cased, fast
+    or identical) and answer it under MODE_FAMILY_SCALER. Shared by
+    StandardScaler (`_mode`) and MaxAbsScaler/RobustScaler
+    (`scaler_requested_mode`); once per fit, in no loop."""
+    if py_type(requested) is not native_loaded_module("builtins").str:
         raise Error("numeric_mode must be fast, identical or None")
-    mode = py_call(py_call(mode.strip).lower)
+    var mode = py_call(py_call(requested.strip).lower)
     var mode_word = String(mode)
     if mode_word != "fast" and mode_word != "identical":
         raise Error("numeric_mode must be fast, identical or None")
@@ -91,14 +99,7 @@ def scaler_requested_mode(fields: PythonObject, context: PythonObject) raises ->
     var mode = py_get(fields, "numeric_mode")
     if mode is None:
         return context["backend_fields"]["_DEFAULT_MODE"]
-    if py_type(mode) is not native_loaded_module("builtins").str:
-        raise Error("numeric_mode must be fast, identical or None")
-    mode = py_call(py_call(mode.strip).lower)
-    var mode_word = String(mode)
-    if mode_word != "fast" and mode_word != "identical":
-        raise Error("numeric_mode must be fast, identical or None")
-    answer_mode_object(mode, mode_word, MODE_FAMILY_SCALER)
-    return mode
+    return _answered_mode(mode)
 
 
 def _direct(entries: PythonObject, name: String) raises -> PythonObject:
