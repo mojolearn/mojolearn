@@ -7,7 +7,7 @@ reference, NOT by calling the bodies, plus the UNPINNED spelling of each seam
 its DEVIATION (IDENTITY_PATHS.md rows 110-119)."""
 from std.math import fma, sqrt
 
-from checks.numerics import ftz, identical_cos, identical_div, identical_exp, identical_log, identical_mul, identical_mul64, identical_pow, identical_sqrt
+from checks.numerics import ftz, identical_cos, identical_div, identical_exp, identical_log, identical_mul, identical_pow, identical_sqrt
 from x_cluster.bodies import IDN_BGMM_NK_LEVELS, SplitMix64
 from mixture.nk_order import gmm_nk_fold_levels
 from x_cluster.host.moments_gemm import gemm_fold_cov, gemm_fold_means
@@ -336,17 +336,23 @@ def oracle_agglo(
     3 single); `adj_in` empty (every pair) or an n x n CONNECTED edge mask.
     Each step scans EVERY live pair i < j in row-major order and takes the
     first strictly lowest (last_on_tie: the last of the lowest). The update
-    as scikit-learn / scipy define it, in Float64 from the Float32 matrix,
-    rounded once to Float32; ward (a - b) as ((na+nk) dak + (nb+nk) dbk -
-    nk dab) / (na+nb+nk) (scipy_spelling: scipy's `_ward`, each term times
-    the reciprocal t = 1 / (na+nb+nk), which rounds differently); average
+    as scikit-learn / scipy define it, in Float32 on every column (the
+    product since 11a15b7512, 2026-10-02: the merge loop runs on the device,
+    which has no binary64 on Apple; restated here 2026-11-19, the Float64
+    form this oracle held until then was never the device's and the first
+    GPU run of agglo_check showed it, 4 ward cells): every product, sum and
+    quotient its own Float32 rounding, flushed; the sizes are cluster counts,
+    exact in Float32. ward (a - b) as ((na+nk) dak + (nb+nk) dbk - nk dab) /
+    (na+nb+nk), the three products summed left to right, minus last, one
+    quotient (scipy_spelling: scipy's `_ward`, each term times the
+    reciprocal t = 1 / (na+nb+nk), which rounds differently); average
     (na dak + nb dbk) / (na + nb) (scipy_spelling: na/(na+nb) dak +
     nb/(na+nb) dbk)."""
     var d = dist.copy()
     var constrained = len(adj_in) > 0
     var adj = adj_in.copy()
     var live = List[Bool](length=n, fill=True)
-    var size = List[Float64](length=n, fill=Float64(1))
+    var size = List[Float32](length=n, fill=Float32(1))
     var node = List[Int](capacity=n)
     for i in range(n):
         node.append(i)
@@ -376,21 +382,24 @@ def oracle_agglo(
                 continue
             var ha = not constrained or adj[ba * n + k]
             var hb = not constrained or adj[bb * n + k]
-            var dak = Float64(d[ba * n + k])
-            var dbk = Float64(d[bb * n + k])
+            var dak = ftz(d[ba * n + k])
+            var dbk = ftz(d[bb * n + k])
             var nk = size[k]
             var v: Float32
             if linkage == 0:
-                var w: Float64
+                var w: Float32
                 if scipy_spelling:
-                    var t = Float64(1) / (na + nb + nk)
-                    w = (na + nk) * t * dak + (nb + nk) * t * dbk - nk * t * Float64(dab)
+                    var t = ftz(identical_div(Float32(1), ftz(ftz(na + nb) + nk)))
+                    var q1 = ftz(identical_mul(ftz(identical_mul(ftz(na + nk), t)), dak))
+                    var q2 = ftz(identical_mul(ftz(identical_mul(ftz(nb + nk), t)), dbk))
+                    var q3 = ftz(identical_mul(ftz(identical_mul(nk, t)), ftz(dab)))
+                    w = ftz(ftz(q1 + q2) - q3)
                 else:
-                    var p1 = identical_mul64(na + nk, dak)
-                    var p2 = identical_mul64(nb + nk, dbk)
-                    var p3 = identical_mul64(nk, Float64(dab))
-                    w = ((p1 + p2) - p3) / ((na + nb) + nk)
-                v = ftz(Float32(w)) if w > Float64(0) else Float32(0)
+                    var p1 = ftz(identical_mul(ftz(na + nk), dak))
+                    var p2 = ftz(identical_mul(ftz(nb + nk), dbk))
+                    var p3 = ftz(identical_mul(nk, ftz(dab)))
+                    w = ftz(identical_div(ftz(ftz(p1 + p2) - p3), ftz(ftz(na + nb) + nk)))
+                v = w if w > Float32(0) else Float32(0)
             elif not (ha or hb):
                 continue
             elif not hb:
@@ -402,9 +411,14 @@ def oracle_agglo(
             elif linkage == 3:
                 v = min(d[ba * n + k], d[bb * n + k])
             elif scipy_spelling:
-                v = ftz(Float32(na / (na + nb) * dak + nb / (na + nb) * dbk))
+                var sab = ftz(na + nb)
+                var r1 = ftz(identical_mul(ftz(identical_div(na, sab)), dak))
+                var r2 = ftz(identical_mul(ftz(identical_div(nb, sab)), dbk))
+                v = ftz(r1 + r2)
             else:
-                v = ftz(Float32((identical_mul64(na, dak) + identical_mul64(nb, dbk)) / (na + nb)))
+                var s1 = ftz(identical_mul(na, dak))
+                var s2 = ftz(identical_mul(nb, dbk))
+                v = ftz(identical_div(ftz(s1 + s2), ftz(na + nb)))
             d[ba * n + k] = v
             d[k * n + ba] = v
             if constrained and (ha or hb):

@@ -34,7 +34,7 @@ def check_build(name: String, x: List[Float32], n: Int, dim: Int, mut trace: Ide
     trace.record_list_i32(String("ivfpq.") + name + ".codes", dev.codes)
     report(name + ": coarse centres == host_ivf_build", same_f32(dev.centers, ora.centers), failed)
     report(name + ": lists == host_ivf_build", same_i32(dev.offsets, ora.offsets) and same_i32(dev.list_indices, ora.list_indices), failed)
-    report(name + ": codebooks == host_kmeans_fit", same_f32(dev.codebooks, ora.codebooks), failed)
+    report(name + ": codebooks == oracle (batched Lloyd)", same_f32(dev.codebooks, ora.codebooks), failed)
     report(name + ": codes == oracle (5800, 5801)", same_i32(dev.codes, ora.codes), failed)
 
 

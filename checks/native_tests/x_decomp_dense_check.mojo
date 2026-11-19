@@ -7,7 +7,7 @@ from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
 # standalone main() that no pixi task, workflow, development group or tools
 # script ran. Its main() is now `run_checks()` there; this is its one entry
 # (`pixi run check-native-gpu x_decomp_dense_check`).
-# Device column only: the suite drives device code (it imports decomposition.checks.jacobi_eigh_device), so the CPU build never instantiates it.
+# Device column only: the suite drives device code (x_decomp.device.DevExec), so the CPU build never instantiates it.
 def run_cases(column: Column, mut report: Report):
     try:
         comptime if not CPU_COLUMN_BUILD:
