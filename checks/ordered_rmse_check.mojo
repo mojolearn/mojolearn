@@ -178,7 +178,7 @@ def whole_loop_cursor_check(ctx: DeviceContext) raises:
                 expected[pos] += values[leaf_ids[pos]]
         var hc = ctx.enqueue_create_host_buffer[DType.float32](size)
         if f < len(fit.folds):
-            ctx.enqueue_copy(dst_ptr=hc.unsafe_ptr(), src_buf=fit.fold_cursors[f])
+            download_host_into[DType.float32](ctx, fit.fold_cursors[f], hc)
         else:
             download_host_into[DType.float32](ctx, fit.estimation_cursor, hc)
         ctx.synchronize()

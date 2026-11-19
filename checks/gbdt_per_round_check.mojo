@@ -184,7 +184,7 @@ def check_partitions(ctx: DeviceContext) raises -> Int:
                 h_cap.unsafe_ptr().unsafe_store(r, UInt32(b))
             var d_bins = ctx.enqueue_create_buffer[DType.uint32](n)
             upload_host_into[DType.uint32](ctx, d_bins, h_n)
-            ctx.enqueue_copy(dst_buf=dp.bins, src_ptr=h_cap.unsafe_ptr())
+            upload_host_into[DType.uint32](ctx, dp.bins, h_cap)
             ctx.synchronize()
             var host_part = partition_from_bins(ctx, d_bins, n, n_leaves)
             var host_rows = read_rows(ctx, host_part, n, n)
@@ -229,7 +229,7 @@ def check_partitions(ctx: DeviceContext) raises -> Int:
         h_cap.unsafe_ptr().unsafe_store(200, bad)
         var d_bins = ctx.enqueue_create_buffer[DType.uint32](n)
         upload_host_into[DType.uint32](ctx, d_bins, h_n)
-        ctx.enqueue_copy(dst_buf=dp.bins, src_ptr=h_cap.unsafe_ptr())
+        upload_host_into[DType.uint32](ctx, dp.bins, h_cap)
         ctx.synchronize()
         var host_refused = False
         try:

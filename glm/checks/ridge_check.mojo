@@ -83,7 +83,7 @@ from checks.numerics import (
     identical_sqrt,
     numeric_mode_name,
 )
-from checks.native_tests.kit import download_host_into
+from checks.native_tests.kit import download_host_into, upload_whole_into
 
 
 comptime IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
@@ -151,8 +151,8 @@ def _device_fit(
     var w = ctx.enqueue_create_buffer[DType.float32](d)
     var ha = a_h.copy()
     var hb = b_h.copy()
-    ctx.enqueue_copy(dst_buf=a, src_ptr=ha.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=b, src_ptr=hb.unsafe_ptr())
+    upload_whole_into[DType.float32](ctx, a, ha)
+    upload_whole_into[DType.float32](ctx, b, hb)
     ctx.synchronize()
     ridge_fit(ctx, a, b, w, n, d, alpha, RIDGE_ALGO_EIG)
     var hw = ctx.enqueue_create_host_buffer[DType.float32](d)

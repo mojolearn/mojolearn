@@ -73,7 +73,7 @@ from ensemble.randomforest import (
     class_weight_uniform_host,
     fit_forest,
 )
-from checks.native_tests.kit import upload_host_into
+from checks.native_tests.kit import download_buffer_into, upload_host_into
 
 comptime DT = DType.float32
 comptime LT = DType.int32
@@ -254,7 +254,7 @@ def arm_a_zero_weight_drop(ctx: DeviceContext) raises -> Int:
             "  arm A: n_selected", s.n_selected, "want", n_keep,
         )
     var hb = ctx.enqueue_create_host_buffer[DType.int32](n_rows)
-    ctx.enqueue_copy(dst_buf=hb, src_buf=s.selected_rows_[0])
+    download_buffer_into[DType.int32](ctx, s.selected_rows_[0], hb)
     ctx.synchronize()
     var wrong = 0
     for j in range(min(s.n_selected, n_keep)):

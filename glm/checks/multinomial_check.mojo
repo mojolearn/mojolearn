@@ -132,7 +132,7 @@ from checks.numerics import (
     identical_mul_add,
     numeric_mode_name,
 )
-from checks.native_tests.kit import download_host_into
+from checks.native_tests.kit import download_host_into, upload_whole_into
 
 
 comptime IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
@@ -245,7 +245,7 @@ struct FitResult(Movable):
 def _upload(ctx: DeviceContext, h: List[Float32]) raises -> DeviceBuffer[DType.float32]:
     var buf = ctx.enqueue_create_buffer[DType.float32](len(h))
     var tmp = h.copy()
-    ctx.enqueue_copy(dst_buf=buf, src_ptr=tmp.unsafe_ptr())
+    upload_whole_into[DType.float32](ctx, buf, tmp)
     ctx.synchronize()
     _ = tmp^
     return buf^

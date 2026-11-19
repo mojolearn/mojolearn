@@ -48,7 +48,7 @@ from ensemble.decisiontree.batched_levelalgo.quantiles import (
     Quantiles,
 )
 from ensemble.decisiontree.decisiontree import DecisionTreeParams, GINI
-from checks.native_tests.kit import upload_host_into
+from checks.native_tests.kit import download_buffer_into, upload_host_into
 
 comptime DT = DType.float32
 comptime LT = DType.int32
@@ -172,7 +172,7 @@ def _fit[sabotage: Int](ctx: DeviceContext) raises -> FitOut:
     # The sampler's own output for the LAST batch -- nodes 1 and 2.
     var n_read = 2 * out.k
     var hs = ctx.enqueue_create_host_buffer[DType.int32](n_read)
-    ctx.enqueue_copy(dst_buf=hs, src_buf=builder.column_samples)
+    download_buffer_into[DType.int32](ctx, builder.column_samples, hs)
     ctx.synchronize()
     for i in range(n_read):
         out.samples.append(hs.unsafe_ptr().unsafe_load(i))
