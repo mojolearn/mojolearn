@@ -20,7 +20,7 @@ def _same(a: List[Float32], b: List[Float32], label: String) raises:
             raise Error(label + ": bit mismatch at " + String(i))
 
 
-def main() raises:
+def run_checks() raises:
     var n = 41
     var batch_size = 7
     var frequency = 6

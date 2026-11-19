@@ -34,7 +34,7 @@ def run[O: ClusterOps](mut ops: O, a: List[Float32], b: List[Float32], d: Int) r
     return ops.get_i(sl, 64)
 
 
-def main() raises:
+def run_checks() raises:
     var d = 5
     var a = seam_fixture(64, d, 3)
     # centers: rows of a, the first six repeated, so every row near them ties exactly

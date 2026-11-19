@@ -7,7 +7,7 @@ from ivf.checks.ivf_check import _plant_index, _search
 from ivf.checks.ivf_large_probe_check import check_large_probes
 
 
-def main() raises:
+def run_checks() raises:
     comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
         raise Error("large IVF k gate requires IDENTICAL")
     comptime N = 1057
