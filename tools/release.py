@@ -519,6 +519,19 @@ class Leg:
         return self.exit_code() == 0 and self.proof_ok(commit)
 
 
+class RemoteLeg(Leg):
+    """A measurement build's GitHub leg whose tree stays on GitHub (lane fx-pack-offload, 2026-11-19): its collector
+    runs `release_github_build.py run --records-only`, and the candidate's pack job (.github/workflows/
+    candidate-pack.yml, tools/release_remote_pack.py) downloads the tree there and runs this file's own
+    linux-wait checks, linux-assemble and linux-pack on it. Here the leg is done when its run succeeded and its
+    records were collected (release_github_build.records_only_ok)."""
+
+    defines = ""
+
+    def proof_ok(self, commit):
+        return release_github_build.records_only_ok(self.out_dir, commit, self.defines)[0]
+
+
 class ColumnLeg(Leg):
     """One GPU wheel column (tools/release_wheel_smoke.sh), run detached like a
     build leg: its own session, its exit code written last, a failed attempt
@@ -878,12 +891,19 @@ def github_legs(ctx):
         # (release_reuse.unit_plan; the assemble job takes them from the binding cache)
         plan = ctx.plan() if defines and callable(getattr(ctx, "plan", None)) else None
         skip = release_reuse.skip_units(plan, vendor, arch) if plan else []
-        legs.append(Leg(name, vendor, arch,
-                        ["python3", "tools/release_github_build.py", "run", "--commit", ctx.commit,
-                         "--arch", arch, "--out", str(out)] + (["--defines", defines] if defines else [])
-                        + (["--skip-units", " ".join(skip)] if skip else [])
-                        + (["--ref", ref] if ref else []) + (["--tooling-sha", tooling] if tooling else []),
-                        {}, rb, legs_dir, out))
+        # a measurement build packed on GitHub (candidate_pack "github"): the collector takes the records only
+        remote = candidate_pack(ctx) == "github"
+        leg = (RemoteLeg if remote else Leg)(
+            name, vendor, arch,
+            ["python3", "tools/release_github_build.py", "run", "--commit", ctx.commit,
+             "--arch", arch, "--out", str(out)] + (["--defines", defines] if defines else [])
+            + (["--skip-units", " ".join(skip)] if skip else [])
+            + (["--ref", ref] if ref else []) + (["--tooling-sha", tooling] if tooling else [])
+            + (["--records-only"] if remote else []),
+            {}, rb, legs_dir, out)
+        if remote:
+            leg.defines = defines
+        legs.append(leg)
     return legs
 
 
@@ -911,6 +931,17 @@ def candidate_defines(ctx):
     """The measurement build's defines (tools/release.py candidate --defines; MOJOLEARN_BUILD_DEFINES spelling),
     empty for a release."""
     return getattr(getattr(ctx, "args", None), "candidate_defines", "") or ""
+
+
+def candidate_pack(ctx):
+    """Where a measurement build's linux-wait checks, linux-assemble and linux-pack run (lane fx-pack-offload,
+    2026-11-19): "github" on the Mac that launched it (the legs' trees stay on GitHub and the pack job
+    .github/workflows/candidate-pack.yml runs those steps; linux-pack downloads linux/final), "here" on that pack
+    job's runner (tools/release_remote_pack.py runner), "" for a release and a measurement build packed locally
+    (`release.py candidate --pack local`)."""
+    if not getattr(getattr(ctx, "args", None), "candidate_version", ""):
+        return ""
+    return getattr(getattr(ctx, "args", None), "candidate_pack", "") or ""
 
 
 def candidate_timed(ctx):
@@ -3443,6 +3474,11 @@ class Release(release_identity_wheels.IdentityOnWheels):
             return (f"would launch {len(launch)} leg(s) ({self.args.build_backend})"
                     + (f"; would take {', '.join(taken)} from an earlier freeze" if taken else "")
                     + (f"; REFUSED {'; '.join(refused)}" if refused else ""))
+        if launch and candidate_pack(self) == "here":
+            # the pack runner launches nothing: every leg's tree was downloaded before this ran
+            # (tools/release_remote_pack.py fetch_legs); a leg not done here is a missing or refused tree
+            raise StepFailed("the pack runner found leg(s) not done: " + ", ".join(l.name for l in launch)
+                             + " (their trees did not download or do not verify; see the fetch lines above)")
         launch_detached(self, launch)
         if refused:
             # The other legs are launched; nothing is rebuilt for the refused one.
@@ -3615,6 +3651,9 @@ class Release(release_identity_wheels.IdentityOnWheels):
             return "no leg to wait for (every Linux binding is reused)"
         if self.dry:
             return "would wait for " + ", ".join(l.name for l in legs)
+        if candidate_pack(self) == "here" and any(l.exit_code() != 0 for l in legs):
+            raise StepFailed("the pack runner found leg(s) that did not finish on the Mac: "
+                             + ", ".join(f"{l.name} (exit {l.exit_code()})" for l in legs if l.exit_code() != 0))
         if not any(l.pid() or l.exit_code() is not None for l in legs):
             launch_detached(self, legs)
         tried = {l.name: 0 for l in legs}
@@ -3691,6 +3730,12 @@ class Release(release_identity_wheels.IdentityOnWheels):
         if bad:
             raise StepFailed("build leg(s) failed: " + ", ".join(bad)
                              + ". Inspect retained evidence; repair or reconcile before another build.")
+        if candidate_pack(self) == "github":
+            # THE TREES STAY ON GITHUB (lane fx-pack-offload): the host-byte comparison, the host composition and
+            # the leg records read the trees, so they run in this same step on the pack runner
+            # (candidate-pack.yml runs linux-wait again there, on the downloaded trees, before it assembles)
+            return ("all legs built on GitHub: " + ", ".join(l.name for l in legs)
+                    + "; their trees stay there and the pack job checks, assembles and packs them")
         # A leg taken by its compile requirements, or the published PTX set
         # taken whole, ships the host owner's host bindings (linux-assemble
         # replaces its own), so its stale host bytes are not compared here.
@@ -3814,6 +3859,9 @@ class Release(release_identity_wheels.IdentityOnWheels):
                 and sorted(d.get("taken") or []) == sorted(self.admitted_legs()))
 
     def step_linux_assemble(self):
+        if candidate_pack(self) == "github":
+            # on the pack runner, beside the trees (candidate-pack.yml); linux-pack starts that job
+            return "on GitHub: the pack job (.github/workflows/candidate-pack.yml) assembles beside the trees"
         # the assembled sets of this plan first: a done assembly is never refused again (0.8.65)
         if self.assembly_needed() and self.assembled_ok():
             return "have " + str(self.assembled_marker().parent)
@@ -3931,6 +3979,12 @@ class Release(release_identity_wheels.IdentityOnWheels):
         finals = self.split_finals()
         if all(finals.values()) and wheel_commit(finals["linux"]) == self.commit:
             return "have " + ", ".join(w.name for w in finals.values())
+        if candidate_pack(self) == "github":
+            # THE PACK ON GITHUB (lane fx-pack-offload, 2026-11-19; Andrew: offload the laptop): this same step,
+            # with linux-wait's tree checks and linux-assemble, runs on a free runner beside the trees
+            # (.github/workflows/candidate-pack.yml); the Mac uploads the build's records and downloads linux/final
+            import release_remote_pack
+            return release_remote_pack.pack_on_github(self)
         if self.assembly_needed() and not self.dry and not self.assembled_ok():
             raise StepFailed("the assembled sets are not there or not this plan's; run linux-assemble")
         sets, proofs, manifests = self.pack_inputs()
@@ -3989,13 +4043,16 @@ class Release(release_identity_wheels.IdentityOnWheels):
         # min(4, slot_count()) slots (4 of the 10-core M4's 5), and the 5th admits the pack while the build
         # runs, under mac_slot's load and free-memory test. Before, the scheduler's exclusive "mac" token
         # held it behind macos-build, macos-smoke and gate-apple.
-        args = [PY, str(ROOT / "tools" / "mac_slot.py"), "run", "--"] + args
+        if candidate_pack(self) != "here":
+            # the pack runner (candidate-pack.yml) is a whole free runner for this one job: no Mac slot there
+            args = [PY, str(ROOT / "tools" / "mac_slot.py"), "run", "--"] + args
         self.must(args, env=dict(MOJOLEARN_RELEASE_UNSMOKED_ARCHES=",".join(unsmoked)) if unsmoked else None,
                   log=self.rel / "linux-pack.log", what="pack_wheel.py", cwd=pack_cwd)
         final_dir = dist / "final"
         if not self.dry:
             final_dir.mkdir(parents=True, exist_ok=True)
-        for package in self.split_packages():
+
+        def audit_and_strip(package):
             project, prefix = SPLIT_PACKAGES[package]
             packed = sorted(dist.glob(f"{prefix}-*.whl")) if not self.dry else [dist / f"<packed {prefix}>.whl"]
             if len(packed) != 1:
@@ -4009,6 +4066,27 @@ class Release(release_identity_wheels.IdentityOnWheels):
             self.must([PY, str(ROOT / "tools" / "strip_wheel_dir_entries.py"), repaired[0],
                        final_dir / repaired[0].name, "--receipt", final_dir / f"dir-entry-strip-{package}.json"],
                       what=f"strip_wheel_dir_entries.py {project}")
+
+        # THE CORE FIRST, THEN EVERY OTHER WHEEL AT ONCE (lane fx-pack-offload, 2026-11-19): a plugin's audit reads
+        # only the core wheel beside it (its runtime names and its tag) and writes its own show-/repair-/twine-
+        # <dist>.txt and repaired wheel, and each strip writes its own final wheel and receipt, so the plugins and
+        # the meta wheel are independent units once the core's audit is done. Before, they ran one after another.
+        # On the Mac they still do: its Docker Desktop VM died under this step's serial load on 2026-11-19 (502 from
+        # the socket, audit.sh exit 125), and the Mac's pack is now the fallback (`release.py candidate --pack
+        # local`, the release); the runner (Docker native, 4 vCPU, audit.sh --cpus 2 each) runs them at once.
+        packages = self.split_packages()
+        if packages[0] != "linux":
+            raise StepFailed(f"the core packs first; the split packages are {packages}")
+        audit_and_strip(packages[0])
+        rest = packages[1:]
+        if self.dry or len(rest) < 2 or sys.platform == "darwin":
+            for package in rest:
+                audit_and_strip(package)
+        else:
+            import concurrent.futures as cf
+            with cf.ThreadPoolExecutor(max_workers=min(len(rest), os.cpu_count() or 1)) as pool:
+                for done in [pool.submit(audit_and_strip, package) for package in rest]:
+                    done.result()
         if self.dry:
             return ("would pack " + ", ".join(SPLIT_PACKAGES[k][0] for k in self.split_packages())
                     + " from the sets " + ",".join(f"{v}/{a}" for v, a in release_reuse.LINUX_SETS)
