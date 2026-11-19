@@ -98,7 +98,7 @@ from gemm.host.gemm_int15_oracle import (
 from gemm.contract import GEMM_ORACLE_HOST_SABOTAGE
 from checks.native_tests.kit import download_host_into, upload_host_into
 
-comptime IDENTICAL_BUILD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+from checks.mode_policy import KERNEL_FORM_IDENTICAL as IDENTICAL_BUILD
 comptime POISON = Float32(-987654.0)
 comptime HAS_UNIT = lib_int8_matrix_unit_for[TARGET_COLUMN]()
 comptime IS_APPLE = TARGET_COLUMN == COLUMN_APPLE

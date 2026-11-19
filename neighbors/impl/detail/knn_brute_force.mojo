@@ -170,7 +170,7 @@ from nn.topk import top_k
 # `-D MOJOLEARN_KNN_IDENTICAL_LEGACY_SELECT=1` /
 # `-D MOJOLEARN_KNN_IDENTICAL_LEGACY_LAYOUT=1` forcing it OFF on any column.
 # FAST never enters either.
-comptime IDENTICAL_BUILD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+from checks.mode_policy import KERNEL_FORM_IDENTICAL as IDENTICAL_BUILD
 comptime EXPERIMENTAL_SMALLK_IDENTICAL = knn_smallk_select_for[
     TARGET_COLUMN, IDENTICAL_BUILD
 ]()

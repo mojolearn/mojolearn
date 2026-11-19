@@ -153,7 +153,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode
 from checks.native_tests.kit import download_host_into, upload_host_into
 
 
-comptime IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+from checks.mode_policy import KERNEL_FORM_IDENTICAL as IDENTICAL
 comptime SCRATCH = "/private/tmp/mojolearn_if_cards"
 """Where `check_if_card_is_emitted` writes its two control cards. A FIXED
 path under /private/tmp, not a session scratchpad: this file used to name

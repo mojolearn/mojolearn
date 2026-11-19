@@ -79,11 +79,7 @@ from checks.numerics import (
 
 
 comptime RF_BINS_ROW_MAJOR = (
-    (
-        GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-        or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    )
-    and TARGET_HAS_APPLE_GPU
+    TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_RF_BINS_COLUMN_MAJOR"]()
 )
 """Apple FAST, and Apple IDENTICAL for narrow data only

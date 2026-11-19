@@ -47,7 +47,7 @@ from std.sys.compile import is_defined
 #:   stopping rule. New shuffle order and new curve bits on every column.
 # TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path umbrella; EXP:2438 DELETED) read deleted here 2026-11-15 by lane/expdel2-29-neural; code recoverable at 92d4b79ec8.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-29-neural.patch
-comptime _MLP_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+from checks.mode_policy import KERNEL_FORM_IDENTICAL as _MLP_IDN
 # TOMBSTONE: MOJOLEARN_IDN_MLP_BLOCKED_FOLDS_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at 92d4b79ec8.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_MLP_BLOCKED_FOLDS_OFF.patch
 comptime MLP_BLOCKED_FOLDS = _MLP_IDN

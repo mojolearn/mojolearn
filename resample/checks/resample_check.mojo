@@ -192,7 +192,7 @@ from resample.checks.statistics import (
 )
 
 
-comptime IDENTICAL_BUILD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+from checks.mode_policy import KERNEL_FORM_IDENTICAL as IDENTICAL_BUILD
 
 comptime CHECK_SEED: UInt64 = 8675309
 

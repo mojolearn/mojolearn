@@ -6,6 +6,7 @@ from std.sys.compile import is_defined
 from std.sys.info import has_amd_rdna_gpu_accelerator
 from core.accelerator_target import TARGET_HAS_AMD_GPU, TARGET_HAS_APPLE_GPU, TARGET_HAS_NVIDIA_GPU
 
+from checks.mode_policy import ROW_TILE_FREE
 from checks.numerics import (
     NumericMode,
     NUMERIC_FAST,
@@ -1176,7 +1177,9 @@ def lib_block_bounds_a_float_fold[kernel: Int]() -> Bool:
 
 def lib_block_size_for[kernel: Int, column: Int]() -> Int:
     """SCHEDULING for most rows, NUMERIC for three of them."""
-    comptime identical = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    # The tile row of the mode policy table (checks/mode_policy.mojo): a tile
+    # that bounds a float fold is fixed unless the row is relaxed.
+    comptime identical = not ROW_TILE_FREE
     comptime numeric_row = lib_block_bounds_a_float_fold[kernel]()
     comptime resolved = (
         COLUMN_BIT_IDENTICAL if identical and numeric_row else column

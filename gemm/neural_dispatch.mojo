@@ -30,6 +30,12 @@ from gemm.experiments.neural_profile import (
     NEURAL_PROFILE_CHANGED,NEURAL_LEAF,NEURAL_CHAINS,neural_validate,
 )
 from gemm.experiments.neural_switches import ROLE_PROJECTION,ROLE_HEAD,ROLE_WGRAD
+# lane fx-fast-matrix-units (2026-11-19, -D MOJOLEARN_GEMM_FAST_MATRIX_UNITS=1, default OFF, A/B owed with quality): the
+# matrix-units relaxation of an NVIDIA `fast` build (gemm/fast_matrix_units.mojo). False on every other build.
+from gemm.fast_matrix_units import (
+    GEMM_FAST_MATRIX_UNITS,GEMM_FAST_MATRIX_UNITS_ALL,
+    matrix_units_takes,matrix_units_workspace_floats,matrix_units_gemm_into,
+)
 # lane fx-gemm-seq-packed (2026-11-18): the names `identical_gemm_leaf_ptr_into` below reads; nothing else uses them here.
 from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE,NUMERIC_IDENTICAL
@@ -122,6 +128,26 @@ def _admit_product(mut c: DeviceBuffer[DType.float32],
         raise Error("neural GEMM output/workspace must not overlap inputs or each other")
 
 
+def _matrix_units_admits(mut c: DeviceBuffer[DType.float32],
+    mut a: DeviceBuffer[DType.float32],mut b: DeviceBuffer[DType.float32],
+    mut ws: DeviceBuffer[DType.float32],m: Int,n: Int,k: Int,op: Int) -> Bool:
+    """Whether the matrix-units arm may take this product: the size rule, operands long enough and an output that
+    overlaps no input, and for the form that transposes A into the workspace a workspace that overlaps nothing.
+    False sends the call to the route below with its own refusals, so no refusal moves or changes its wording.
+    A and B hold m k and n k floats in all three addressings."""
+    if not matrix_units_takes(m,n,k):
+        return False
+    if len(c)<m*n or len(a)<m*k or len(b)<n*k:
+        return False
+    if _overlaps(c,m*n,a,m*k) or _overlaps(c,m*n,b,n*k):
+        return False
+    var wsn = matrix_units_workspace_floats(m,n,k,op)
+    if wsn>0:
+        if len(ws)<wsn or _overlaps(ws,wsn,c,m*n) or _overlaps(ws,wsn,a,m*k) or _overlaps(ws,wsn,b,n*k):
+            return False
+    return True
+
+
 def identical_gemm_into[allow_vendor: Bool = True,ROLE: Int = ROLE_PROJECTION](
     ctx: DeviceContext,mut c: DeviceBuffer[DType.float32],
     mut a: DeviceBuffer[DType.float32],mut b: DeviceBuffer[DType.float32],
@@ -130,6 +156,17 @@ def identical_gemm_into[allow_vendor: Bool = True,ROLE: Int = ROLE_PROJECTION](
     """ROLE is the caller class (ROLE_PROJECTION, ROLE_HEAD, ROLE_WGRAD); it
     never changes the route."""
     comptime assert ROLE == ROLE_PROJECTION or ROLE == ROLE_HEAD or ROLE == ROLE_WGRAD, "neural GEMM role"
+    # lane fx-fast-matrix-units: an NVIDIA `fast` build with the matrix-units row relaxed sends a large product of a
+    # caller that left the vendor route open (forward, dInput and dWeight alike) to the TF32 tensor-core product,
+    # FP32 accumulation. A caller that closed it (`allow_vendor=False`; taken too under the arm's value 3, its own
+    # owed row), a product under the size rule and every
+    # refusal keep the route below. Per call under the arm: the integer tests of `_matrix_units_admits`, then one
+    # launch in place of the route's (two for OP_TN: the transpose of A into `ws`); no allocation, lookup or wait.
+    # Asynchronous like the route below. Not compiled without the define.
+    comptime if GEMM_FAST_MATRIX_UNITS and (allow_vendor or GEMM_FAST_MATRIX_UNITS_ALL):
+        if _matrix_units_admits(c,a,b,ws,m,n,k,op):
+            if matrix_units_gemm_into(ctx,c,a,b,ws,m,n,k,op):
+                return
     comptime if not NEURAL_GEMM_EXPERIMENT_ENABLED:
         _incumbent_into[allow_vendor](ctx,c,a,b,ws,m,n,k,op)
         return
@@ -439,6 +476,9 @@ struct GemmWorkspace(Movable):
         comptime if NEURAL_GEMM_EXPERIMENT_ENABLED:
             neural_validate(m,n,k,op)
         var required = identical_gemm_workspace_max_floats(m,n,k)
+        # lane fx-fast-matrix-units (arm only): room for the transpose of A of an OP_TN the matrix unit takes.
+        comptime if GEMM_FAST_MATRIX_UNITS and (allow_vendor or GEMM_FAST_MATRIX_UNITS_ALL):
+            required = max(required,matrix_units_workspace_floats(m,n,k,op))
         self._ensure(ctx,required)
         identical_gemm_into[allow_vendor,ROLE](ctx,c,a,b,self.buffer,m,n,k,op)
 
@@ -461,6 +501,12 @@ struct GemmWorkspace(Movable):
         mut b: DeviceBuffer[DType.float32],m: Int,n: Int,k: Int,op: Int) raises:
         """`run`'s product, queued for `list_run`. A refusal is this product's own, raised here with the wording
         its single launch uses; the products queued before it are launched first, as they would have been."""
+        # lane fx-fast-matrix-units (arm only): a product the matrix unit takes is its own launch, never a list entry
+        # (the list's shared launch is the FP32 packed body). List products are independent, so its place is free.
+        comptime if GEMM_FAST_MATRIX_UNITS and (allow_vendor or GEMM_FAST_MATRIX_UNITS_ALL):
+            if matrix_units_takes(m,n,k):
+                self.run[allow_vendor,ROLE](ctx,c,a,b,m,n,k,op)
+                return
         comptime if not NEURAL_GEMM_WORKLIST:
             self.run[allow_vendor,ROLE](ctx,c,a,b,m,n,k,op)
             return

@@ -66,7 +66,7 @@ from metrics.impl.stats.detail.trustworthiness_score import (
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
 
 
-comptime IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+from checks.mode_policy import KERNEL_FORM_IDENTICAL as IDENTICAL
 comptime N = 523
 comptime M = 6
 comptime DE = 2

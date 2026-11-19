@@ -226,7 +226,7 @@ from gemm.checks.gemm_oracle import fold_balanced_tree, gemm_oracle
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, numeric_mode_name
 from checks.native_tests.kit import download_host_into, upload_host_into
 
-comptime IDENTICAL_BUILD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+from checks.mode_policy import KERNEL_FORM_IDENTICAL as IDENTICAL_BUILD
 
 #: Written into every output buffer before every launch. A cell still holding
 #: it afterwards was NEVER WRITTEN. Contract section 8 makes this load

@@ -75,6 +75,7 @@ from gbdt.estimator import (
     gbdt_predict,
     gbdt_predict_multi,
 )
+from checks.mode_policy import mode_policy_mask
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
     NUMERIC_IDENTICAL,
@@ -101,6 +102,14 @@ from gbdt.mojolearn_gbdt_run import (
     gbdt_fit_ordered_rmse_run,
     gbdt_fit_two_level_feature_freq_run,
 )
+
+
+def gbdt_mode_policy_mask_binding() raises -> PythonObject:
+    """The mode policy rows this binary was compiled with
+    (`checks/mode_policy.mojo`): bit i set = row i relaxed. 0 in every
+    identical build. Read by `python -m mojolearn verify`, which refuses an
+    identical set that reports anything else."""
+    return PythonObject(Int(mode_policy_mask()))
 
 
 def gbdt_numeric_mode_binding() raises -> PythonObject:
@@ -607,6 +616,7 @@ def build__mojolearn_gbdt() -> PythonObject:
         m.def_function[gbdt_model_dim_binding]("gbdt_model_dim")
         m.def_function[gbdt_predict_multi_binding]("gbdt_predict_multi")
         m.def_function[gbdt_numeric_mode_binding]("gbdt_numeric_mode")
+        m.def_function[gbdt_mode_policy_mask_binding]("gbdt_mode_policy_mask")
         m.def_function[gbdt_per_round_paths_binding]("gbdt_per_round_paths")
         m.def_function[gbdt_binary_prediction_binding[True,DType.float32]]("gbdt_binary_probabilities")
         m.def_function[gbdt_binary_prediction_binding[False,DType.int32]]("gbdt_binary_classes")

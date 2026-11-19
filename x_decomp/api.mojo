@@ -258,7 +258,7 @@ def rank_above_run(sv: Int, n: Int, rtol: Float64) raises -> Int:
 # OLS sequence (_column_means + _center + _ols_tsqr) is NV/AMD 2.97x/1.74x SLOWER istella, 6.17x/3.83x taxi, r2 SAME, so
 # the one-entry route is the only IDENTICAL OLS route (MOJOLEARN_IDN_ALL_OFF no longer clears it); the _OFF define is
 # refused. Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
-comptime _API_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+from checks.mode_policy import KERNEL_FORM_IDENTICAL as _API_IDN
 comptime IDN_OLS_ONE_ENTRY = _API_IDN
 # TOMBSTONE: MOJOLEARN_IDN_OLS_R_TRISOLVE (loser: noise, ols taxi/istella avg ~0.98x, bits changed) deleted 2026-10-11 by c14beeda5; code recoverable at c14beeda5^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_OLS_R_TRISOLVE.patch

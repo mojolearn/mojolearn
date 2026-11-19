@@ -727,11 +727,8 @@ def batched_loglike_grad(
 # no cross-vendor IDENTICAL vote. Retain existing default and Apple-only guard.
 # Evidence: ab-20261006/m3/artifacts/repairs-i23-5b467815b/results/I23,
 # overnight-ab-20261006/{amd,nvidia} normalized controls.
-comptime ARIMA_FAST_BATCH_GRAD = TARGET_HAS_APPLE_GPU and (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    # I23 batch-gradient measurement belongs on Apple; Linux controls excluded.
-    or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-)
+# I23 batch-gradient measurement belongs on Apple; Linux controls excluded.
+comptime ARIMA_FAST_BATCH_GRAD = TARGET_HAS_APPLE_GPU
 
 
 def _batched_loglike_grad_stacked(

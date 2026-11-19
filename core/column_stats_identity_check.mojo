@@ -65,7 +65,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, numeric
 from checks.native_tests.kit import download_host_into, upload_host_into
 
 
-comptime IDENTICAL_BUILD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+from checks.mode_policy import KERNEL_FORM_IDENTICAL as IDENTICAL_BUILD
 
 #: The fold check runs at EXACTLY one row per thread, so nothing is summed
 #: before the fold gets it and the fold's SHAPE is the only thing under

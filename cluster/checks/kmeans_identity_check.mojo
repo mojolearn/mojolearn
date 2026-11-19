@@ -80,7 +80,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode
 from checks.native_tests.kit import download_host_into, upload_host_into
 
 
-comptime IDENTICAL_BUILD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+from checks.mode_policy import KERNEL_FORM_IDENTICAL as IDENTICAL_BUILD
 
 #: The fold this check drives. 128 is what every column carries for the
 #: three float-fold library rows today, so the check runs at the shipped
