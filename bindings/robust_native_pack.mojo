@@ -25,7 +25,7 @@ from bindings.scaler_native_door import _input, _ptr
 from core.preprocessing_program import prep_program_stage as _stage
 from x_prep.robust_native_run import _robust_fit_program
 from bindings.p3_prep_fitted_unpack import prep_fitted_vector
-from bindings.scaler_lifecycle_native_door import _entries, _public_result
+from bindings.scaler_lifecycle_native_door import _entries, _public_result, scaler_requested_mode
 from bindings.x_prep_native_owner_run import xprep_r3
 from bindings.x_prep_native_owner_door import xprep_storage, xprep_take, xprep_values, xprep_run
 from gemm.f16_widen import f16_bits_to_f32
@@ -100,7 +100,7 @@ def robust_fit(model: PythonObject, source: PythonObject, target: PythonObject, 
     device output region, which the separate transform keeps)."""
     var fields = py_fields(model)
     # Preserve the public wrapper's input/target validation before fit begins.
-    var mode = context["backend_fields"]["_DEFAULT_MODE"]
+    var mode = scaler_requested_mode(fields,context)
     var entries = _entries(mode,context)
     var values = xprep_values(source,entries,context)
     var n = Int(py=values[3])
@@ -249,17 +249,20 @@ def robust_lifecycle_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
         if operation == "init":
             for k in range(5):  # small-loop(params: the five stored constructor parameters)
                 py_setitem(fields,names[k],args[k])
+            py_setitem(fields,"numeric_mode",args[5])
         elif operation == "get_params":
             result = Python.dict()
             for k in range(5):  # small-loop(params: the five constructor parameters)
                 py_setitem(result.value(),names[k],fields[names[k]])
+            # None on an instance pickled before the parameter existed.
+            py_setitem(result.value(),"numeric_mode",py_get(fields,"numeric_mode"))
         elif operation == "set_params":
             var options = args[0]
             var builtins = native_loaded_module("builtins")
             var string_type = builtins.str
             var keys = py_call(builtins.list,options)
             for k in range(len(keys)):  # driver-loop: proposed parameter names in caller order
-                if py_type(keys[k]) is not string_type or not py_contains(names,keys[k]):
+                if py_type(keys[k]) is not string_type or (not py_contains(names,keys[k]) and String(keys[k]) != "numeric_mode"):
                     raise Error("mojolearn: invalid parameter for RobustScaler")
                 py_setitem(fields,keys[k],options[keys[k]])
             result = py_present(model)

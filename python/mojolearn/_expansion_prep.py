@@ -298,6 +298,8 @@ class RobustScaler(_PrepBase):
     unit_variance : bool, default False
         Also divide the scale by ``norm.ppf(q_max) - norm.ppf(q_min)``, so that normally distributed
         data ends with unit variance. Requires ``0 < q_min < q_max < 100`` (``ValueError`` otherwise).
+    numeric_mode : {"fast", "identical"} or None, default None
+        Numeric mode; None uses the library default. ``'fast'`` is available on Apple GPUs only.
 
     Attributes
     ----------
@@ -318,15 +320,16 @@ class RobustScaler(_PrepBase):
     """
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _sklearn_input_tags = {"allow_nan": True}
-    _parameters = ("with_centering", "with_scaling", "quantile_range", "copy", "unit_variance")
+    _parameters = ("with_centering", "with_scaling", "quantile_range", "copy", "unit_variance", "numeric_mode")
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
         _register_robust_scaler(cls, _ROBUST_CONTEXT)
 
     def __init__(self, *, with_centering=True, with_scaling=True, quantile_range=(25.0, 75.0), copy=True,
-                 unit_variance=False):
-        return _ROBUST_CALL(self, "init", (with_centering, with_scaling, quantile_range, copy, unit_variance), _ROBUST_CONTEXT)
+                 unit_variance=False, numeric_mode=None):
+        return _ROBUST_CALL(self, "init", (with_centering, with_scaling, quantile_range, copy, unit_variance, numeric_mode),
+                            _ROBUST_CONTEXT)
 
     def get_params(self, deep=True):
         """Return this scaler's constructor parameters as a dictionary."""
@@ -373,6 +376,8 @@ class MaxAbsScaler(_PrepBase):
     ----------
     copy : bool, default True
         Accepted for scikit-learn compatibility; transform always returns a new array.
+    numeric_mode : {"fast", "identical"} or None, default None
+        Numeric mode; None uses the library default. ``'fast'`` is available on Apple GPUs only.
 
     Attributes
     ----------
@@ -395,7 +400,7 @@ class MaxAbsScaler(_PrepBase):
     """
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _sklearn_input_tags = {"allow_nan": True}
-    _parameters = ("copy",)
+    _parameters = ("copy", "numeric_mode")
 
     _mojolearn_native_public = True
 
@@ -403,8 +408,8 @@ class MaxAbsScaler(_PrepBase):
         super().__init_subclass__(**kwargs)
         _register_maxabs_scaler(cls, _MAXABS_CONTEXT)
 
-    def __init__(self, *, copy=True):
-        return _MAXABS_CALL(self, "init", (copy,), _MAXABS_CONTEXT)
+    def __init__(self, *, copy=True, numeric_mode=None):
+        return _MAXABS_CALL(self, "init", (copy, numeric_mode), _MAXABS_CONTEXT)
 
     def get_params(self, deep=True):
         """Return this scaler's constructor parameters as a dictionary."""
@@ -1033,6 +1038,8 @@ class GaussianNB(_Classifier):
         the class frequencies in the training data.
     var_smoothing : float, default 1e-9
         Fraction of the largest feature variance added to every variance.
+    numeric_mode : {"fast", "identical"} or None, default None
+        Numeric mode; None uses the library default. ``'fast'`` is available on Apple GPUs only.
 
     Attributes
     ----------
@@ -1062,11 +1069,12 @@ class GaussianNB(_Classifier):
     >>> model = mojolearn.GaussianNB().fit(X, y)
     >>> model.predict(X[:5])
     """
-    _parameters = ("priors", "var_smoothing")
+    _parameters = ("priors", "var_smoothing", "numeric_mode")
 
-    def __init__(self, *, priors=None, var_smoothing=1e-9):
+    def __init__(self, *, priors=None, var_smoothing=1e-9, numeric_mode=None):
         self.priors = priors
         self.var_smoothing = var_smoothing
+        self.numeric_mode = numeric_mode
 
     def fit(self, X, y, sample_weight=None):
         return _CLS_CALL(self, "fit", (X, y, sample_weight), _CLS_CONTEXT)

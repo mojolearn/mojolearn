@@ -7,6 +7,7 @@ is retained once at import, so answering an admitted `fast` allocates
 nothing per call."""
 
 from std.python import PythonObject
+from bindings.py_balanced import py_type, py_get
 from std.sys.info import CompilationTarget
 from core.mode_answer import MODE_FAMILIES_ALL, MODE_FAMILIES_ANSWERED, connect_mode_answer, fast_is_answered_by_identical
 from core.shared_slot import SharedSlot
@@ -51,3 +52,29 @@ def answer_mode_object(mut mode: PythonObject, word: String, family: Int) raises
             var held = MODE_ANSWER_WORDS.get_or_create_ptr()
             if len(held[].words) > 0:
                 mode = held[].words[0]
+
+
+def fast_answers_compiled_code(want: PythonObject, codes: PythonObject, got: Int, family: Int) raises -> Bool:
+    """The MISMATCH branch of a door's "requested word against the binary's
+    compiled mode code" check, for a door of `family` whose check reads the
+    raw word: whether `want` is the word `fast`, the identical set answers
+    it for that family, and `got` is the code `codes` holds for `identical`.
+    Called only after the door's own comparison failed, so a call whose word
+    matches its binary pays nothing; the refusal that follows a False is the
+    door's own, unchanged."""
+    comptime if CompilationTarget.is_macos():
+        return False
+    if not fast_is_answered_by_identical(family):
+        return False
+    var held = MODE_ANSWER_WORDS.get_or_create_ptr()
+    if len(held[].words) == 0:
+        return False
+    var identical = held[].words[0]
+    if py_type(want) is not py_type(identical):
+        return False
+    if String(py=want) != "fast":
+        return False
+    var code = py_get(codes, identical, PythonObject(None))
+    if code is None:
+        return False
+    return Int(py=code) == got

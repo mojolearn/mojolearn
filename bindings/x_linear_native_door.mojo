@@ -1681,12 +1681,18 @@ comptime _XL_HOST_ONLY_SLOT = "x_linear_host_inference_only_v1"
 comptime _XL_AFTER_FIT_SLOT = "x_linear_no_after_fit_v1"
 
 
-def _xl_cd_entry(context: PythonObject) raises -> NativeDescriptorCall:
+def _xl_cd_entry(fields: PythonObject, context: PythonObject) raises -> NativeDescriptorCall:
     """The connected solver image's operations entry
     (core/solver_entry_table.mojo), by the (tier, vendor) key the bridge
-    recorded at import, or the refusal recorded then."""
+    recorded at import, or the refusal recorded then. `numeric_mode` None
+    (or absent: a model saved before the parameter existed) is the image
+    connected at import, as before the parameter; an explicit word is
+    validated and answered as every x_linear estimator's is (`_xl_mode`)
+    and selects that tier's image. Once per public call, in no loop."""
     var nk = x_linear_keys()
     var key = py_item(context, nk[].k_cd_solver)
+    if py_get(fields, nk[].k_numeric_mode) is not None:
+        key = py_item(py_item(context, nk[].k_cd_solver_modes), PythonObject(_xl_mode(fields, context)))
     if py_type(key) is _b().str:
         raise Error(String(py=key))
     return solver_ops_entry(SolverEntryKey(Int(py=key[0]), Int(py=key[1])))
@@ -1773,7 +1779,7 @@ def xl_cd_fit(model: PythonObject, args: PythonObject, context: PythonObject) ra
         sw_keep = w.array
         sw_addr = w.address
         _ = w  # keep the Python object alive through the native call above
-    var entry = _xl_cd_entry(context)
+    var entry = _xl_cd_entry(fields, context)
     var coef = admitted_array(Python.tuple(n_cols), "<f4", context)
     py_setitem(fields, nk[].k_coef_, coef)
     var info = admitted_vector(1, "<f4", context)
@@ -1820,7 +1826,7 @@ def xl_cd_predict(model: PythonObject, source: PythonObject, context: PythonObje
     var x = admit_x_unrecorded(source, "ElasticNet", context, order="F", finite=False)
     if x.cols != _int(py_item(fields, nk[].k_n_features_in_)):
         raise Error("mojolearn ElasticNet feature count differs from fit")
-    var entry = _xl_cd_entry(context)
+    var entry = _xl_cd_entry(fields, context)
     var coef = _xl_words(py_item(fields, nk[].k_coef_), "coef_", context)
     var out = admitted_vector(x.rows, "<f4", context)
     var intercept = _float(py_item(fields, nk[].k_intercept_))

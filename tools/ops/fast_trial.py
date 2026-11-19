@@ -3,7 +3,7 @@
 """The per-estimator `fast` trial on a BUILT install (.github/workflows/fast-trial.yml).
 
     fast_trial.py run --python VPY --tests-root SOURCE/python/mojolearn/tests --out OUT
-                      --families 0x7fffff [--exact MASK] [--shard I --shards N] [--workers W]
+                      --families 0x7ffffff [--exact MASK] [--shard I --shards N] [--workers W]
     fast_trial.py summary --out OUT [--out OUT2 ...] --ledger fast_ledger.json --md SUMMARY.md
 
 WHAT IT RUNS. `test_fast_selector.py -k BuiltInstallFamilies` against the installed wheel (through
@@ -40,7 +40,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 TEST_FILE = "test_fast_selector.py"
 TEST_SELECT = "BuiltInstallFamilies"
-MASK_ALL = (1 << 23) - 1  # core/mode_answer.mojo MODE_FAMILIES_ALL
+MASK_ALL = (1 << 27) - 1  # core/mode_answer.mojo MODE_FAMILIES_ALL
 UNIT_TIMEOUT = 1900  # the test's own child timeout is 1800 s
 STATUSES = ("answered", "mixed", "refused", "unavailable", "no_parameter", "crashed")
 
@@ -137,7 +137,7 @@ def run_unit(python: str, tests_root: Path, out: Path, unit, code: str) -> dict:
 def cmd_run(a) -> int:
     tests_root = Path(a.tests_root).resolve()
     module = load_test(tests_root)
-    estimators = [row[0] for row in module.FAMILIES]
+    estimators = [row[0] for row in module.FAMILIES + list(getattr(module, "WALK", []))]
     todo = units(estimators, trials(a.families, a.exact), a.shard, a.shards)
     out = Path(a.out)
     (out / "units").mkdir(parents=True, exist_ok=True)

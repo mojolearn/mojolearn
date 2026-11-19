@@ -163,6 +163,8 @@ from bindings.classifier_public_lifecycle_door import classifier_label_list
 from bindings.gp_label_snapshot_native_unpack import gp_label_list as _label_list
 from bindings.gp_state_admission_native_unpack import _gp_scalar_fields, _gp_array_fields, _gp_admit_binary_class
 from bindings.mode_metadata_native_door import _fields
+from bindings.mode_answer_door import answer_mode_object
+from core.mode_answer import MODE_FAMILY_FOREST
 from providers.python.classical_family_admission_pyapi_unpack import classical_family_admit
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains, py_fields, py_item
 from bindings.classical_arrays_door import classical_address, classical_wrap_array, classical_is_array, classical_input, classical_dtype_str, classical_c_bytes, _store_code
@@ -667,6 +669,12 @@ def _schema_forest_mode(fields: PythonObject, context: PythonObject) raises -> P
     """`ForestProtocol._effective_mode`: the mode captured at fit, else the
     requested one, else the process default."""
     var requested = _schema_valid_mode(py_get(fields, "numeric_mode"))
+    if requested is not None:
+        # The fit captured the answered word (trees_public_forest_door
+        # `_check_mode`); the save compares against the same answer. Once per
+        # save, beside the two word builds `_schema_valid_mode` already makes.
+        var requested_word = String(py=requested)
+        answer_mode_object(requested, requested_word, MODE_FAMILY_FOREST)
     var captured = py_get(fields, "_fit_numeric_mode")
     if captured is not None:
         if py_type(captured) is not py_type(PythonObject("")):

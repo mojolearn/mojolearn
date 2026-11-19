@@ -19,7 +19,7 @@ from bindings.scaler_native_door import _input, _ptr, _copy_row
 from core.preprocessing_program import prep_program_stage as _stage
 from x_prep.maxabs_native_run import _maxabs_fit_program
 from bindings.p3_prep_fitted_unpack import prep_fitted_vector
-from bindings.scaler_lifecycle_native_door import _entries, _public_result
+from bindings.scaler_lifecycle_native_door import _entries, _public_result, scaler_requested_mode
 from bindings.x_prep_native_inputs_door import _target, _values
 from bindings.x_prep_native_owner_run import xprep_r3
 from bindings.x_prep_native_owner_door import xprep_storage, xprep_take, xprep_values, xprep_run
@@ -35,7 +35,7 @@ def maxabs_fit(model: PythonObject, source: PythonObject, target: PythonObject, 
     Apple fast entry, or an output large enough for the device output
     region, which the separate transform keeps)."""
     var fields = py_fields(model)
-    var mode = context["backend_fields"]["_DEFAULT_MODE"]
+    var mode = scaler_requested_mode(fields,context)
     var entries = _entries(mode,context)
     var direct = py_get(entries,"x_prep_maxabs_fit_direct")
     # The existing Apple fast direct entry owns its upload; retain that
@@ -172,15 +172,20 @@ def maxabs_lifecycle_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
         var result = Optional[PythonObject]()
         if operation == "init":
             py_setitem(fields,"copy",args[0])
+            py_setitem(fields,"numeric_mode",args[1])
         elif operation == "get_params":
-            result = Python.dict(copy=fields["copy"])
+            # `numeric_mode` reads None on an instance pickled before the
+            # parameter existed.
+            var params = Python.dict(copy=fields["copy"])
+            py_setitem(params,"numeric_mode",py_get(fields,"numeric_mode"))
+            result = params
         elif operation == "set_params":
             var options = args[0]
             var builtins = native_loaded_module("builtins")
             var string_type = builtins.str
             var names = py_call(builtins.list,options)
             for k in range(len(names)):  # driver-loop: proposed parameter names, in declared order
-                if py_type(names[k]) is not string_type or String(names[k]) != "copy":
+                if py_type(names[k]) is not string_type or (String(names[k]) != "copy" and String(names[k]) != "numeric_mode"):
                     raise Error("mojolearn: invalid parameter for MaxAbsScaler")
                 py_setitem(fields,names[k],options[names[k]])
             result = py_present(model)

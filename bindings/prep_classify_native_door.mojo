@@ -46,7 +46,7 @@ from bindings.arena_cache_release_door import arena_cache_release_operation
 from bindings.prep_classify_prog_door import ClsProg, NONE, f32_array, i32_array, f32_input
 from bindings.prep_classify_prog_run import cls_class_counts
 from bindings.prep_classify_common_door import (
-    XIn, CsrIn, PartialCodes, cls_builtins, cls_name, cls_repr, cls_str, cls_kind, cls_mode, cls_entry,
+    XIn, CsrIn, PartialCodes, cls_builtins, cls_name, cls_repr, cls_str, cls_kind, cls_mode, cls_requested_mode, cls_entry,
     idn_int, classical_shared, blocked, check_fitted, check_width, cls_x2d, is_sparse, csr_input, csr_dense_x,
     float_list, given_priors, prior_sum, is_real, cls_float, col_stats, cs, class_stats, cls_stats, qda_cov, gram,
     nb_onepass, nb_counts, encode_y, partial_codes, stage_partial_codes, partial_refuse,
@@ -497,7 +497,7 @@ def _gnb_fit(model: PythonObject, fields: PythonObject, args: PythonObject, cont
     var d = arr.d
     var codes = encode_y(model, fields, args[1], n, context)
     var K = _n_classes(fields)
-    var mode = cls_mode(context)
+    var mode = cls_requested_mode(fields, context)
     var pr = ClsProg()
     var xo = pr.put(arr.value)
     var yo = pr.put_codes(codes)
@@ -532,7 +532,7 @@ def _gnb_partial_fit(model: PythonObject, fields: PythonObject, args: PythonObje
     var d = arr.d
     var pc = partial_codes(model, fields, args[1], args[2], n, context)
     var K = _n_classes(fields)
-    var mode = cls_mode(context)
+    var mode = cls_requested_mode(fields, context)
     if not pc.first:
         check_width(model, fields, d)
         mode = fields["numeric_mode_"]

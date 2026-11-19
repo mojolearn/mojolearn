@@ -11,6 +11,8 @@ from bindings.native_array_storage_door import native_array_empty, native_array_
 from bindings.native_loaded_module_door import native_loaded_module
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
+from bindings.mode_answer_door import answer_mode_object
+from core.mode_answer import MODE_FAMILY_PREP
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_arrays_door import classical_address, classical_dtype_str, classical_c_order, classical_c_bytes, classical_wrap_array, classical_is_array
 from bindings.admitted_input_unpack import admit_x
@@ -102,6 +104,25 @@ def cls_kind(model: PythonObject, context: PythonObject) raises -> String:
 def cls_mode(context: PythonObject) raises -> PythonObject:
     """`_expansion_prep._mode()`: the process numeric mode."""
     return context["backend_fields"]["_DEFAULT_MODE"]
+
+
+def cls_requested_mode(fields: PythonObject, context: PythonObject) raises -> PythonObject:
+    """The mode a classifier with an optional `numeric_mode` field fits in
+    (GaussianNB): the process default when the field is None or absent (a
+    model pickled before the parameter existed), else the validated word,
+    answered (core/mode_answer.mojo, family PREP). Once per fit, in no loop;
+    the None path makes the one default read `cls_mode` makes."""
+    var mode = py_get(fields, "numeric_mode")
+    if mode is None:
+        return context["backend_fields"]["_DEFAULT_MODE"]
+    if py_type(mode) is not cls_builtins().str:
+        raise Error("ValueError: numeric_mode must be fast, identical or None")
+    mode = py_call(py_call(mode.strip).lower)
+    var mode_word = String(mode)
+    if mode_word != "fast" and mode_word != "identical":
+        raise Error("ValueError: numeric_mode must be fast, identical or None")
+    answer_mode_object(mode, mode_word, MODE_FAMILY_PREP)
+    return mode
 
 
 def cls_entry(mode: PythonObject, name: String, context: PythonObject) raises -> PythonObject:

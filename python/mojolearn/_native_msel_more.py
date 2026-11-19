@@ -70,7 +70,7 @@ def _connect_boosting(boosting, register, owner_for, _layout):
 def _connect_naive_bayes(prep, register, owner_for):
     # glue: GaussianNB's fixed schema, once, when the prep family loads
     cls = prep.GaussianNB
-    names = ('priors', 'var_smoothing')
+    names = ('priors', 'var_smoothing', 'numeric_mode')
     owner = owner_for(cls, prep._CLS_CONTEXT, names,
                       ('classes_', 'n_features_in_', 'numeric_mode_', 'theta_', 'var_', 'class_count_',
                        'class_prior_', 'epsilon_', '_const', '_raw_var'), False)

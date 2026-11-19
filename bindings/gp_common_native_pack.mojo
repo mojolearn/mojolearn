@@ -16,6 +16,8 @@ from bindings.native_loaded_module_door import native_loaded_module
 from bindings.mode_metadata_native_door import _plan
 from bindings.gp_native_boundary_door import GPConnection
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem
+from bindings.mode_answer_door import fast_answers_compiled_code
+from core.mode_answer import MODE_FAMILY_GP
 from std.memory import unsafe_memcpy
 from bindings.family_common_unpack import family_repr, family_is_str, FAMILY_F32P
 from bindings.family_common_pack import family_call, family_array
@@ -60,7 +62,8 @@ def gp_extension(model: PythonObject, binding: PythonObject, prefix: String, reb
     var got = connection.native.mode
     if got >= 0:
         var wanted = py_get(context["family_gp_mode_codes"], want, PythonObject(None))
-        if wanted is None or Int(py=wanted) != got:
+        if (wanted is None or Int(py=wanted) != got) and not fast_answers_compiled_code(
+                want, context["family_gp_mode_codes"], got, MODE_FAMILY_GP):
             raise Error("RuntimeError: " + prefix + ": numeric_mode=" + family_repr(want) + " was requested but "
                         + String(py_fields(binding)["__name__"]) + " reports compile-time mode code "
                         + String(got) + "; " + rebuild)

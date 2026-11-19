@@ -61,8 +61,16 @@ def connect(tables, solver=None):
         except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as error:
             metrics[mode] = _refusal(error)
     cd, host_predict = "ImportError: the coordinate-descent solver is not connected here", None
+    cd_modes = {"identical": cd, "fast": cd}
     if solver is not None:
         cd = _connect_cd(solver)
+        # An explicit ElasticNet / Lasso numeric_mode selects that tier's image; None keeps `cd`.
+        cd_modes[selected] = cd
+        other = "fast" if selected == "identical" else "identical"
+        try:
+            cd_modes[other] = _connect_cd(_backend.binding("_mojolearn_solver", other))
+        except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as error:
+            cd_modes[other] = _refusal(error)
         # an explicit host Lasso / ElasticNet predicts through the classical
         # door's host entry (`_HostCD.predict`)
         from .linear_model import _native_classical, _CLASSICAL
@@ -94,7 +102,7 @@ def connect(tables, solver=None):
                    classifier_labels_mro=type.__dict__["__mro__"].__get__(ClassLabels))
     context.update(xl_helpers=helpers, xl_undefined_warning=UndefinedMetricWarning,
                    xl_decimal=decimal.Decimal, xl_pow_context=_POW_CONTEXT)
-    context.update(xl_bindings=linear, classical_metrics=metrics, cd_solver=cd,
+    context.update(xl_bindings=linear, classical_metrics=metrics, cd_solver=cd, cd_solver_modes=cd_modes,
                    cd_host_predict=host_predict, environment=os.environ._data,
                    xl_sgd_clf_loss=dict(tables.get("sgd_clf_loss", {})), xl_sgd_reg_loss=dict(tables.get("sgd_reg_loss", {})),
                    xl_sgd_penalty=dict(tables.get("sgd_penalty", {})), xl_sgd_lr=dict(tables.get("sgd_lr", {})),

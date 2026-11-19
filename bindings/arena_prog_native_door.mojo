@@ -14,7 +14,7 @@
 # `_expansion_prep._Prog.run` and `_expansion_metrics._execute` step for
 # step: the same entries are called with the same words, so no bit moves.
 from bindings.mode_answer_door import answer_mode_object
-from core.mode_answer import MODE_FAMILY_NEURAL
+from core.mode_answer import MODE_FAMILY_PROGRAM
 from std.sys.compile import is_defined
 from bindings.native_array_storage_door import native_array_zeros
 from std.memory import unsafe_memcpy
@@ -118,7 +118,10 @@ def _family_entries(mode: PythonObject, family: String, context: PythonObject) r
         if py_type(refusal) is not b.str:
             raise Error("TypeError: arena program mode refusal requires a native string")
         raise Error("ValueError: " + String(refusal))
-    answer_mode_object(selected, word, MODE_FAMILY_NEURAL)
+    # The shared x_prep / x_metrics program runner: every classifier's accuracy
+    # score hands it the estimator's raw word (family PROGRAM, not NEURAL: the
+    # trial of 2026-11-19 showed KNeighborsClassifier.score refusing here).
+    answer_mode_object(selected, word, MODE_FAMILY_PROGRAM)
     var bindings = context["prog_bindings"]
     _family_dictionary(bindings, b)
     var entries = bindings[selected]

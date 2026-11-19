@@ -82,6 +82,25 @@ def _mode(fields: PythonObject, context: PythonObject) raises -> PythonObject:
     return mode
 
 
+def scaler_requested_mode(fields: PythonObject, context: PythonObject) raises -> PythonObject:
+    """The mode a scaler with an optional `numeric_mode` field fits in
+    (MaxAbsScaler, RobustScaler): the process default when the field is None
+    or absent (an instance pickled before the parameter existed), else the
+    validated word, answered as StandardScaler's is. Once per fit, in no loop;
+    the None path makes the one default read the fit made before."""
+    var mode = py_get(fields, "numeric_mode")
+    if mode is None:
+        return context["backend_fields"]["_DEFAULT_MODE"]
+    if py_type(mode) is not native_loaded_module("builtins").str:
+        raise Error("numeric_mode must be fast, identical or None")
+    mode = py_call(py_call(mode.strip).lower)
+    var mode_word = String(mode)
+    if mode_word != "fast" and mode_word != "identical":
+        raise Error("numeric_mode must be fast, identical or None")
+    answer_mode_object(mode, mode_word, MODE_FAMILY_SCALER)
+    return mode
+
+
 def _direct(entries: PythonObject, name: String) raises -> PythonObject:
     if String(getenv("MOJOLEARN_SCALER_DIRECT", "1").strip()) == "0":
         return PythonObject(None)

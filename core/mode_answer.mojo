@@ -32,7 +32,9 @@ Families (lane fx-fast-selector2). The answer is held per door family, as one
 bit of `ModeAnswer.families`. A family's bit is set only when EVERY public
 operation of that family (fit, predict, score, transform, explain, partial
 fit, save, load, parameter read-back) answers the word the same way; the set
-of such families is the one constant `MODE_FAMILIES_ANSWERED` below. A family
+of such families is the one constant `MODE_FAMILIES_ANSWERED` below, which
+names the shared doors a family passes (RESOLVER, DECOMP_KIT, METADATA,
+PROGRAM) beside the family itself. A family
 whose bit is clear keeps the uniform refusal of an install with no fast set
 in all its operations: its doors' calls here leave the word `fast` alone, so
 no estimator fits under `fast` and then refuses in its next call. Turning a
@@ -81,18 +83,42 @@ comptime MODE_FAMILY_NEURAL = 1 << 16       # neural_block, sequential, sequence
 comptime MODE_FAMILY_XCNN = 1 << 17         # xcnn_common_door
 comptime MODE_FAMILY_XSEQ = 1 << 18         # xseq_native_common_door, xseq_score_native_door
 comptime MODE_FAMILY_RESOLVER = 1 << 19     # estimator_binding_pyapi_door (shared by every family that hands it a raw word)
-comptime MODE_FAMILY_METADATA = 1 << 20     # mode_metadata_native_door, model_catalog_native_door
+comptime MODE_FAMILY_METADATA = 1 << 20     # mode_metadata_native_door (shared: numeric_mode_used / vendor_used of every estimator; the neural model catalog answers under NEURAL)
 comptime MODE_FAMILY_MSEL = 1 << 21         # msel_scorer_native_door
 comptime MODE_FAMILY_LINALG = 1 << 22       # linalg_ops_resample_door
-comptime MODE_FAMILIES_ALL = (1 << 23) - 1
+comptime MODE_FAMILY_PROGRAM = 1 << 23      # arena_prog_native_door (the shared x_prep / x_metrics program runner: every classifier's accuracy score passes it)
+comptime MODE_FAMILY_MIXTURE = 1 << 24      # mixture_native_door, svm_mixture_native_door (GaussianMixture's compiled-mode check)
+comptime MODE_FAMILY_GP = 1 << 25           # gp_common_native_pack (the GP estimators' compiled-mode check)
+comptime MODE_FAMILY_PREP = 1 << 26         # prep_classify_common_door (cls_requested_mode: the x_prep classifiers that take numeric_mode)
+comptime MODE_FAMILIES_ALL = (1 << 27) - 1
 
 # THE ONE DECISION of which families answer `fast` by the identical set where
 # the selector decided so. Every family not named here refuses `fast` in all
-# its operations, as an install with no fast set always has. Empty until the
-# built-install run (RUN OWED of lane fx-fast-selector2) shows a family whole:
-# 134 door files still read the mode word without the shared step, and a
-# family is never turned on by reading alone.
-comptime MODE_FAMILIES_ANSWERED = 0
+# its operations, as an install with no fast set always has.
+#
+# Evidence (lane fx-fast-per-estimator, 2026-11-19; the built-install trial on
+# wheel 7f5eac7eab, CPU runner, runs 44627498380 and 44628153265 under
+# ~/mojolearn-evidence/measure-candidate/build-7f5eac7eab/fast-trial/):
+# - whole in the EXACT trial 0x83ffe (every public operation, pickle and
+#   save/load equal to identical): GBDT, IFOREST, SCALER, PCA, IPCA, NMF,
+#   TSVD, KPCA, PLS, LINEAR, KERNEL, with the shared doors they pass,
+#   DECOMP_KIT and RESOLVER (without those two KERNEL and PLS refuse at fit).
+# - whole in the every-family trial and open in one door that this lane
+#   closed, so they are on from that trial plus the edit and the next built
+#   wheel's trial must confirm them: NEIGHBORS with PROGRAM (the classifier's
+#   accuracy score through the shared program runner), FOREST with METADATA
+#   (the archive save compared the raw word with the fitted one; the mode
+#   metadata door compares them too), MIXTURE (GaussianMixture's
+#   compiled-mode check) and PREP (GaussianNB's new parameter).
+# Off: SPECTRAL, TSA, NEURAL, XCNN, XSEQ, MSEL, LINALG, GP (no trial row, or
+# doors that still read the raw word; lists in the lane's RESULT file).
+# A family is added only from a trial run with no `mixed` row.
+comptime MODE_FAMILIES_ANSWERED = (
+    MODE_FAMILY_FOREST | MODE_FAMILY_IFOREST | MODE_FAMILY_GBDT | MODE_FAMILY_SCALER | MODE_FAMILY_PCA
+    | MODE_FAMILY_IPCA | MODE_FAMILY_NMF | MODE_FAMILY_TSVD | MODE_FAMILY_KPCA | MODE_FAMILY_PLS
+    | MODE_FAMILY_DECOMP_KIT | MODE_FAMILY_LINEAR | MODE_FAMILY_KERNEL | MODE_FAMILY_NEIGHBORS
+    | MODE_FAMILY_RESOLVER | MODE_FAMILY_METADATA | MODE_FAMILY_PROGRAM | MODE_FAMILY_MIXTURE | MODE_FAMILY_PREP
+)
 
 
 struct ModeAnswer(Defaultable, Movable):

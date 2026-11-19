@@ -82,6 +82,8 @@ from bindings.boundary_read_door import read_int_like, read_float_like, read_boo
 from providers.python.estimator_lifecycle_pyapi_unpack import estimator_outside, estimator_feature_check, estimator_fit_begin, estimator_fit_end, estimator_fit_complete
 from providers.python.estimator_tabular_boundary_pyapi_unpack import _target, _refusal
 from bindings.py_optional import py_or_none
+from bindings.mode_answer_door import fast_answers_compiled_code
+from core.mode_answer import MODE_FAMILY_MIXTURE
 from mixture.mixture_native_run import _gmm_operation
 
 comptime _GMM = "mojolearn GaussianMixture: "
@@ -427,6 +429,8 @@ def _check_mode(binding: PythonObject, model: PythonObject, context: PythonObjec
     var got = _estimator_mode_word(binding, getter)
     var wanted = py_get(context["family_gmm_mode_codes"], want, PythonObject(None))
     if wanted is None or Int(py=wanted) != got:
+        if fast_answers_compiled_code(want, context["family_gmm_mode_codes"], got, MODE_FAMILY_MIXTURE):
+            return
         raise Error("RuntimeError: " + _GMM + "numeric_mode=" + family_repr(want) + " was requested "
                     + "but " + String(py_fields(binding)["__name__"])
                     + " reports compile-time mode code " + String(got)
