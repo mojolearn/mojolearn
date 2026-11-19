@@ -50,6 +50,10 @@ on:
         description: "matrix runners the units are split across"
         required: false
         default: "1"
+      tests_from:
+        description: "source (default: the wheel commit's test_fast_selector.py) or tooling (this run's ref's copy, for a wheel whose test predates a trial fix)"
+        required: false
+        default: "source"
       python:
         description: "Python version (the release CPU column's)"
         required: false
@@ -137,10 +141,12 @@ jobs:
           EXACT: ${{ inputs.exact_families }}
           SHARD: ${{ matrix.shard }}
           SHARDS: ${{ inputs.shards }}
+          TESTS_FROM: ${{ inputs.tests_from }}
         run: |
+          case "$TESTS_FROM" in source|tooling) ;; *) echo "tests_from must be source or tooling" >&2; exit 2;; esac
           echo "runner: $(nproc) cores, $(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2), $(free -g | awk '/Mem:/{print $2}') GiB"
           python3 tooling/tools/ops/fast_trial.py run --python "$VENV/bin/python" \
-            --tests-root source/python/mojolearn/tests --out "$RUNNER_TEMP/trial-out" \
+            --tests-root "$TESTS_FROM/python/mojolearn/tests" --out "$RUNNER_TEMP/trial-out" \
             --families "$FAMILIES" --exact "$EXACT" --shard "$SHARD" --shards "$SHARDS" --workers "$(nproc)" \
             > "$RUNNER_TEMP/trial.log" 2>&1
           rc=$?
@@ -180,12 +186,15 @@ jobs:
           pattern: fast-trial-shard-*
           path: shards
       - name: fast_ledger.json and SUMMARY.md
+        env:
+          TESTS_FROM: ${{ inputs.tests_from }}
         run: |
           set -eu
+          case "$TESTS_FROM" in source|tooling) ;; *) echo "tests_from must be source or tooling" >&2; exit 2;; esac
           mkdir -p report
           outs=(); for d in shards/fast-trial-shard-*; do outs+=(--out "$d"); done
           [ "${#outs[@]}" -gt 0 ] || { echo "no shard artifact" >&2; exit 1; }
-          python3 tooling/tools/ops/fast_trial.py summary "${outs[@]}" --tests-root source/python/mojolearn/tests \
+          python3 tooling/tools/ops/fast_trial.py summary "${outs[@]}" --tests-root "$TESTS_FROM/python/mojolearn/tests" \
             --ledger report/fast_ledger.json --md report/SUMMARY.md
           cat report/SUMMARY.md >> "$GITHUB_STEP_SUMMARY"
           head -n 60 report/SUMMARY.md

@@ -129,15 +129,16 @@ def upload_wheel(wheel, key, days):
     return bincache.presign("GET", key, int(days * 86400), creds)
 
 
-def fast_trial_argv(ref, commit, wheel_name, url, digest, token, families, exact="", shards=1):
+def fast_trial_argv(ref, commit, wheel_name, url, digest, token, families, exact="", shards=1, tests_from="source"):
     """The `gh workflow run fast-trial.yml` command (inputs as verify-smoke.yml's, plus the trial's)."""
     return ["gh", "workflow", "run", FAST_TRIAL_WORKFLOW, "--ref", ref, "-f", f"ref={commit}",
             "-f", f"wheel_url={url}", "-f", f"wheel_name={wheel_name}", "-f", f"wheel_sha256={digest}",
             "-f", f"families={families}", "-f", f"exact_families={exact}", "-f", f"shards={int(shards)}",
-            "-f", f"token={token}"]
+            "-f", f"tests_from={tests_from}", "-f", f"token={token}"]
 
 
-def dispatch_fast_trial(wheel_dir, ref="", commit="", families="0x7fffff", exact="", shards=1, dry=False, days=2):
+def dispatch_fast_trial(wheel_dir, ref="", commit="", families="0x7fffff", exact="", shards=1, dry=False, days=2,
+                        tests_from="source"):
     """Dispatch .github/workflows/fast-trial.yml on the core wheel (same upload and key as the smoke)."""
     wheel = core_wheel(wheel_dir)
     if not commit:
@@ -149,10 +150,11 @@ def dispatch_fast_trial(wheel_dir, ref="", commit="", families="0x7fffff", exact
     if dry:
         print("FAST-TRIAL would upload " + wheel.name + " to R2 " + key + " and run: "
               + " ".join(fast_trial_argv(ref, commit, wheel.name, "<presigned>", digest, token, families, exact,
-                                         shards)))
+                                         shards, tests_from)))
         return token
     url = upload_wheel(wheel, key, days)
-    p = subprocess.run(fast_trial_argv(ref, commit, wheel.name, url, digest, token, families, exact, shards),
+    p = subprocess.run(fast_trial_argv(ref, commit, wheel.name, url, digest, token, families, exact, shards,
+                                       tests_from),
                        cwd=ROOT, capture_output=True, text=True)
     if p.returncode != 0:
         raise SystemExit(f"fast trial: gh workflow run failed: {(p.stderr or p.stdout).strip()[-400:]}")
@@ -211,9 +213,12 @@ def main(argv=None):
     ap.add_argument("--families", default="0x7fffff", help="fast-trial: trial mask of door families")
     ap.add_argument("--exact-families", default="", help="fast-trial: a second trial with exactly this set")
     ap.add_argument("--shards", type=int, default=1, help="fast-trial: matrix runners")
+    ap.add_argument("--tests-from", choices=("source", "tooling"), default="source",
+                    help="fast-trial: run the wheel commit's test file (source) or --ref's copy (tooling)")
     a = ap.parse_args(argv)
     if a.workflow == "fast-trial":
-        dispatch_fast_trial(a.wheel_dir, a.ref, a.commit, a.families, a.exact_families, a.shards, a.dry_run)
+        dispatch_fast_trial(a.wheel_dir, a.ref, a.commit, a.families, a.exact_families, a.shards, a.dry_run,
+                            tests_from=a.tests_from)
         return 0
     dispatch(a.wheel_dir, a.ref, a.commit, a.dry_run, census=a.census)
     return 0

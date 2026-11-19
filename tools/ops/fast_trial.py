@@ -112,7 +112,7 @@ def run_unit(python: str, tests_root: Path, out: Path, unit, code: str) -> dict:
     log = out / "units" / f"{stem}.log"
     env = dict(os.environ, MOJOLEARN_FAST_ANSWER_TRIAL_FAMILIES=value, MOJOLEARN_FAST_LEDGER=str(ledger),
                MOJOLEARN_FAST_ESTIMATORS=estimator)
-    argv = [python, "-I", "-c", code, str(tests_root), "-q", "-p", "no:cacheprovider", "--import-mode=importlib",
+    argv = [python, "-I", "-c", code, str(tests_root), "-q", "-rfEs", "-p", "no:cacheprovider", "--import-mode=importlib",
             str(tests_root / TEST_FILE), "-k", TEST_SELECT]
     start = time.monotonic()
     with open(log, "w") as fh, tempfile.TemporaryDirectory() as cwd:  # an empty cwd: no source tree on sys.path

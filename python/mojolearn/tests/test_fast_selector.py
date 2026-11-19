@@ -348,7 +348,18 @@ def operations(model, kind):
     return ops
 def run(name, kind, extra, mode):
     # (fit error or None, {operation: digest or "refused: ..."}, model)
-    model = getattr(mojolearn, name)(numeric_mode=mode, **extra)
+    # Construction is inside the report too: a class with no `numeric_mode` parameter (ElasticNet, GaussianNB,
+    # MaxAbsScaler, RobustScaler) raises TypeError for the word, which is its refusal; its `identical` arm is
+    # built without the keyword. Before this, the TypeError escaped the child and the whole unit was skipped.
+    cls = getattr(mojolearn, name)
+    try:
+        model = cls(numeric_mode=mode, **extra)
+    except TypeError as error:
+        if mode is not None or "numeric_mode" not in str(error):
+            return f"{type(error).__name__}: {error}"[:300], {}, None
+        model = cls(**extra)
+    except Exception as error:
+        return f"{type(error).__name__}: {error}"[:300], {}, None
     try:
         model.fit(X, *target(kind))
     except Exception as error:
@@ -380,8 +391,8 @@ for name, kind, extra in FAMILIES:
         if ops[op] != "same":
             ops[op] += " " + value[:200]
     whole = all(value == "same" for value in ops.values())
-    rows[name] = dict(status="answered" if whole else "mixed", ops=ops, attribute=model.numeric_mode,
-                      param=model.get_params()["numeric_mode"])
+    rows[name] = dict(status="answered" if whole else "mixed", ops=ops, attribute=getattr(model, "numeric_mode", None),
+                      param=model.get_params().get("numeric_mode"))
 print(json.dumps(dict(answer=mojolearn._backend._FAST_ANSWER, vendor=mojolearn.vendor(), rows=rows)))
 """
 
@@ -471,12 +482,20 @@ class BuiltInstallFamilies(unittest.TestCase):
         done = subprocess.run([sys.executable, "-c", _FAMILY_CHILD, json.dumps(chosen), every],
                               env=dict(os.environ, MOJOLEARN_NUMERIC_MODE="identical"),
                               capture_output=True, text=True, timeout=1800)
+        ledger = os.environ.get("MOJOLEARN_FAST_LEDGER")
         if done.returncode != 0:
-            self.skipTest("no built mojolearn in this environment: " + done.stderr[-300:])
+            if not ledger:
+                self.skipTest("no built mojolearn in this environment: " + done.stderr[-300:])
+            # A trial asked for a report: the child's failure IS the report (a skip hid it and left no ledger).
+            why = f"child rc={done.returncode}: " + " | ".join(done.stderr.strip().splitlines()[-6:])[-600:]
+            with open(ledger, "w") as out:
+                json.dump(dict(answer=None, vendor=None, families=every,
+                               rows={name: dict(status="crashed", why=why, family=ESTIMATOR_FAMILY.get(name, "?"))
+                                     for name, _, _ in chosen}), out, indent=1, sort_keys=True)
+            self.fail(why)
         report = json.loads(done.stdout.strip().splitlines()[-1])
         for name, row in report["rows"].items():
             row["family"] = ESTIMATOR_FAMILY.get(name, "?")
-        ledger = os.environ.get("MOJOLEARN_FAST_LEDGER")
         if ledger:
             with open(ledger, "w") as out:
                 json.dump(dict(report, families=every), out, indent=1, sort_keys=True)
