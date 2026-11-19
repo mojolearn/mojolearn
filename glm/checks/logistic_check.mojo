@@ -138,6 +138,7 @@ from checks.numerics import (
     identical_mul_add,
     numeric_mode_name,
 )
+from checks.native_tests.kit import download_host_into
 
 
 comptime IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
@@ -250,14 +251,13 @@ def _fit(
     var iters = 0
     var ret = qn_fit_x(ctx, pams, x^, y^, n, d, n_classes, w, fx, iters, has_sw, trace)
     var hw = ctx.enqueue_create_host_buffer[DType.float32](n_param)
-    ctx.enqueue_copy(dst_ptr=hw.unsafe_ptr(), src_buf=w)
+    download_host_into[DType.float32](ctx, w, hw)
     ctx.synchronize()
     var out = List[Float32]()
     for i in range(n_param):
         out.append(hw.unsafe_ptr().unsafe_load(i))
     _ = hx^
     _ = hy^
-    _ = hw^
     return FitResult(out^, fx, iters, ret)
 
 
@@ -540,7 +540,7 @@ def check_logistic_device_equals_host() raises:
     var obj = GLMWithData(ctx, x^, y^, n, dims, QN_LOSS_LOGISTIC, l2)
     var loss_dev = obj.evaluate(ctx, w, g)
     var hg = ctx.enqueue_create_host_buffer[DType.float32](n_param)
-    ctx.enqueue_copy(dst_ptr=hg.unsafe_ptr(), src_buf=g)
+    download_host_into[DType.float32](ctx, g, hg)
     ctx.synchronize()
     var g_dev = List[Float32]()
     for k in range(n_param):
@@ -602,7 +602,6 @@ def check_logistic_device_equals_host() raises:
     _ = hx^
     _ = hy^
     _ = hw2^
-    _ = hg^
 
     # DEVIATION 1946: the context dies LAST, after every value built on it.
     # Mojo frees at LAST USE, so without this the buffer releases above run
