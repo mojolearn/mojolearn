@@ -44,7 +44,7 @@ from gemm.fast_matrix_units import (
     GEMM_FAST_MATRIX_UNITS, matrix_units_takes, matrix_units_workspace_floats, matrix_units_cell_bound,
 )
 from gemm.checks.gemm_lowbit_check import _upload_f32, _download_f32, _poisoned
-from checks.native_tests.runner import Check, Column, Report, require
+from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
 
 
 comptime MATRIX_UNITS_FIXTURES = 6
@@ -221,8 +221,14 @@ def _run_gpu(mut report: Report) raises:
 
 
 def run_cases(column: Column, mut report: Report):
+    # GPU column only. The body opens the vendor route (`identical_gemm_into[True]`), which instantiates the MAX
+    # library's GPU matmul; in the CPU column's binary that is "target 'unknown' is not supported by this build"
+    # (2026-11-19: it failed the whole CPU check build with no source location). The CPU build compiles none of it.
     try:
-        _run_gpu(report)
+        comptime if CPU_COLUMN_BUILD:
+            raise Error("gemm_matrix_units runs on the gpu column only")
+        else:
+            _run_gpu(report)
     except error:
         report.abort(error)
 

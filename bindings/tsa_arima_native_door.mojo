@@ -12,10 +12,10 @@ native call each, through `tsa_native_call` (bindings/tsa_public_native.mojo):
 The numerical entry selection and argument layout are preserved. Compilation
 does not establish runtime behavior or within-release bitwise identity.
 A host inference class (`HostARIMA`) reads its loaded forecast host binding
-from bindings.mode_answer_door import answer_mode_object
-from core.mode_answer import MODE_FAMILY_TSA
 from the module table.
 """
+from bindings.mode_answer_door import answer_mode_object
+from core.mode_answer import MODE_FAMILY_TSA
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from arima.tsa_arima_run import _penalties
