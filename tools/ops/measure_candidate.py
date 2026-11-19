@@ -395,29 +395,23 @@ def ab_plan(owed_file, planner_file, vendor, b_names, times_board, chunk_s=TR.DE
     largest over TIMES_BOARD, one path or a list; the family median for a race or a neighbouring shape with no stored
     time) plus one process start per chunk and arm (TR.PROC_S; the races' wall_s holds the rest), and the base races'
     smoke (TR.SMOKE_S_PER_RACE; lane fb15-ab-verdicts, 2026-11-18: ab1 was estimated at 152 minutes and passed the
-    240-minute cap with 17 of 25 sqrt-comptime-step cells left); a race with a STORED BASE runs the arm only,
-    counted at its cap (the stored base time, the most it can take)."""
+    240-minute cap with 17 of 25 sqrt-comptime-step cells left). Every unit times its base in the same job (the
+    2026-11-17 STORED BASE, an arm alone against another host's base time, is gone: IN-JOB BASE CAP, measure_owed.py)."""
     if not b_names:
         return []
     planner = MO.load_planner(str(planner_file))
     doc = PC.load_json(owed_file)
-    units, _, _, _, rowmap, _ = MO.plan(doc, {"recipes": [], "race_ids": []}, planner, vendor, list(b_names))
-    bases = MO.unit_bases(doc, rowmap, units)
+    units = MO.plan(doc, {"recipes": [], "race_ids": []}, planner, vendor, list(b_names))[0]
     secs = stored_times(times_board)
     med = TR.family_medians(secs)
     out = []
     for (arm, rows), ids in sorted(units.items(), key=lambda kv: MO.unit_order(kv[0])):
         if arm == "candidate":
             continue
-        # STORED BASE (measure_owed.py): those races time the arm only, at most their cap (the stored base time)
-        caps = (bases.get((arm, rows)) or {}).get("round_seconds") or {}
-        stored = {k.split(" ")[0] for k in ((bases.get((arm, rows)) or {}).get("cells") or {})}
-        each = {i: (caps.get(i) or (secs.get(i) if rows == "full" else None)
-                    or med.get(i.split("/")[0], chunk_s / 4.0)) for i in ids}
-        s = sum(t if i in stored else 2 * t for i, t in each.items())
-        nchunks = len(TR.chunk_ids(ids, {}, chunk_s)) if ids else 0
-        procs = (1 if stored >= set(ids) else 2) * nchunks
-        smoke = TR.SMOKE_S_PER_RACE * sum(1 for i in ids if i not in stored) if rows == "full" else 0.0
+        each = {i: ((secs.get(i) if rows == "full" else None) or med.get(i.split("/")[0], chunk_s / 4.0)) for i in ids}
+        s = sum(2 * t for t in each.values())
+        procs = 2 * (len(TR.chunk_ids(ids, {}, chunk_s)) if ids else 0)
+        smoke = TR.SMOKE_S_PER_RACE * len(ids) if rows == "full" else 0.0
         out.append((arm, rows, len(ids), (s + TR.PROC_S * procs + smoke) / 60.0))
     return out
 
