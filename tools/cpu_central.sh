@@ -26,6 +26,11 @@
 #   tools/cpu_central.sh status [<id>]         the pods, their leases and queues; or one job
 #   tools/cpu_central.sh log <id> [N]          last N lines (default 40) of a job's log
 #   tools/cpu_central.sh summary <id>          the job's SUMMARY.md on the box (the same lines tools/box_persist.py fetch gets),
+#                                              then each part's verdict on its own line, so a compile result reads
+#                                              apart from red tool tests (compile = build-cpu and the parse groups):
+#                                                COMPILE <id> <sha> <suite>: green (N) | red: ... | not in this suite
+#                                                NATIVE  <id> <sha> <suite>: ...
+#                                                TOOLS   <id> <sha> <suite>: ...
 #                                              then ONE line a lane decides on:
 #                                                RESULT <id> <sha> <suite>: green | red: ... | pending (<status>)
 #                                              exit 0 only when green (every check ran and passed), 1 red, 2 pending or
@@ -162,6 +167,12 @@ summary_verdict() {  # <id> <summary output>: prints the RESULT line; exit 0 gre
     case "${st:-unknown}" in
         queued|starting|running|unknown|'') echo "RESULT $id ${head:-?}: pending (${st:-no answer from the box})"; exit 2 ;;
     esac
+    local part label v
+    for part in compile native tools; do
+        case "$part" in compile) label="COMPILE" ;; native) label="NATIVE " ;; tools) label="TOOLS  " ;; esac
+        v=$(sed -n "s/^verdict $part: //p" "$f" | head -n 1)
+        echo "$label $id ${head:-?}: ${v:-not in this summary (a job script from before the per-part verdicts; read the parts above)}"
+    done
     if [ -z "$res" ]; then
         # a summary from before the not-run line (or none): green only if line 3 says 0 failed and 0 missing/not run
         if grep -qE '^checks: [1-9][0-9]* +passed: [0-9]+ +failed: 0( +not run: 0)? *$' "$f" && [ "$st" = done ]; then res=green
