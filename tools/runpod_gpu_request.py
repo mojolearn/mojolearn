@@ -208,6 +208,27 @@ def pick_cpu_instance(catalog, min_vcpu=32, min_ram_per_vcpu=2):
     return [r[0] for r in rows if r[1] >= vcpu], vcpu
 
 
+def check_cpu_vcpu(catalog, flavors, vcpu):
+    """Refuse a vCPU count outside a flavor's catalog range BEFORE any provider call (lane fx-cpu-box-wait, 2026-11-20:
+    cpu5m takes 2..32). catalog: the GraphQL `cpuFlavors` rows or None (then nothing is known and nothing is refused
+    here; the API refuses with nothing created). Every flavor in the comma-separated order must be in the catalog and
+    allow `vcpu`."""
+    vcpu = int(vcpu)
+    rows = {r["id"]: r for r in catalog or [] if isinstance(r, dict) and isinstance(r.get("id"), str)}
+    if not rows:
+        return
+    for f in [f.strip() for f in str(flavors).split(",") if f.strip()]:
+        row = rows.get(f)
+        if row is None:
+            raise ValueError(f"CPU flavor {f} is not in RunPod's CPU catalog ({', '.join(sorted(rows))})")
+        try:
+            lo, hi = int(row.get("minVcpu") or 2), int(row.get("maxVcpu") or 0)
+        except (TypeError, ValueError):
+            continue
+        if hi and not lo <= vcpu <= hi:
+            raise ValueError(f"CPU flavor {f} takes {lo}..{hi} vCPU (RunPod's CPU catalog); {vcpu} asked")
+
+
 def main(argv=None):
     args = sys.argv[1:] if argv is None else argv
     if args and args[0] == "cpu":
@@ -222,10 +243,11 @@ def main(argv=None):
             raise SystemExit("RunPod request refused before create: " + str(error)) from None
         return 0
     if args and args[0] == "cpu-pick":
-        # cpu-pick CATALOG_JSON MIN_VCPU MIN_RAM_PER_VCPU -> "<flavor,flavor,...> <vcpu>"; a missing or unreadable
-        # catalog picks from the fallback order
-        if len(args) != 4:
-            raise SystemExit("usage: runpod_gpu_request.py cpu-pick CATALOG_JSON MIN_VCPU MIN_RAM_PER_VCPU")
+        # cpu-pick CATALOG_JSON MIN_VCPU MIN_RAM_PER_VCPU [FLAVORS VCPU] -> "<flavor,flavor,...> <vcpu>"; a missing or
+        # unreadable catalog picks from the fallback order. FLAVORS / VCPU (each '-' for the pick's own) are the
+        # caller's pins: they replace the pick and are checked against the catalog's vCPU range, as the pick is
+        if len(args) not in (4, 6):
+            raise SystemExit("usage: runpod_gpu_request.py cpu-pick CATALOG_JSON MIN_VCPU MIN_RAM_PER_VCPU [FLAVORS VCPU]")
         try:
             data = json.loads(Path(args[1]).read_text())
             catalog = (data.get("data") or {}).get("cpuFlavors") if isinstance(data, dict) else data
@@ -233,9 +255,14 @@ def main(argv=None):
             catalog = None
         try:
             order, vcpu = pick_cpu_instance(catalog, int(args[2]), float(args[3]))
+            flavors = ",".join(order)
+            if len(args) == 6:
+                flavors = flavors if args[4] in ("", "-") else args[4]
+                vcpu = vcpu if args[5] in ("", "-") else int(args[5])
+            check_cpu_vcpu(catalog, flavors, vcpu)
         except ValueError as error:
             raise SystemExit("RunPod request refused before create: " + str(error)) from None
-        print(",".join(order), vcpu)
+        print(flavors, vcpu)
         return 0
     if args and args[0] == "v2":
         if len(args) != 8:

@@ -6,8 +6,9 @@
 #
 #   tools/cpu_central.sh up [minutes]          ORCHESTRATOR ONLY (MOJOLEARN_ORCHESTRATOR=1). RENTS one CPU pod: the
 #                                              instance with the most vCPUs for the price from RunPod's CPU catalog (at
-#                                              least CPC_MIN_VCPU=32 vCPU and CPC_MIN_RAM_PER_VCPU=2 GB a vCPU; model and
-#                                              price in the log), refused when tools/rent_guard.sh (the account cap the
+#                                              least CPC_MIN_VCPU=32 vCPU and CPC_MIN_RAM_PER_VCPU=8 GB a vCPU; model and
+#                                              price in the log; a pinned MOJOLEARN_CPC_VCPU outside a flavor's catalog
+#                                              range is refused before any provider call), refused when tools/rent_guard.sh (the account cap the
 #                                              other tools use) refuses or the balance is under CPC_MIN_BALANCE. The
 #                                              fixed watchdog covers [minutes] (default 120) until the queue's lease
 #                                              takes over: the pod deletes itself CPC_IDLE_MIN (120) idle minutes after
@@ -18,11 +19,17 @@
 #                                              seeds <sha> on the box (from GitHub; shipped from this checkout when
 #                                              GitHub refuses the box) and queues tools/ops/cpu_box_checks_job.sh under
 #                                              tools/box_persist_run.sh; prints the job id (cpc1-NNNN) and its R2 tag.
-#                                              Several checks run at once (CPC_SLOTS jobs; the units of all of them share
-#                                              one memory ledger on the box). Lanes may call this on a box that is up.
-#   tools/cpu_central.sh status [<id>]         the pod, its lease and queue; or one job
+#                                              Several checks run at once (slots from the box's memory, below; the units
+#                                              of all of them share one memory ledger on the box and WAIT for memory,
+#                                              never skipped). Lanes may call this on a box that is up. With two boxes
+#                                              up it goes to the one with fewer active checks per slot (CPC_BOX pins).
+#   tools/cpu_central.sh status [<id>]         the pods, their leases and queues; or one job
 #   tools/cpu_central.sh log <id> [N]          last N lines (default 40) of a job's log
-#   tools/cpu_central.sh summary <id>          the job's SUMMARY.md on the box (the same lines tools/box_persist.py fetch gets)
+#   tools/cpu_central.sh summary <id>          the job's SUMMARY.md on the box (the same lines tools/box_persist.py fetch gets),
+#                                              then ONE line a lane decides on:
+#                                                RESULT <id> <sha> <suite>: green | red: ... | pending (<status>)
+#                                              exit 0 only when green (every check ran and passed), 1 red, 2 pending or
+#                                              no summary
 #   tools/cpu_central.sh cancel <id>           cancel a queued or running check
 #   tools/cpu_central.sh sh <command>          a command on the box (keeps the lease busy while it runs)
 #   tools/cpu_central.sh tools <sha>           ORCHESTRATOR ONLY: move the box's tools tree to <sha>
@@ -34,10 +41,17 @@
 # down) for the dead-man, the create, the on-pod watchdog, the git seeding, the archive and the verified delete.
 # NEVER AN APPLE MACHINE (AGENTS.md hard rule): only RunPod Linux CPU flavors are accepted (runpod_gpu_request.py cpu).
 #
-# Parallel plan: one box of >= 32 vCPU; CPC_SLOTS (default 4) check jobs at once; inside a job every parse group, the
-# checks build, the check slices and the tool tests start together as memory allows (measured peaks per group,
-# $CPU_CHECKS_HOME/peaks.tsv on the box), each multi-threaded on every core. Each job's SUMMARY.md states busy cores
-# of total.
+# TWO BOXES. CPC_BOX=cpc1 (default) or cpc2 names the box a command acts on (`up`, `down`, `tools`, `status`); a job id
+# cpcN-NNNN names its own box. Each box has its own state dir ($MOJOLEARN_DEVPOD_STATE/cpcN), dead-man, Mac watcher,
+# queue lease and lane tree (cpuchk on cpc1, cpuchk2 on cpc2). `up` never rents a second box unless CPC_BOX=cpc2.
+#
+# Parallel plan: one box of >= 32 vCPU at CPC_MIN_RAM_PER_VCPU=8 GB a vCPU (2026-11-20: on 32 vCPU / 64 GB the
+# memory-admitted parse groups, 5-15 GiB each, kept 3.5 of 32 cores busy). Check jobs at once (queue slots) = the box's
+# memory budget (85 percent) / CPC_GIB_PER_SLOT (64 GiB, one job's build plus a few parse groups), at least 1; CPC_SLOTS
+# pins it. Inside a job every parse group, the checks build, the check slices and the tool tests start as memory allows
+# (measured peaks per group, $CPU_CHECKS_HOME/peaks.tsv on the box), each multi-threaded on every core; units of all
+# jobs share one ledger and wait for memory. Each job's log states busy cores of total every minute with the reason
+# when below 80 percent, and its SUMMARY.md the busy cores of total.
 #
 # Tests (no rental): tools/test_cpu_central.sh.
 set -euo pipefail
@@ -55,17 +69,31 @@ ROOT=$_CPC_ROOT
 rp_select_api 2
 die() { echo "cpu_central: $*" >&2; exit 1; }
 say() { echo "cpu_central: $*"; }
-CPC_KEY=cpc1
-CPC_LANE=cpuchk                                       # the queue's lane name; its tree /root/mojolearn-cpuchk -> /root/mojolearn
-CPC_SLOTS=${CPC_SLOTS:-4}
+CPC_MAX_BOXES=2
+set_box() {  # <cpcN>: CPC_KEY and its queue lane (cpc1: cpuchk, tree /root/mojolearn-cpuchk -> /root/mojolearn; cpcN: cpuchkN)
+    [[ "$1" =~ ^cpc([1-9])$ ]] && [ "${BASH_REMATCH[1]}" -le "$CPC_MAX_BOXES" ] || die "a CPU check box is cpc1..cpc$CPC_MAX_BOXES, not '$1'"
+    CPC_KEY=$1; CPC_LANE=cpuchk; [ "$1" = cpc1 ] || CPC_LANE=cpuchk${1#cpc}
+}
+set_box "${CPC_BOX:-cpc1}"
+CPC_SLOTS=${CPC_SLOTS:-}                              # empty: from the box's memory (slots_for_kb)
+CPC_GIB_PER_SLOT=${CPC_GIB_PER_SLOT:-64}
 CPC_MIN_VCPU=${CPC_MIN_VCPU:-32}
-CPC_MIN_RAM_PER_VCPU=${CPC_MIN_RAM_PER_VCPU:-2}
+CPC_MIN_RAM_PER_VCPU=${CPC_MIN_RAM_PER_VCPU:-8}
 CPC_MIN_BALANCE=${CPC_MIN_BALANCE:-10}
 CPC_DISK_GB=${CPC_DISK_GB:-150}
 CPC_HOME_BOX=/root/cpu-checks
-pod_keys() { echo "$CPC_KEY"; }
+pod_keys() { local i; for i in $(seq 1 "$CPC_MAX_BOXES"); do echo "cpc$i"; done; }
 QUEUE_VENDOR=cpu
-queue_slots() { echo "$CPC_SLOTS"; }
+slots_for_kb() {  # <MemTotal kB>: check jobs at once = 85 percent of the memory / CPC_GIB_PER_SLOT, at least 1
+    [ -z "$CPC_SLOTS" ] || { echo "$CPC_SLOTS"; return; }
+    awk -v kb="$1" -v g="$CPC_GIB_PER_SLOT" 'BEGIN {n = int(kb * 0.85 / 1048576 / g); if (n < 1) n = 1; if (n > 16) n = 16; print n}'
+}
+queue_slots() {  # <key>: from the box's memory (the same allocation the job reads: MemTotal capped by the cgroup)
+    local kb
+    kb=$(BOX_TIMEOUT=120 box "kb=\$(awk '/MemTotal/ {print \$2}' /proc/meminfo); m=\$(cat /sys/fs/cgroup/memory.max 2> /dev/null || echo max); [ \"\$m\" = max ] || [ \$(( m / 1024 )) -ge \$kb ] || kb=\$(( m / 1024 )); echo \$kb" < /dev/null | tr -dc 0-9)
+    [ -n "$kb" ] || [ -n "$CPC_SLOTS" ] || { echo 1; return; }
+    slots_for_kb "${kb:-0}"
+}
 
 # Nothing Apple, from any input (the provider is RunPod Linux only; runpod_gpu_request.py cpu refuses again).
 refuse_apple() {
@@ -78,17 +106,36 @@ refuse_apple() {
 }
 refuse_apple "${MOJOLEARN_CPC_FLAVORS:-}" "${MOJOLEARN_DEVPOD_CPU_IMAGE:-}" "${CPC_PROVIDER:-runpod}"
 [ "${CPC_PROVIDER:-runpod}" = runpod ] || die "CPC_PROVIDER must be runpod (the only CPU box provider); nothing rented"
-[[ "$CPC_SLOTS" =~ ^[1-9][0-9]?$ ]] || die "CPC_SLOTS must be 1..99"
+[ -z "$CPC_SLOTS" ] || [[ "$CPC_SLOTS" =~ ^[1-9][0-9]?$ ]] || die "CPC_SLOTS must be 1..99"
+[[ "$CPC_GIB_PER_SLOT" =~ ^[1-9][0-9]*$ ]] || die "CPC_GIB_PER_SLOT must be a whole number of GiB"
 
 need_box() {  # the box is up, its lane file names it
     reconcile
-    [ -f "$STATE_ROOT/$CPC_KEY/state.env" ] || die "the CPU check box is not up. Only the orchestrator brings it up (tools/cpu_central.sh up); a lane reports that and uses the GitHub runners"
+    [ -f "$STATE_ROOT/$CPC_KEY/state.env" ] || die "the CPU check box is not up ($CPC_KEY). Only the orchestrator brings it up (tools/cpu_central.sh up); a lane reports that and uses the GitHub runners"
     mkdir -p "$NVC_HOME/lanes/$CPC_LANE"; echo "$CPC_KEY" > "$NVC_HOME/lanes/$CPC_LANE/pod"
     pod_env "$CPC_KEY"
 }
-job_id() {  # <id>: cpc1-NNNN or NNNN -> JOB_N
-    case "$1" in "$CPC_KEY"-[0-9]*) JOB_N=${1#*-} ;; [0-9]*) JOB_N=$1 ;; *) die "a job id is $CPC_KEY-<n>, e.g. $CPC_KEY-0003" ;; esac
+job_id() {  # <id>: cpcN-NNNN (that box) or NNNN (CPC_BOX, default cpc1) -> JOB_N, CPC_KEY
+    case "$1" in
+        cpc[1-9]-[0-9]*)
+            [ -z "${CPC_BOX:-}" ] || [ "$CPC_BOX" = "${1%%-*}" ] || die "job $1 is on ${1%%-*}, not CPC_BOX=$CPC_BOX"
+            set_box "${1%%-*}"; JOB_N=${1#*-} ;;
+        [0-9]*) JOB_N=$1 ;;
+        *) die "a job id is $CPC_KEY-<n>, e.g. $CPC_KEY-0003" ;;
+    esac
     [[ "$JOB_N" =~ ^[0-9]{4,}$ ]] || die "a job id is $CPC_KEY-<n>, e.g. $CPC_KEY-0003"
+}
+choose_box() {  # `check` without CPC_BOX: the live box with the fewest queued and running checks per slot
+    local k best='' bestv='' v
+    [ -z "${CPC_BOX:-}" ] || return 0
+    reconcile
+    for k in $(live_pods); do
+        pod_env "$k"
+        v=$(BOX_TIMEOUT=60 box "a=\$(grep -lE '^(queued|starting|running)\$' $QD/[0-9]*/status 2> /dev/null | wc -l); s=\$(cat $QD/slots 2> /dev/null || echo 1); echo \$(( a * 1000 / (s > 0 ? s : 1) ))" < /dev/null | tr -dc 0-9) || v=''
+        [ -n "$v" ] || continue
+        if [ -z "$best" ] || [ "$v" -lt "$bestv" ]; then best=$k; bestv=$v; fi
+    done
+    [ -z "$best" ] || set_box "$best"
 }
 pick_instance() {  # -> PICK_FLAVORS PICK_VCPU, from the catalog (GraphQL cpuFlavors) or the fallback order
     local cat="$TMPD/cpu_catalog.json"
@@ -98,10 +145,35 @@ pick_instance() {  # -> PICK_FLAVORS PICK_VCPU, from the catalog (GraphQL cpuFla
             -d '{"query":"query { cpuFlavors { id groupId displayName minVcpu maxVcpu ramMultiplier } }"}' > "$cat" 2> /dev/null || : > "$cat"
     else : > "$cat"; fi
     cp "$cat" "$NVC_HOME/cpu_catalog-$(date -u +%Y%m%dT%H%M%SZ).json" 2> /dev/null || true
-    local out; out=$(python3 "$ROOT/tools/runpod_gpu_request.py" cpu-pick "$cat" "$CPC_MIN_VCPU" "$CPC_MIN_RAM_PER_VCPU") || exit 1
-    PICK_FLAVORS=${MOJOLEARN_CPC_FLAVORS:-${out% *}}; PICK_VCPU=${MOJOLEARN_CPC_VCPU:-${out#* }}
+    # the pins (MOJOLEARN_CPC_FLAVORS, MOJOLEARN_CPC_VCPU) replace the pick and are refused here, before any provider
+    # call, when a flavor's catalog range does not take the vCPU count (cpu5m: 2..32)
+    local out; out=$(python3 "$ROOT/tools/runpod_gpu_request.py" cpu-pick "$cat" "$CPC_MIN_VCPU" "$CPC_MIN_RAM_PER_VCPU" \
+        "${MOJOLEARN_CPC_FLAVORS:--}" "${MOJOLEARN_CPC_VCPU:--}") || die "nothing rented (above)"
+    PICK_FLAVORS=${out% *}; PICK_VCPU=${out#* }
     [[ "$PICK_VCPU" =~ ^[0-9]+$ ]] && [ "$PICK_VCPU" -ge "$CPC_MIN_VCPU" ] || die "vCPU count '$PICK_VCPU' is under CPC_MIN_VCPU=$CPC_MIN_VCPU; nothing rented"
     if [ -s "$cat" ] && grep -q cpuFlavors "$cat"; then PICK_FROM="RunPod's CPU catalog"; else PICK_FROM="the fallback order (no catalog)"; fi
+}
+
+summary_verdict() {  # <id> <summary output>: prints the RESULT line; exit 0 green, 1 red, 2 pending or no summary
+    local id=$1 f=$2 st head res
+    st=$(sed -n 's/^JOBSTATUS //p' "$f" | tail -n 1)
+    head=$(sed -n 's/^# CPU box checks \([0-9a-f]*\) suite \([a-z]*\).*/\1 \2/p' "$f" | head -n 1)
+    res=$(sed -n 's/^result: //p' "$f" | head -n 1)
+    case "${st:-unknown}" in
+        queued|starting|running|unknown|'') echo "RESULT $id ${head:-?}: pending (${st:-no answer from the box})"; exit 2 ;;
+    esac
+    if [ -z "$res" ]; then
+        # a summary from before the not-run line (or none): green only if line 3 says 0 failed and 0 missing/not run
+        if grep -qE '^checks: [1-9][0-9]* +passed: [0-9]+ +failed: 0( +not run: 0)? *$' "$f" && [ "$st" = done ]; then res=green
+        elif grep -q '^checks: ' "$f"; then res="red: $(grep -m 1 '^checks: ' "$f")"
+        else echo "RESULT $id ${head:-?}: no summary (job $st)"; exit 2; fi
+    fi
+    case "$res" in
+        green) [ "$st" = done ] || res="red: job $st although its summary says green" ;;
+    esac
+    echo "RESULT $id ${head:-?}: $res (job $st)"
+    [ "$res" = green ]
+    exit $?
 }
 
 cmd="${1:-}"; shift || true
@@ -152,8 +224,9 @@ echo BOX nproc=\$(nproc) mem_gib=\$(awk '/MemTotal/ {print int(\$2/1048576)}' /p
     mkdir -p "$NVC_HOME/lanes/$CPC_LANE"; echo "$CPC_KEY" > "$NVC_HOME/lanes/$CPC_LANE/pod"
     boxline=$(grep '^BOX ' "$TMPD/box.txt" | tail -n 1)
     per=$(awk -v c="$COST_HR" -v n="$(printf '%s' "$boxline" | sed -n 's/.*nproc=\([0-9]*\).*/\1/p')" 'BEGIN{if (c+0 > 0 && n+0 > 0) printf "%.4f", c/n; else print "?"}')
-    say "UP: $CPC_KEY pod $POD_ID: $GPU, \$$COST_HR/hr (\$$per per vCPU-hour); ${boxline#BOX }; $CPC_SLOTS check slots; deletes itself $CPC_IDLE_MIN idle minutes after its last check"
-    say "check a commit: tools/cpu_central.sh check <sha> [parse|native|tools|all]"
+    slots=$(BOX_TIMEOUT=60 box "cat $QD/slots" < /dev/null 2> /dev/null | tr -dc 0-9 || true)
+    say "UP: $CPC_KEY pod $POD_ID: $GPU, \$$COST_HR/hr (\$$per per vCPU-hour); ${boxline#BOX }; ${slots:-?} check slots (85 percent of memory / $CPC_GIB_PER_SLOT GiB${CPC_SLOTS:+; pinned CPC_SLOTS=$CPC_SLOTS}); deletes itself $CPC_IDLE_MIN idle minutes after its last check"
+    say "check a commit: tools/cpu_central.sh check <sha> [parse|native|tools|all]; then tools/cpu_central.sh summary <id> (exit 0 = green)"
     ;;
 check)
     sha_in=${1:?check <sha> [parse|native|tools|all] [--filter GLOBS] [--cap MIN] [--timeout S]}; shift
@@ -168,6 +241,7 @@ check)
         esac
     done
     sha=$(git -C "$ROOT" rev-parse --verify -q "$sha_in^{commit}") || die "no commit $sha_in in this checkout (fetch it first)"
+    choose_box
     need_box
     # the commit into the box's source repo (dev_pod.sh seed: GitHub first, else shipped from this checkout); one seed
     # at a time, the repo's index is shared
@@ -187,14 +261,18 @@ check)
     # shellcheck disable=SC2086
     [ -z "$hits" ] || tag=$(basename "$(dirname "$(ls -t $hits | head -n 1)")")
     echo "$id"
-    say "queued $id: ${sha:0:10} $suite${tag:+; results tag $tag (tools/box_persist.py fetch --tag $tag)}; summary: tools/cpu_central.sh summary $id"
+    say "queued $id on $CPC_KEY: ${sha:0:10} $suite${tag:+; results tag $tag (tools/box_persist.py fetch --tag $tag)}; decide on: tools/cpu_central.sh summary $id (its last line RESULT ...; exit 0 only when green)"
     ;;
 status)
-    need_box
-    if [ -n "${1:-}" ]; then job_id "$1"; box "$NVQ status $(sq "$JOB_N")" < /dev/null; exit; fi
-    echo "== $CPC_KEY: pod $POD_ID, $GPU, \$$COST_HR/hr, ssh $SSH_TARGET"
-    echo "watcher: $(tail -1 "$(ls -d "$STATE_ROOT/$CPC_KEY"/watch-* 2>/dev/null | tail -1)/watch.log" 2>/dev/null || echo none)"
-    BOX_TIMEOUT=120 box "$NVQ lease-check; echo nproc=\$(nproc) load=\$(cut -d' ' -f1-3 /proc/loadavg) mem_avail_gib=\$(awk '/MemAvailable/ {print int(\$2/1048576)}' /proc/meminfo); $NVQ queue" < /dev/null || echo "(no answer from $CPC_KEY)"
+    if [ -n "${1:-}" ]; then job_id "$1"; need_box; box "$NVQ status $(sq "$JOB_N")" < /dev/null; exit; fi
+    boxes=$CPC_KEY
+    if [ -z "${CPC_BOX:-}" ]; then reconcile; boxes=$(live_pods | tr '\n' ' '); [ -n "${boxes// /}" ] || boxes=$CPC_KEY; fi
+    for k in $boxes; do
+        set_box "$k"; need_box
+        echo "== $CPC_KEY: pod $POD_ID, $GPU, \$$COST_HR/hr, ssh $SSH_TARGET"
+        echo "watcher: $(tail -1 "$(ls -d "$STATE_ROOT/$CPC_KEY"/watch-* 2>/dev/null | tail -1)/watch.log" 2>/dev/null || echo none)"
+        BOX_TIMEOUT=120 box "$NVQ lease-check; echo nproc=\$(nproc) load=\$(cut -d' ' -f1-3 /proc/loadavg) mem_avail_gib=\$(awk '/MemAvailable/ {print int(\$2/1048576)}' /proc/meminfo) slots=\$(cat $QD/slots 2> /dev/null); $NVQ queue" < /dev/null || echo "(no answer from $CPC_KEY)"
+    done
     ;;
 log)
     job_id "${1:?log <id> [N]}"; nl="${2:-40}"; [[ "$nl" =~ ^[0-9]+$ ]] || die "N is a line count"
@@ -206,10 +284,14 @@ summary)
     cat > "$TMPD/summary.sh" <<'SUMMARY_EOF'
 j=$1/$2
 d=$( (. "$j/job.env"; printf '%s\n' "$NOTE") | sed -n 's/.*-> \(.*\)\]$/\1/p' | head -n 1)
+st=$(cat "$j/status" 2> /dev/null)
 if [ -n "$d" ] && [ -f "$d/SUMMARY.md" ]; then cat "$d/SUMMARY.md"
-else echo "no SUMMARY.md yet in ${d:-?} (job $(cat "$j/status" 2> /dev/null))"; tail -n 5 "$j/log"; fi
+else echo "no SUMMARY.md yet in ${d:-?} (job ${st:-?})"; tail -n 5 "$j/log"; fi
+echo "JOBSTATUS ${st:-unknown}"
 SUMMARY_EOF
-    box "bash -s -- $(sq "$QD") $(sq "$JOB_N")" < "$TMPD/summary.sh"
+    box "bash -s -- $(sq "$QD") $(sq "$JOB_N")" < "$TMPD/summary.sh" > "$TMPD/summary.out" 2>&1 || true
+    grep -v '^JOBSTATUS ' "$TMPD/summary.out" || true
+    summary_verdict "$CPC_KEY-$JOB_N" "$TMPD/summary.out"
     ;;
 cancel)
     job_id "${1:?cancel <id>}"; need_box; box "$NVQ cancel $(sq "$CPC_LANE") $(sq "$JOB_N")" < /dev/null

@@ -23,7 +23,7 @@
 #                                              --checkout also moves the working tree to it (tools/cpu_central.sh)
 #
 # THE CPU CHECK BOX (`up <key> --vendor cpu`, lane fx-cpu-box-checks, 2026-11-19): a RunPod CPU pod (no GPU) that
-# only tools/cpu_central.sh rents (key cpc1), with the CPU flavors and vCPU count it picks
+# only tools/cpu_central.sh rents (keys cpc1, cpc2), with the CPU flavors and vCPU count it picks
 # (MOJOLEARN_DEVPOD_CPU_FLAVORS, MOJOLEARN_DEVPOD_CPU_VCPU) on runpod/base (MOJOLEARN_DEVPOD_CPU_IMAGE); created
 # through the v1 CPU schema as tools/runpod_cpu_leg.sh does, its status read through v2. Its lease is the queue's
 # (tools/cpu_central.sh), as for the shared NVIDIA pods.
