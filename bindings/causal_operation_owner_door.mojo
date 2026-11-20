@@ -17,7 +17,7 @@ from core.shared_slot import SharedSlot
 from bindings.py_optional import py_present
 # RUN (lane rs-neural): the live field names, no Python import.
 from training.causal_operation_owner_run import _causal_model_runtime_names, _causal_block_runtime_names
-from bindings.causal_keys_unpack import causal_keys
+from bindings.causal_keys_unpack import causal_keys, CausalKeys
 from bindings.py_balanced import py_item
 
 
@@ -82,10 +82,9 @@ def _causal_native_plain(mut mods: NativeModules, value: PythonObject, context: 
     raise Error("TypeError: causal metadata requires native scalar/container values")
 
 
-def _causal_buffer(value: PythonObject, context: PythonObject) raises -> PythonObject:
+def _causal_buffer(value: PythonObject, context: PythonObject, nk: UnsafePointer[CausalKeys, MutUntrackedOrigin]) raises -> PythonObject:
     if value is None:
         return value
-    var nk = causal_keys()
     if py_type(value) is py_item(context, nk[].k_array_class):
         return generation_array_snapshot(value)
     return generation_buffer_view(value)
@@ -252,7 +251,7 @@ def _causal_model_capture_full(mut mods: NativeModules, model: PythonObject, con
         var identity = py_call(bi.id, original)
         var captured = py_get(buffers, identity)
         if captured is None and original is not None:
-            captured = _causal_buffer(original, context)
+            captured = _causal_buffer(original, context, nk)
             py_setitem(buffers, identity, captured)
         py_setitem(fields, name, captured)
     py_setitem(fields, nk[].k__causal_original_parameters, original_parameters)
@@ -262,7 +261,7 @@ def _causal_model_capture_full(mut mods: NativeModules, model: PythonObject, con
             raise Error("TypeError: CausalLM packed head requires three native planes")
         var copied = Python.list()
         for i in range(3):  # small-loop(retained int15 head planes)
-            _ = py_call(copied.append, _causal_buffer(packed[i], context))
+            _ = py_call(copied.append, _causal_buffer(packed[i], context, nk))
         py_setitem(fields, nk[].k__head_int15, copied)
     var blocks = py_item(fields, nk[].k__blocks)
     if py_type(blocks) is not bi.list and py_type(blocks) is not bi.tuple:
@@ -357,16 +356,17 @@ def _causal_model_matches(mut mods: NativeModules, saved: PythonObject, model: P
     return key[].complete(offset) and key[].arrays_match(mods, context)
 
 
-def _causal_view_retained(mut mods: NativeModules, view: PythonObject, original: PythonObject, context: PythonObject) raises -> Bool:
+def _causal_view_retained(mut mods: NativeModules, view: PythonObject, original: PythonObject, context: PythonObject,
+                          nk: UnsafePointer[CausalKeys, MutUntrackedOrigin]) raises -> Bool:
     # True when `view` is a passive view of the Array `original` (same
     # storage), never a converted copy or a foreign exporter.
     if view is None or original is None:
         return view is None and original is None
-    var nk = causal_keys()
     return py_type(original) is py_item(context, nk[].k_array_class) and view._base is original
 
 
 def _causal_block_retained(mut mods: NativeModules, snap: PythonObject, live: PythonObject, context: PythonObject) raises -> Bool:
+    var nk = causal_keys()
     for name in [String("_w"), String("_wopt")]:  # small-loop(weight slot lists)
         if py_contains(snap, name):
             var views = snap[name]
@@ -374,9 +374,8 @@ def _causal_block_retained(mut mods: NativeModules, snap: PythonObject, live: Py
             if len(views) != len(originals):
                 return False
             for i in range(len(views)):  # driver-loop: over the block's weight slots, identity only
-                if not _causal_view_retained(mods, views[i], originals[i], context):
+                if not _causal_view_retained(mods, views[i], originals[i], context, nk):
                     return False
-    var nk = causal_keys()
     var packed = py_get(live, nk[].k__int15)
     if packed is not None:
         var planes = py_item(snap, nk[].k__int15)
@@ -386,7 +385,7 @@ def _causal_block_retained(mut mods: NativeModules, snap: PythonObject, live: Py
                     return False
                 continue
             for j in range(len(packed[i])):  # small-loop(packed: weight plane slots): identity only, no hooks
-                if not _causal_view_retained(mods, planes[i][j], packed[i][j], context):
+                if not _causal_view_retained(mods, planes[i][j], packed[i][j], context, nk):
                     return False
     return True
 
@@ -585,12 +584,12 @@ def causal_model_capture(mut mods: NativeModules, model: PythonObject, context: 
     if py_get(entries, nk[].k_parallel_call) is not None:
         return result
     for name in ["_embed", "_norm", "_head"]:  # small-loop(head buffers)
-        if not _causal_view_retained(mods, fields[name], py_item(fields, nk[].k__causal_original_parameters)[name], context):
+        if not _causal_view_retained(mods, fields[name], py_item(fields, nk[].k__causal_original_parameters)[name], context, nk):
             return result
     var packed = py_get(live, nk[].k__head_int15)
     if packed is not None:
         for i in range(3):  # small-loop(int15 head planes)
-            if not _causal_view_retained(mods, py_item(fields, nk[].k__head_int15)[i], packed[i], context):
+            if not _causal_view_retained(mods, py_item(fields, nk[].k__head_int15)[i], packed[i], context, nk):
                 return result
     var derived = Python.list()
     var blocks = py_item(live, nk[].k__blocks)
@@ -759,10 +758,10 @@ def causal_layer_capture(mut mods: NativeModules, state: PythonObject, kind: Pyt
                 if hit is not None:
                     captured = hit[1]
                 else:
-                    captured = _causal_buffer(value, context)
+                    captured = _causal_buffer(value, context, nk)
                     py_setitem(views, buffers[i], Python.list(value, captured))
             else:
-                captured = _causal_buffer(value, context)
+                captured = _causal_buffer(value, context, nk)
             py_setitem(original_buffers, buffers[i], captured)
             py_setitem(fields, buffers[i], captured)
     if prepared is None and stamped:
@@ -914,7 +913,7 @@ def causal_checkpoint_capture(mut mods: NativeModules, checkpoint: PythonObject,
         var name = String(keys[i])
         var value = checkpoint[keys[i]]
         if name == "prompt" or name == "current":
-            py_setitem(result, keys[i], _causal_buffer(value, context))
+            py_setitem(result, keys[i], _causal_buffer(value, context, nk))
         elif name == "pending_bytes":
             if py_type(value) is not bi.bytes and py_type(value) is not bi.bytearray:
                 raise Error("TypeError: generation checkpoint pending bytes require native byte storage")
