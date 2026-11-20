@@ -721,6 +721,8 @@ def parse(argv):
                     "candidate.json is written; see prune_set)")
     ap.add_argument("--no-verify-smoke", action="store_true", help="do not start .github/workflows/verify-smoke.yml "
                     "on the packed core wheel (an A set starts it by default; it reports and gates nothing)")
+    ap.add_argument("--no-cpu-coverage", action="store_true", help="do not start the CPU coverage smoke "
+                    "(.github/workflows/fast-trial.yml mode=coverage) beside the verify smoke; it reports and gates nothing")
     ap.add_argument("--pack", choices=("github", "local"), default=None, help="where linux-wait's tree checks, "
                     "linux-assemble and linux-pack run: github (default for a new build: "
                     ".github/workflows/candidate-pack.yml beside the trees; the Mac downloads linux/final) or local "
@@ -928,6 +930,16 @@ def main(argv=None, release=None):
         except (Exception, SystemExit) as exc:
             print(f"VERIFY-SMOKE not started ({exc}); by hand: python3 tools/ops/verify_smoke_dispatch.py "
                   f"--wheel-dir {final} --ref <pushed branch holding verify-smoke.yml>")
+        if not getattr(a, "no_cpu_coverage", False):
+            # THE CPU COVERAGE SMOKE (lane fx-coverage-smokes, 2026-11-20): every public class and method of the same
+            # core wheel on a CPU runner, identical (fast-trial.yml mode=coverage). It reports and gates nothing.
+            try:
+                verify_smoke_dispatch.dispatch_fast_trial(final, a.ref or cand.get("tooling_ref") or "", a.commit,
+                                                          shards=verify_smoke_dispatch.COVERAGE_SHARDS,
+                                                          mode="coverage")
+            except (Exception, SystemExit) as exc:
+                print(f"CPU-COVERAGE not started ({exc}); by hand: python3 tools/ops/verify_smoke_dispatch.py "
+                      f"--workflow cpu-coverage --wheel-dir {final} --ref <pushed branch holding fast-trial.yml>")
     if a.keep_intermediates:
         print("measurement build: --keep-intermediates: nothing pruned")
     elif not cand.get("prune"):

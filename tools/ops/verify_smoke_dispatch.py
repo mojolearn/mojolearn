@@ -5,6 +5,8 @@
     python3 tools/ops/verify_smoke_dispatch.py --wheel-dir <work dir>/<commit12>/linux/final [--ref BRANCH] [--dry-run]
     python3 tools/ops/verify_smoke_dispatch.py --workflow fast-trial --wheel-dir ... [--families 0xfffffff]
         [--exact-families MASK] [--shards N]     (the per-estimator fast trial, .github/workflows/fast-trial.yml)
+    python3 tools/ops/verify_smoke_dispatch.py --workflow cpu-coverage --wheel-dir ... [--shards 4]
+        (the CPU coverage smoke of every public class: fast-trial.yml with mode=coverage)
 
 The wheels are packed on this Mac (tools/release.py candidate, linux-pack); release-linux-build.yml uploads no wheel.
 So, as tools/release_identity_wheels.py does for cpu-identity-gate.yml, the core wheel goes to R2 (credentials stay
@@ -32,6 +34,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = "verify-smoke.yml"
 FAST_TRIAL_WORKFLOW = "fast-trial.yml"
+#: the CPU coverage smoke's matrix runners: about 250 public classes, one process each, on 4-core runners
+COVERAGE_SHARDS = 4
 EVIDENCE = Path(os.environ.get("MOJOLEARN_EVIDENCE_ROOT", os.path.expanduser("~/mojolearn-evidence")))
 #: the last census dispatched per --ref: {ref: {commit, wheel, sha256, inputs, token, made}}
 CENSUS_RECORDS = EVIDENCE / "verify-smoke" / "census-records.json"
@@ -129,38 +133,44 @@ def upload_wheel(wheel, key, days):
     return bincache.presign("GET", key, int(days * 86400), creds)
 
 
-def fast_trial_argv(ref, commit, wheel_name, url, digest, token, families, exact="", shards=1, tests_from="source"):
-    """The `gh workflow run fast-trial.yml` command (inputs as verify-smoke.yml's, plus the trial's)."""
-    return ["gh", "workflow", "run", FAST_TRIAL_WORKFLOW, "--ref", ref, "-f", f"ref={commit}",
-            "-f", f"wheel_url={url}", "-f", f"wheel_name={wheel_name}", "-f", f"wheel_sha256={digest}",
-            "-f", f"families={families}", "-f", f"exact_families={exact}", "-f", f"shards={int(shards)}",
-            "-f", f"tests_from={tests_from}", "-f", f"token={token}"]
+def fast_trial_argv(ref, commit, wheel_name, url, digest, token, families, exact="", shards=1, tests_from="source",
+                    mode="trial"):
+    """The `gh workflow run fast-trial.yml` command (inputs as verify-smoke.yml's, plus the trial's). `mode` is sent
+    only when it is not the default, so a --ref whose workflow predates the input still takes a trial."""
+    return (["gh", "workflow", "run", FAST_TRIAL_WORKFLOW, "--ref", ref, "-f", f"ref={commit}",
+             "-f", f"wheel_url={url}", "-f", f"wheel_name={wheel_name}", "-f", f"wheel_sha256={digest}",
+             "-f", f"families={families}", "-f", f"exact_families={exact}", "-f", f"shards={int(shards)}",
+             "-f", f"tests_from={tests_from}", "-f", f"token={token}"]
+            + ([] if mode == "trial" else ["-f", f"mode={mode}"]))
 
 
 def dispatch_fast_trial(wheel_dir, ref="", commit="", families="0xfffffff", exact="", shards=1, dry=False, days=2,
-                        tests_from="source"):
-    """Dispatch .github/workflows/fast-trial.yml on the core wheel (same upload and key as the smoke)."""
+                        tests_from="source", mode="trial"):
+    """Dispatch .github/workflows/fast-trial.yml on the core wheel (same upload and key as the smoke). mode="coverage"
+    is the CPU coverage smoke (every public class and method, identical; artifact cpu-coverage-<commit>)."""
+    label = "CPU-COVERAGE" if mode == "coverage" else "FAST-TRIAL"
+    run_label = "cpu-coverage" if mode == "coverage" else "fast-trial"
     wheel = core_wheel(wheel_dir)
     if not commit:
         commit = json.loads((Path(wheel_dir) / "candidate.json").read_text())["source_commit"]
     ref = ref or current_branch()
     digest = sha256(wheel)
-    token = hashlib.sha256(f"fast-trial {commit} {time.time()}".encode()).hexdigest()[:12]
+    token = hashlib.sha256(f"{run_label} {commit} {time.time()}".encode()).hexdigest()[:12]
     key = f"verify-smoke/{commit[:12]}/{wheel.name}"
     if dry:
-        print("FAST-TRIAL would upload " + wheel.name + " to R2 " + key + " and run: "
+        print(f"{label} would upload " + wheel.name + " to R2 " + key + " and run: "
               + " ".join(fast_trial_argv(ref, commit, wheel.name, "<presigned>", digest, token, families, exact,
-                                         shards, tests_from)))
+                                         shards, tests_from, mode)))
         return token
     url = upload_wheel(wheel, key, days)
     p = subprocess.run(fast_trial_argv(ref, commit, wheel.name, url, digest, token, families, exact, shards,
-                                       tests_from),
+                                       tests_from, mode),
                        cwd=ROOT, capture_output=True, text=True)
     if p.returncode != 0:
-        raise SystemExit(f"fast trial: gh workflow run failed: {(p.stderr or p.stdout).strip()[-400:]}")
-    print(f"FAST-TRIAL dispatched {FAST_TRIAL_WORKFLOW} on --ref {ref} for {commit[:12]} ({wheel.name}) families "
-          f"{families} exact {exact or '-'}; run-name 'fast-trial {commit} {families} {exact} {token}'; "
-          f"artifact fast-trial-{commit}; find it: gh run list --workflow {FAST_TRIAL_WORKFLOW} -L 5")
+        raise SystemExit(f"{run_label}: gh workflow run failed: {(p.stderr or p.stdout).strip()[-400:]}")
+    print(f"{label} dispatched {FAST_TRIAL_WORKFLOW} (mode {mode}) on --ref {ref} for {commit[:12]} ({wheel.name}) "
+          f"families {families} exact {exact or '-'} shards {shards}; run-name '{run_label} {commit} {families} {exact} "
+          f"{token}'; artifact {run_label}-{commit}; find it: gh run list --workflow {FAST_TRIAL_WORKFLOW} -L 5")
     return token
 
 
@@ -210,18 +220,24 @@ def main(argv=None):
     g.add_argument("--census", dest="census", action="store_true", default=None,
                    help="take the frames census even when nothing it reads changed")
     g.add_argument("--no-census", dest="census", action="store_false", help="skip the frames census")
-    ap.add_argument("--workflow", choices=("verify-smoke", "fast-trial"), default="verify-smoke",
-                    help="fast-trial: the per-estimator fast trial (.github/workflows/fast-trial.yml) on the same wheel")
+    ap.add_argument("--workflow", choices=("verify-smoke", "fast-trial", "cpu-coverage"), default="verify-smoke",
+                    help="fast-trial: the per-estimator fast trial (.github/workflows/fast-trial.yml) on the same wheel; "
+                         "cpu-coverage: the CPU coverage smoke of every public class (fast-trial.yml mode=coverage)")
     ap.add_argument("--families", default="0xfffffff", help="fast-trial: trial mask of door families")
     ap.add_argument("--exact-families", default="", help="fast-trial: a second trial with exactly this set")
-    ap.add_argument("--shards", type=int, default=1, help="fast-trial: matrix runners")
+    ap.add_argument("--shards", type=int, default=None,
+                    help="fast-trial / cpu-coverage: matrix runners (default 1 for the trial, COVERAGE_SHARDS for coverage)")
     ap.add_argument("--python", default=None, help="verify-smoke only: the Python version to install the wheel under (e.g. 3.10)")
     ap.add_argument("--tests-from", choices=("source", "tooling"), default="source",
                     help="fast-trial: run the wheel commit's test file (source) or --ref's copy (tooling)")
     a = ap.parse_args(argv)
     if a.workflow == "fast-trial":
-        dispatch_fast_trial(a.wheel_dir, a.ref, a.commit, a.families, a.exact_families, a.shards, a.dry_run,
+        dispatch_fast_trial(a.wheel_dir, a.ref, a.commit, a.families, a.exact_families, a.shards or 1, a.dry_run,
                             tests_from=a.tests_from)
+        return 0
+    if a.workflow == "cpu-coverage":
+        dispatch_fast_trial(a.wheel_dir, a.ref, a.commit, shards=a.shards or COVERAGE_SHARDS, dry=a.dry_run,
+                            mode="coverage")
         return 0
     dispatch(a.wheel_dir, a.ref, a.commit, a.dry_run, census=a.census, python=a.python)
     return 0

@@ -131,6 +131,131 @@ def test_family_status():
     assert ft.family_status([{"status": "refused"}, {"status": "crashed"}]) == "crashed"
 
 
+# ---- the CPU coverage mode (lane fx-coverage-smokes, 2026-11-20) ---------------------------------------------------
+
+def test_workflow_coverage_mode():
+    wf = yaml.safe_load((ROOT / ".github/workflows/fast-trial.yml").read_text())
+    on = wf.get("on", wf.get(True))
+    assert on["workflow_dispatch"]["inputs"]["mode"]["default"] == "trial"
+    assert "mode must be trial or coverage" in _steps_text(wf["jobs"]["plan"])
+    run = _steps_text(wf["jobs"]["trial"])
+    # the same install, the same runner, every core, the same shards
+    assert 'fast_trial.py coverage --python "$VENV/bin/python"' in run
+    cov = run[run.index("fast_trial.py coverage"):run.index("fast_trial.py run")]
+    assert '--workers "$(nproc)"' in cov and '--shard "$SHARD" --shards "$SHARDS"' in cov
+    # GitHub's bash is `-eo pipefail`: every rc is captured with ||, so the log tail always prints
+    assert "rc=$?\n" not in run and "|| rc=$?" in run
+    srun = _steps_text(wf["jobs"]["summary"])
+    assert "fast_trial.py coverage-summary" in srun and "coverage_ledger.json" in srun
+    assert "cpu-coverage" in wf["jobs"]["summary"]["steps"][-1]["with"]["name"]
+
+
+def test_coverage_split_and_dispatch_argv():
+    probe, other = ft.coverage_split(["PCA", "cross_val_score", "Ridge", "PCA", "linalg"])
+    assert probe == ["PCA", "Ridge"] and other == ["cross_val_score", "linalg"]
+    d = _load("verify_smoke_dispatch", ROOT / "tools/ops/verify_smoke_dispatch.py")
+    trial = d.fast_trial_argv("b", "c" * 40, "w.whl", "u", "s", "t", "0xfffffff")
+    assert not any(x.startswith("mode=") for x in trial)  # a --ref whose workflow predates `mode` still takes it
+    cov = d.fast_trial_argv("b", "c" * 40, "w.whl", "u", "s", "t", "0xfffffff", shards=4, mode="coverage")
+    assert "mode=coverage" in cov and "shards=4" in cov
+
+
+FAKE_PACKAGE = """
+import os, time
+__all__ = ["Good", "Refuser", "Crasher", "NeedsThing", "Sleeper", "CONST", "helper"]
+CONST = 3
+def helper():
+    return 1
+def vendor():
+    return "cpu"
+class Good:
+    def __init__(self, numeric_mode=None, n_estimators=100):
+        assert numeric_mode == "identical" and n_estimators == 4
+    def fit(self, X, y):
+        assert len(X) == len(y)
+        return self
+    def predict(self, X):
+        return X[:, 0]
+    def transform(self, X):
+        return X[:, :2]
+    def inverse_transform(self, X):
+        assert X.shape[1] == 2
+        return X
+    def save(self, path):
+        open(path, "w").write("m")
+    @classmethod
+    def load(cls, path):
+        assert open(path).read() == "m"
+        return cls(numeric_mode="identical", n_estimators=4)
+class Refuser:
+    def fit(self, X):
+        raise RuntimeError("Refuser has no CPU route")
+class Crasher:
+    def fit(self, X, y=None):
+        return self
+    def boom(self, X):
+        os.abort()
+    def later(self):
+        return 1
+    def predict(self, X):
+        raise ValueError("predict has no host binding")
+class NeedsThing:
+    def __init__(self, thing):
+        pass
+class Sleeper:
+    def fit(self, X):
+        return self
+    def wait(self):
+        time.sleep(120)
+"""
+
+
+def test_coverage_child_end_to_end(tmp_path):
+    """The real child against a fake installed `mojolearn`: ran, refused, not covered, a crash the parent restarts
+    past (the methods after it still run), a timeout, and a capitalised name that is not a class."""
+    import pytest
+    pytest.importorskip("numpy")
+    pkg = tmp_path / "site" / "mojolearn"
+    pkg.mkdir(parents=True)
+    (pkg / "__init__.py").write_text(FAKE_PACKAGE)
+    wrapper = tmp_path / "python"
+    # the child runs `python -I`, which ignores PYTHONPATH: the wrapper drops -I so the fake package is the install
+    wrapper.write_text(f'#!/bin/sh\n[ "$1" = -I ] && shift\nPYTHONPATH={tmp_path / "site"} exec {sys.executable} "$@"\n')
+    wrapper.chmod(0o755)
+    out = tmp_path / "out"
+    assert ft.main(["coverage", "--python", str(wrapper), "--out", str(out), "--workers", "3",
+                    "--unit-timeout", "15"]) == 0
+    ledger, md = tmp_path / "coverage_ledger.json", tmp_path / "SUMMARY.md"
+    assert ft.main(["coverage-summary", "--out", str(out), "--ledger", str(ledger), "--md", str(md)]) == 0
+    rows = json.loads(ledger.read_text())["rows"]
+    assert rows["Good"]["word"] == "ran", rows["Good"]
+    assert {k: v["status"] for k, v in rows["Good"]["steps"].items()} == {
+        "construct": "ran", "fit": "ran", "predict": "ran", "transform": "ran", "inverse_transform": "ran",
+        "save": "ran", "load": "ran"}
+    assert rows["Refuser"]["word"] == "refused" and "no CPU route" in rows["Refuser"]["steps"]["fit"]["why"]
+    crash = rows["Crasher"]
+    assert crash["word"] == "crashed" and crash["runs"] == 2
+    assert crash["steps"]["boom"]["status"] == "crashed"
+    assert crash["steps"]["later"]["status"] == "ran"  # the method after the crash still ran
+    assert crash["steps"]["predict"]["status"] == "refused"
+    assert rows["NeedsThing"]["word"] == "not_covered" and "thing" in rows["NeedsThing"]["steps"]["construct"]["why"]
+    assert rows["Sleeper"]["steps"]["wait"] == dict(status="crashed", why="timed out", seconds=None)
+    assert rows["CONST"]["kind"] == "int"
+    text = md.read_text()
+    assert "Crasher.boom: **crashed**" in text and "Refuser.fit: **refused**: RuntimeError" in text
+    assert "Public names listed but not probed: 1 functions/submodules" in text and "CONST" in text
+    assert "| **total** | **5** |" in text
+
+
+def test_coverage_class_word():
+    w = ft.coverage_class_word
+    assert w(dict(steps={})) == "crashed"
+    assert w(dict(steps={"construct": dict(status="ran"), "fit": dict(status="ran"), "predict": dict(status="refused")})) == "partial"
+    assert w(dict(steps={"construct": dict(status="ran"), "fit": dict(status="refused")})) == "refused"
+    assert w(dict(steps={"construct": dict(status="not_covered")})) == "not_covered"
+    assert w(dict(steps={"construct": dict(status="ran"), "p": dict(status="not_covered")})) == "ran"
+
+
 if __name__ == "__main__":
     import pytest
     sys.exit(pytest.main([__file__, "-q"]))

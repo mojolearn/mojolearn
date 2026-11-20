@@ -229,6 +229,36 @@ arith_gate() {
     say "arith gate passed ($(grep -c . "$RES/logs/arith.log") log lines)"
     phase_end 0
 }
+# THE FAULT GATE (lane fx-coverage-smokes, 2026-11-20): once per job, on this box's GPU, that the checks can still
+# FAIL: `verify --self-test` from the candidate's installed wheel and the cheap registered sabotage checks
+# (tools/ops/gpu_fault_gate.py: each must report its injected fault DETECTED; one that passes silently fails the
+# unit). Untimed; it runs after the candidate's install and before any smoke or board, so the GPU is idle. Its line is
+# FAULTS_LINE (job.log and status.json `faults`), its file $RES/FAULTS-$V.txt, its logs $RES/faults/. Fail soft: a
+# failure is phase `faults` rc 1 in phases.tsv (the job's worst rc) and the job goes on. A resubmit into the same
+# results dir does not run it again (faults/faults.done). PC_FAULTS=0 turns it off; PC_FAULT_ARMS names other pixi
+# sabotage tasks. Cost: ESTIMATE ~6-9 pod minutes the first time per commit (builds cached under CACHE_ROOT).
+# Usage: fault_gate <candidate venv python>
+FAULTS_LINE=
+fault_gate() {
+    local rc
+    [ "${PC_FAULTS:-1}" = 0 ] && { FAULTS_LINE="FAULTS: off (PC_FAULTS=0)"; say "$FAULTS_LINE"; return 0; }
+    if [ -s "$RES/faults/faults.done" ]; then
+        FAULTS_LINE=$(head -n 1 "$RES/FAULTS-$V.txt" 2> /dev/null)
+        say "fault gate: ran earlier in this results dir: ${FAULTS_LINE:-no FAULTS-$V.txt}"
+        return 0
+    fi
+    phase faults
+    mkdir -p "$RES/faults"
+    ${PY:-python3} tools/ops/gpu_fault_gate.py --python "$1" --out "$RES/faults" --summary "$RES/FAULTS-$V.txt" \
+        --vendor "$V" --tree "$(pwd)" --cache "${CACHE_ROOT:-$RES}/fault-bins" ${PC_FAULT_ARMS:+--arms "$PC_FAULT_ARMS"} \
+        > "$RES/logs/faults.log" 2>&1
+    rc=$?
+    FAULTS_LINE=$(head -n 1 "$RES/FAULTS-$V.txt" 2> /dev/null)
+    [ -n "$FAULTS_LINE" ] || FAULTS_LINE="FAULTS $V: the unit wrote no summary (rc=$rc, logs/faults.log)"
+    say "$FAULTS_LINE"
+    date -u +%Y-%m-%dT%H:%M:%SZ > "$RES/faults/faults.done"
+    phase_end $rc
+}
 host_probe_phase() {
     local rc PREV_HOST PREV_BOOT BOOT_ID
     phase probe
