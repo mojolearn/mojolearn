@@ -467,6 +467,43 @@ class ArmOnGithubPackedBase(unittest.TestCase):
         finally:
             R.LINUX_SETS = saved
 
+    def test_a_finished_pre_fix_github_packed_base_is_repaired_on_rerun(self):
+        import hashlib
+        import threading
+        import zipfile
+        with tempfile.TemporaryDirectory() as td:
+            rel = Path(td) / "rel"
+            final = rel / "linux" / "final"
+            final.mkdir(parents=True)
+            whl = final / "mojolearn_core-0.0.0-py3-none-manylinux_2_35_x86_64.whl"
+            with zipfile.ZipFile(whl, "w") as z:
+                z.writestr("mojolearn/.libs/libMojolearnMath.so", b"pack runner gcc")
+                z.writestr("x-0.dist-info/LINUX_PAYLOAD.json", json.dumps(dict(runtime_sha256={
+                    "mojolearn/.libs/libMojolearnMath.so": hashlib.sha256(b"leg gcc").hexdigest()})))
+            write(rel / "legs" / "cuda-sm_89.exit", "0")
+            write(rel / "legs" / "cuda-sm_80.exit", "0")
+            write(rel / "legs" / "cuda-sm_80.provenance.json", "{}")
+            saved = []
+            r = SimpleNamespace(rel=rel, _lock=threading.Lock(), save=lambda: saved.append(1),
+                                split_finals=lambda: {"linux": next(iter(final.glob("*.whl")), None) if final.is_dir()
+                                                      else None},
+                                state=dict(steps={s: {} for s in ("reuse-plan",) + RC.REPACK_STEPS},
+                                           failures={}, remote_pack=dict(run_id=1), linux_layout="split"))
+            lines = []
+            why = RC.repair_finished_github_pack(r, say=lines.append)
+            self.assertEqual(len(why), 2)
+            self.assertFalse(final.exists())
+            self.assertEqual(len(list((rel / "linux").glob("final.repaired-*"))), 1)
+            self.assertFalse((rel / "legs" / "cuda-sm_89.exit").exists())
+            self.assertTrue((rel / "legs" / "cuda-sm_80.exit").exists(), "a leg with provenance is not relaunched")
+            self.assertEqual(sorted(r.state["steps"]), ["reuse-plan"])
+            self.assertNotIn("remote_pack", r.state)
+            self.assertEqual(saved, [1])
+            self.assertIn("REPAIRING", lines[0])
+            # repaired (or already good): nothing to do on the next run
+            self.assertEqual(RC.repair_finished_github_pack(r, say=lines.append), [])
+        self.assertIn("repair_finished_github_pack(r)", (TOOLS / "release_candidate.py").read_text())
+
     def test_a_failed_github_pack_drops_the_source_worktree(self):
         with tempfile.TemporaryDirectory() as td:
             src = write(Path(td) / "source" / SHA[:12] / "file", "x" * 100).parent

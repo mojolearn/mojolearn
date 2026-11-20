@@ -222,6 +222,52 @@ def drop_source_after_failure(work, commit, state, pack, keep=False, say=print):
     return freed
 
 
+#: the steps a finished --pack github build runs again when repair_finished_github_pack repairs it
+REPACK_STEPS = ("linux-builds", "linux-wait", "linux-assemble", "linux-pack")
+
+
+def repair_finished_github_pack(r, say=print):
+    """A FINISHED --pack github build packed before lane fx-pack-arm (2026-11-19) is repaired on a plain re-run, with
+    no compile: (a) a final wheel whose runtime bytes differ from its own LINUX_PAYLOAD (the pack runner rebuilt
+    libMojolearnMath.so with its GCC 13.3: every B arm on it was refused at assemble) and (b) a GitHub leg with no
+    legs/<leg>.provenance.json (RemoteLeg launched without one: an arm finds no PTX proof of the base and rebuilds
+    sm_80 despite --timed-on). The final set moves aside to linux/final.repaired-<stamp>, the provenance-less legs'
+    exit files move aside (their collectors re-attach to the finished runs by --run-id and write the provenance), and
+    REPACK_STEPS are unrecorded so the build packs again on GitHub. Returns the reasons ([] when nothing to do)."""
+    rel = Path(r.rel)
+    final, legs = rel / "linux" / "final", rel / "legs"
+    finals = [w for w in r.split_finals().values() if w] if final.is_dir() else []
+    if not finals:
+        return []
+    import release_reuse
+    why = []
+    drift = [f"{w.name}: {line}" for w in finals for line in release_reuse.payload_runtime_mismatches(w)]
+    if drift:
+        why.append("the final wheels' runtime bytes differ from their LINUX_PAYLOAD (" + "; ".join(drift) + ")")
+    missing = sorted(e.name[:-len(".exit")] for e in legs.glob("*.exit")
+                     if not (legs / (e.name[:-len(".exit")] + ".provenance.json")).is_file())
+    if missing:
+        why.append("GitHub leg(s) " + ", ".join(missing) + " have no launch provenance (an arm finds no PTX proof)")
+    if not why:
+        return []
+    import datetime as dt
+    stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
+    final.rename(final.with_name("final.repaired-" + stamp))
+    for name in missing:
+        (legs / (name + ".exit")).rename(legs / (name + ".exit.repaired-" + stamp))
+    with r._lock:
+        for step in REPACK_STEPS:
+            (r.state.get("steps") or {}).pop(step, None)
+            (r.state.get("failures") or {}).pop(step, None)
+        r.state.pop("remote_pack", None)
+        r.state.pop("linux_layout", None)
+        r.save()
+    say("measurement build: REPAIRING a finished GitHub pack (no compile): " + "; ".join(why) + f". The final set "
+        f"moved to {final.name}.repaired-{stamp}; " + (f"legs {', '.join(missing)} re-attach to their finished runs; "
+                                                     if missing else "") + "it packs again on GitHub")
+    return why
+
+
 def prune_set(work, commit, say=print):
     """After a set packed and its candidate.json was written: delete prune_plan's files, the directories they
     leave empty, and the detached source worktree <work>/source/<commit12> (a resume makes it again). Returns the
@@ -779,6 +825,8 @@ def main(argv=None, release=None):
     # release.candidate_pack: "here" on candidate-pack.yml's runner, "github" on the Mac that dispatches it
     args.candidate_pack = "here" if a.pack_here else ("github" if pack == "github" else "")
     r = release.Release(args)
+    if not a.dry_run and not a.pack_here and args.candidate_pack == "github":
+        repair_finished_github_pack(r)
     if r.commit != a.commit:
         raise SystemExit(f"measurement build: the Release resolved {r.commit}, not {a.commit}")
     print(f"measurement build {version} of {a.commit[:12]}" + (f" defines {defines}" if defines else "")
