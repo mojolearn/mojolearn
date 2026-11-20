@@ -30,6 +30,8 @@ from bindings.optimizer_owner_boundary_pack import optimizer_owner_new
 from bindings.samba_optimizer_boundary_unpack import samba_optimizer_transfer
 # RUN (lane rs-neural): typed pieces, no Python import.
 from training.samba_state_run import samba_optimizer_device_plan
+from bindings.samba_keys_unpack import samba_keys
+from bindings.py_balanced import py_item
 
 
 def samba_fields(value: PythonObject) raises -> PythonObject:
@@ -40,8 +42,9 @@ def samba_entry_key(context: PythonObject, mode: PythonObject) raises -> SambaEn
     """UNPACK: the Samba table key (core/samba_entry_table.mojo) of the
     stack's connected binding, from the mode and vendor words the bridge
     admitted; `samba_entries` checks them against the binding's own."""
-    var selected = context["mode"] if mode is None else mode
-    var vendor = String("cpu") if context["vendor"] is None else String(context["vendor"])
+    var nk = samba_keys()
+    var selected = py_item(context, nk[].k_mode) if mode is None else mode
+    var vendor = String("cpu") if py_item(context, nk[].k_vendor) is None else String(py_item(context, nk[].k_vendor))
     var word = samba_vendor_word(vendor)
     if word < 0:
         raise Error("Samba: unsupported native vendor " + vendor)
@@ -61,16 +64,17 @@ def samba_primitive(entry: EntryRef, op: Int, addresses: List[Int], ints: List[I
 
 
 def samba_entries(context: PythonObject, mode: PythonObject) raises -> PythonObject:
-    var entries = context["entries"]
-    var selected = context["mode"] if mode is None else mode
-    if Bool(py=selected != context["mode"]):
+    var nk = samba_keys()
+    var entries = py_item(context, nk[].k_entries)
+    var selected = py_item(context, nk[].k_mode) if mode is None else mode
+    if Bool(py=selected != py_item(context, nk[].k_mode)):
         raise Error("Samba: requested numeric mode differs from the connected native mode")
     var want = 1 if String(selected) == "identical" else 0
     # The binding's numeric mode and vendor words are fixed per compiled
     # module: read them once per binding (bindings/p3_samba_caps.mojo), not
     # with two binding crossings on every operation.
     var caps = samba_caps(entries)
-    if Int(py=caps[SAMBA_CAP_MODE]) != want or Bool(py=caps[SAMBA_CAP_VENDOR] != context["vendor"]):
+    if Int(py=caps[SAMBA_CAP_MODE]) != want or Bool(py=caps[SAMBA_CAP_VENDOR] != py_item(context, nk[].k_vendor)):
         raise Error("Samba: native training mode/vendor admission mismatch")
     return entries
 
@@ -82,6 +86,7 @@ def samba_experiment(entries: PythonObject) raises -> PythonObject:
 
 
 def samba_view(flat: PythonObject, offset: Int, dims: List[Int], context: PythonObject) raises -> PythonObject:
+    var nk = samba_keys()
     var bi = native_loaded_module("builtins")
     var n = 1
     for d in dims:  # driver-loop: over tensor shape metadata
@@ -90,7 +95,7 @@ def samba_view(flat: PythonObject, offset: Int, dims: List[Int], context: Python
         n *= d
     if offset < 0 or offset + n > Int(py=flat.size):
         raise Error("Samba: tensor view exceeds flat parameter storage")
-    var result = py_call(bi.object.__new__, context["neural"]["array_class"])
+    var result = py_call(bi.object.__new__, py_item(py_item(context, nk[].k_neural), nk[].k_array_class))
     py_setattr(result, "_store", flat._store)
     py_setattr(result, "_base", flat)
     py_setattr(result, "_pin", flat._pin)
@@ -120,12 +125,13 @@ def samba_view(flat: PythonObject, offset: Int, dims: List[Int], context: Python
 
 
 def samba_schedule_snapshot(schedule: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = samba_keys()
     if schedule is None:
         return PythonObject(None)
     var bi = native_loaded_module("builtins")
     # The three built-in kinds are fixed (python/mojolearn/_native_samba_bridge.py
     # schedule_classes); compare the exact type against each, no list(dict).
-    var classes = context["schedule_classes"]
+    var classes = py_item(context, nk[].k_schedule_classes)
     var schedule_type = py_type(schedule)
     var kind = String()
     for name in [String("constant"), String("linear"), String("cosine")]:  # driver-loop: over the three built-in schedule kinds
@@ -135,33 +141,35 @@ def samba_schedule_snapshot(schedule: PythonObject, context: PythonObject) raise
         raise Error("NotImplementedError: Samba requires ConstantLR, WarmupLinearLR or WarmupCosineLR; Python schedule callbacks cannot execute in the native runtime")
     var fields = samba_fields(schedule)
     var result = bi.dict()
-    py_setitem(result, "kind", kind)
+    py_setitem(result, nk[].k_kind, kind)
     for name in [String("peak_lr"), String("min_lr"), String("warmup_steps"), String("total_steps")]:  # driver-loop: over schedule metadata fields
         py_setitem(result, name, fields[name])
     return result
 
 
 def samba_schedule_rate(config: PythonObject, step: Int, context: PythonObject) raises -> PythonObject:
-    var kind = String(config["kind"])
+    var nk = samba_keys()
+    var kind = String(py_item(config, nk[].k_kind))
     var code = 0 if kind == "constant" else (1 if kind == "linear" else 2)
     if kind != "constant" and kind != "linear" and kind != "cosine":
         raise Error("Samba: unsupported saved learning-rate schedule")
-    var total = -1 if config["total_steps"] is None else Int(py=config["total_steps"])
-    var scalars = Python.list(config["peak_lr"], config["min_lr"])
-    var result = py_call(context["exact_schedule"], py_ints([code, Int(py=config["warmup_steps"]), total, step]), scalars)
+    var total = -1 if py_item(config, nk[].k_total_steps) is None else Int(py=py_item(config, nk[].k_total_steps))
+    var scalars = Python.list(py_item(config, nk[].k_peak_lr), py_item(config, nk[].k_min_lr))
+    var result = py_call(py_item(context, nk[].k_exact_schedule), py_ints([code, Int(py=py_item(config, nk[].k_warmup_steps)), total, step]), scalars)
     if Int(py=result[0]) != 0:
         raise Error("Samba: native exact learning-rate schedule refused saved configuration, status " + String(Int(py=result[0])))
     return result[1]
 
 
 def samba_schedule_from_state(config: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = samba_keys()
     if config is None:
         return PythonObject(None)
     var bi = native_loaded_module("builtins")
-    var kind = String(config["kind"])
-    if not py_contains(context["schedule_classes"], kind):
+    var kind = String(py_item(config, nk[].k_kind))
+    if not py_contains(py_item(context, nk[].k_schedule_classes), kind):
         raise Error("Samba: unsupported saved learning-rate schedule")
-    var result = py_call(bi.object.__new__, context["schedule_classes"][kind])
+    var result = py_call(bi.object.__new__, py_item(context, nk[].k_schedule_classes)[kind])
     # fb6-smoke (2026-11-17): the settings go into the instance dictionary
     # through the optimizer owner's native `schedule_setstate` (admission and
     # ONE rate-block bind), not nine attribute sets through the schedule's
@@ -169,15 +177,16 @@ def samba_schedule_from_state(config: PythonObject, context: PythonObject) raise
     # `_fast`, `_tail_t`, `_tail_v`, `_tb`, `_tbv` table fields are gone:
     # nothing has read them since the rate block replaced the Python table.
     var state = bi.dict()
-    py_setitem(state, "peak_lr", PythonObject(Float64(Float32(Float64(py=py_call(bi.float, config["peak_lr"]))))))
-    py_setitem(state, "min_lr", PythonObject(Float64(Float32(Float64(py=py_call(bi.float, config["min_lr"]))))))
-    py_setitem(state, "warmup_steps", py_call(bi.int, config["warmup_steps"]))
-    py_setitem(state, "total_steps", PythonObject(None) if config["total_steps"] is None else py_call(bi.int, config["total_steps"]))
-    _ = py_call(context["schedule_native"], "schedule_setstate", result, Python.tuple(state), None, context["schedule_context"])
+    py_setitem(state, nk[].k_peak_lr, PythonObject(Float64(Float32(Float64(py=py_call(bi.float, py_item(config, nk[].k_peak_lr)))))))
+    py_setitem(state, nk[].k_min_lr, PythonObject(Float64(Float32(Float64(py=py_call(bi.float, py_item(config, nk[].k_min_lr)))))))
+    py_setitem(state, nk[].k_warmup_steps, py_call(bi.int, py_item(config, nk[].k_warmup_steps)))
+    py_setitem(state, nk[].k_total_steps, PythonObject(None) if py_item(config, nk[].k_total_steps) is None else py_call(bi.int, py_item(config, nk[].k_total_steps)))
+    _ = py_call(py_item(context, nk[].k_schedule_native), "schedule_setstate", result, Python.tuple(state), None, py_item(context, nk[].k_schedule_context))
     return result
 
 
 def _samba_registry(config: PythonObject) raises -> PythonObject:
+    var nk = samba_keys()
     var source = samba_registry(config)
     var result = Python.list()
     var list_type = native_loaded_module("builtins").list
@@ -194,21 +203,22 @@ def _samba_registry(config: PythonObject) raises -> PythonObject:
         if offset > 2147483647 - n:
             raise Error("Samba: flat parameter registry exceeds signed 32-bit indexing")
         var item = Python.dict()
-        py_setitem(item, "name", entry[0])
-        py_setitem(item, "shape", py_call(list_type, shape))
-        py_setitem(item, "offset", offset)
-        py_setitem(item, "size", n)
+        py_setitem(item, nk[].k_name, entry[0])
+        py_setitem(item, nk[].k_shape, py_call(list_type, shape))
+        py_setitem(item, nk[].k_offset, offset)
+        py_setitem(item, nk[].k_size, n)
         _ = py_call(result.append, item)
         offset += n
     return result
 
 
 def samba_moment_view(value: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = samba_keys()
     # Native Array has retained storage even on CPython versions before the
     # Python-level buffer protocol. Capture its admitted slots once; foreign
     # writable buffers keep their original exporter and alias writeback.
-    if py_type(value) is context["neural"]["array_class"]:
-        var captured = neural_array_snapshot(value, context["neural"])
+    if py_type(value) is py_item(py_item(context, nk[].k_neural), nk[].k_array_class):
+        var captured = neural_array_snapshot(value, py_item(context, nk[].k_neural))
         var view = captured._mv
         _ = captured
         return view
@@ -216,113 +226,115 @@ def samba_moment_view(value: PythonObject, context: PythonObject) raises -> Pyth
 
 
 def samba_snapshot(model: PythonObject, copy_arrays: Bool, context: PythonObject) raises -> PythonObject:
-    _ = generation_initialize_binding(context["neural"]["generation_classes"])
+    var nk = samba_keys()
+    _ = generation_initialize_binding(py_item(py_item(context, nk[].k_neural), nk[].k_generation_classes))
     var bi = native_loaded_module("builtins")
     var fields = samba_fields(model)
-    var entries = samba_entries(context, fields["numeric_mode"])
-    var opt = samba_fields(fields["optimizer"])
-    var lease = OptimizerOwnerLease(fields["optimizer"])
+    var entries = samba_entries(context, py_item(fields, nk[].k_numeric_mode))
+    var opt = samba_fields(py_item(fields, nk[].k_optimizer))
+    var lease = OptimizerOwnerLease(py_item(fields, nk[].k_optimizer))
     var owner = lease.value.downcast_value_ptr[OptimizerOwner]()
-    var n = Int(py=fields["n_total"])
-    if opt["_m"] is None:
-        py_setitem(opt, "_m", generation_array([n]))
-    if opt["_v"] is None:
-        py_setitem(opt, "_v", generation_array([n]))
-    var m = _model_f32(opt["_m"], "exp_avg", context["neural"])
-    var v = _model_f32(opt["_v"], "exp_avg_sq", context["neural"])
+    var n = Int(py=py_item(fields, nk[].k_n_total))
+    if py_item(opt, nk[].k__m) is None:
+        py_setitem(opt, nk[].k__m, generation_array([n]))
+    if py_item(opt, nk[].k__v) is None:
+        py_setitem(opt, nk[].k__v, generation_array([n]))
+    var m = _model_f32(py_item(opt, nk[].k__m), "exp_avg", py_item(context, nk[].k_neural))
+    var v = _model_f32(py_item(opt, nk[].k__v), "exp_avg_sq", py_item(context, nk[].k_neural))
     _model_shape(m, [n], "exp_avg")
     _model_shape(v, [n], "exp_avg_sq")
     if owner[].control.handle >= 0 and not owner[].control.host_fresh:
         samba_optimizer_transfer(owner[], Int(py=m._addr), Int(py=v._addr), n, False)
         # A caller may assign writable foreign buffers to the public moment
         # properties. Keep those aliases and write native download bytes back.
-        if m is not opt["_m"]:
-            var m_view = samba_moment_view(opt["_m"], context)
+        if m is not py_item(opt, nk[].k__m):
+            var m_view = samba_moment_view(py_item(opt, nk[].k__m), context)
             py_setitem(m_view, py_call(bi.slice, PythonObject(None)), m._mv)
-        if v is not opt["_v"]:
-            var v_view = samba_moment_view(opt["_v"], context)
+        if v is not py_item(opt, nk[].k__v):
+            var v_view = samba_moment_view(py_item(opt, nk[].k__v), context)
             py_setitem(v_view, py_call(bi.slice, PythonObject(None)), v._mv)
         owner[].control.host_fresh = True
-    var flags = _model_native_buffer(opt["buf_initialized"], "i", context["neural"])
+    var flags = _model_native_buffer(py_item(opt, nk[].k_buf_initialized), "i", py_item(context, nk[].k_neural))
     owner[].control.pristine = False
     var result = bi.dict()
-    py_setitem(result, "schema", "mojolearn.samba-stack-state.v1")
-    py_setitem(result, "profile", "mojolearn.samba-stack.fp32.v1")
-    py_setitem(result, "experiment_profile", samba_experiment(entries))
-    py_setitem(result, "numeric_mode", context["mode"])
-    py_setitem(result, "config", samba_config_dict(fields["config"]))
-    py_setitem(result, "registry", _samba_registry(fields["config"]))
-    py_setitem(result, "parameters", generation_copy(fields["flat"]) if copy_arrays else fields["flat"])
-    py_setitem(result, "exp_avg", generation_copy(m) if copy_arrays else opt["_m"])
-    py_setitem(result, "exp_avg_sq", generation_copy(v) if copy_arrays else opt["_v"])
-    py_setitem(result, "buf_initialized", generation_copy(flags) if copy_arrays else opt["buf_initialized"])
-    py_setitem(result, "t", opt["t"])
+    py_setitem(result, nk[].k_schema, "mojolearn.samba-stack-state.v1")
+    py_setitem(result, nk[].k_profile, "mojolearn.samba-stack.fp32.v1")
+    py_setitem(result, nk[].k_experiment_profile, samba_experiment(entries))
+    py_setitem(result, nk[].k_numeric_mode, py_item(context, nk[].k_mode))
+    py_setitem(result, nk[].k_config, samba_config_dict(py_item(fields, nk[].k_config)))
+    py_setitem(result, nk[].k_registry, _samba_registry(py_item(fields, nk[].k_config)))
+    py_setitem(result, nk[].k_parameters, generation_copy(py_item(fields, nk[].k_flat)) if copy_arrays else py_item(fields, nk[].k_flat))
+    py_setitem(result, nk[].k_exp_avg, generation_copy(m) if copy_arrays else py_item(opt, nk[].k__m))
+    py_setitem(result, nk[].k_exp_avg_sq, generation_copy(v) if copy_arrays else py_item(opt, nk[].k__v))
+    py_setitem(result, nk[].k_buf_initialized, generation_copy(flags) if copy_arrays else py_item(opt, nk[].k_buf_initialized))
+    py_setitem(result, nk[].k_t, py_item(opt, nk[].k_t))
     var optimizer = bi.dict()
-    py_setitem(optimizer, "kind", "adamw")
-    py_setitem(optimizer, "lr", opt["lr"])
-    py_setitem(optimizer, "beta1", opt["betas"][0])
-    py_setitem(optimizer, "beta2", opt["betas"][1])
-    py_setitem(optimizer, "eps", opt["eps"])
-    py_setitem(optimizer, "weight_decay", opt["weight_decay"])
-    py_setitem(optimizer, "max_norm", fields["max_norm"])
-    py_setitem(optimizer, "accumulation_steps", opt["accumulation_steps"])
-    py_setitem(result, "optimizer", optimizer)
-    py_setitem(result, "schedule", samba_schedule_snapshot(opt["lr_schedule"], context))
-    var generator = samba_fields(fields["generator"])
+    py_setitem(optimizer, nk[].k_kind, "adamw")
+    py_setitem(optimizer, nk[].k_lr, py_item(opt, nk[].k_lr))
+    py_setitem(optimizer, nk[].k_beta1, py_item(opt, nk[].k_betas)[0])
+    py_setitem(optimizer, nk[].k_beta2, py_item(opt, nk[].k_betas)[1])
+    py_setitem(optimizer, nk[].k_eps, py_item(opt, nk[].k_eps))
+    py_setitem(optimizer, nk[].k_weight_decay, py_item(opt, nk[].k_weight_decay))
+    py_setitem(optimizer, nk[].k_max_norm, py_item(fields, nk[].k_max_norm))
+    py_setitem(optimizer, nk[].k_accumulation_steps, py_item(opt, nk[].k_accumulation_steps))
+    py_setitem(result, nk[].k_optimizer, optimizer)
+    py_setitem(result, nk[].k_schedule, samba_schedule_snapshot(py_item(opt, nk[].k_lr_schedule), context))
+    var generator = samba_fields(py_item(fields, nk[].k_generator))
     var rng = bi.dict()
-    py_setitem(rng, "seed", generator["seed"])
-    py_setitem(rng, "counter", generator["counter"])
-    py_setitem(result, "rng", rng)
+    py_setitem(rng, nk[].k_seed, py_item(generator, nk[].k_seed))
+    py_setitem(rng, nk[].k_counter, py_item(generator, nk[].k_counter))
+    py_setitem(result, nk[].k_rng, rng)
     _ = lease
     return result
 
 
 def samba_validate_state(state: PythonObject, context: PythonObject) raises -> PythonObject:
-    _ = generation_initialize_binding(context["neural"]["generation_classes"])
+    var nk = samba_keys()
+    _ = generation_initialize_binding(py_item(py_item(context, nk[].k_neural), nk[].k_generation_classes))
     var bi = native_loaded_module("builtins")
-    var entries = samba_entries(context, state["numeric_mode"])
-    if String(py_get(state, "schema")) != "mojolearn.samba-stack-state.v1" or String(py_get(state, "profile")) != "mojolearn.samba-stack.fp32.v1":
+    var entries = samba_entries(context, py_item(state, nk[].k_numeric_mode))
+    if String(py_get(state, nk[].k_schema)) != "mojolearn.samba-stack-state.v1" or String(py_get(state, nk[].k_profile)) != "mojolearn.samba-stack.fp32.v1":
         raise Error("Samba: state schema/profile mismatch")
-    if Bool(py=py_get(state, "experiment_profile", PythonObject("baseline")) != samba_experiment(entries)):
+    if Bool(py=py_get(state, nk[].k_experiment_profile, PythonObject("baseline")) != samba_experiment(entries)):
         raise Error("Samba: experiment numerical profile mismatch")
-    var saved_profile = String(py_get(state, "numeric_profile", PythonObject("fp32_v1")))
+    var saved_profile = String(py_get(state, nk[].k_numeric_profile, PythonObject("fp32_v1")))
     if saved_profile != "fp32_v1":
         raise Error("Samba: state numeric profile must be fp32_v1, got " + saved_profile)
-    var config = samba_config_from_dict(context["config_class"], state["config"])
+    var config = samba_config_from_dict(py_item(context, nk[].k_config_class), py_item(state, nk[].k_config))
     var registry = _samba_registry(config)
-    if Bool(py=registry != state["registry"]):
+    if Bool(py=registry != py_item(state, nk[].k_registry)):
         raise Error("Samba: saved parameter registry differs from configuration")
-    var n = Int(py=registry[len(registry) - 1]["offset"]) + Int(py=registry[len(registry) - 1]["size"])
+    var n = Int(py=py_item(registry[len(registry) - 1], nk[].k_offset)) + Int(py=py_item(registry[len(registry) - 1], nk[].k_size))
     var result = py_call(bi.dict, state)
     for name in [String("parameters"), String("exp_avg"), String("exp_avg_sq")]:  # driver-loop: over the three floating training-state buffers
-        var value = _model_f32(state[name], name, context["neural"])
+        var value = _model_f32(state[name], name, py_item(context, nk[].k_neural))
         _model_shape(value, [n], name)
         py_setitem(result, name, generation_copy(value))
-    var flags = state["buf_initialized"]
-    var own = py_type(flags) is context["neural"]["array_class"]
+    var flags = py_item(state, nk[].k_buf_initialized)
+    var own = py_type(flags) is py_item(py_item(context, nk[].k_neural), nk[].k_array_class)
     var view = flags._mv if own else py_call(bi.memoryview, flags)
     var shape = flags.shape if own else view.shape
     if len(shape) != 1 or Int(py=shape[0]) != len(registry) or (String(view.format) != "i" and String(view.format) != "<i" and String(view.format) != "=i"):
         raise Error("Samba: optimizer flags must be one int32 per registered tensor")
     var copied = generation_array([len(registry)], "i")
     py_setitem(copied._mv, py_call(bi.slice, PythonObject(None)), view)
-    py_setitem(result, "buf_initialized", copied)
-    var step = Int(py=state["t"])
+    py_setitem(result, nk[].k_buf_initialized, copied)
+    var step = Int(py=py_item(state, nk[].k_t))
     if step < 0 or step > 2147483647:
         raise Error("Samba: optimizer step exceeds signed 32-bit range")
-    var accumulation = Int(py=state["optimizer"]["accumulation_steps"])
+    var accumulation = Int(py=py_item(py_item(state, nk[].k_optimizer), nk[].k_accumulation_steps))
     if accumulation < 1 or (accumulation & (accumulation - 1)) != 0:
         raise Error("Samba: accumulation_steps must be a positive power of two")
-    if String(state["optimizer"]["kind"]) != "adamw":
+    if String(py_item(py_item(state, nk[].k_optimizer), nk[].k_kind)) != "adamw":
         raise Error("Samba: optimizer kind must be adamw")
-    var counter = Int(py=state["rng"]["counter"])
+    var counter = Int(py=py_item(py_item(state, nk[].k_rng), nk[].k_counter))
     if counter < 0 or counter > 4294967296:
         raise Error("Samba: RNG counter must be in [0, 2^32], including exhaustion")
-    if Bool(py=state["rng"]["seed"] < 0) or Bool(py=state["rng"]["seed"] >= py_call(bi.int, "18446744073709551616")):
+    if Bool(py=py_item(py_item(state, nk[].k_rng), nk[].k_seed) < 0) or Bool(py=py_item(py_item(state, nk[].k_rng), nk[].k_seed) >= py_call(bi.int, "18446744073709551616")):
         raise Error("Samba: RNG seed must be a 64-bit unsigned integer")
-    _ = samba_schedule_from_state(state["schedule"], context)
-    py_setitem(result, "config", samba_config_dict(config))
-    py_setitem(result, "registry", registry)
+    _ = samba_schedule_from_state(py_item(state, nk[].k_schedule), context)
+    py_setitem(result, nk[].k_config, samba_config_dict(config))
+    py_setitem(result, nk[].k_registry, registry)
     return result
 
 
@@ -331,21 +343,22 @@ def samba_publish(model: PythonObject, state: PythonObject, context: PythonObjec
 
 
 def _samba_publish_checked(model: PythonObject, checked: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = samba_keys()
     # `checked` is a samba_validate_state result (its arrays are already
     # private copies): samba_from_state publishes it without validating and
     # copying the three state arrays a second time (row N166).
     var fields = samba_fields(model)
-    if Bool(py=samba_config_dict(fields["config"]) != checked["config"]):
+    if Bool(py=samba_config_dict(py_item(fields, nk[].k_config)) != py_item(checked, nk[].k_config)):
         raise Error("Samba: state config differs from this stack")
-    var opt = samba_fields(fields["optimizer"])
-    var oc = checked["optimizer"]
-    if Bool(py=opt["accumulation_steps"] != oc["accumulation_steps"]):
+    var opt = samba_fields(py_item(fields, nk[].k_optimizer))
+    var oc = py_item(checked, nk[].k_optimizer)
+    if Bool(py=py_item(opt, nk[].k_accumulation_steps) != py_item(oc, nk[].k_accumulation_steps)):
         raise Error("Samba: saved accumulation_steps differs from this stack")
-    var schedule = samba_schedule_from_state(checked["schedule"], context)
-    var lease = OptimizerOwnerLease(fields["optimizer"])
+    var schedule = samba_schedule_from_state(py_item(checked, nk[].k_schedule), context)
+    var lease = OptimizerOwnerLease(py_item(fields, nk[].k_optimizer))
     var owner = lease.value.downcast_value_ptr[OptimizerOwner]()
-    var flat = fields["flat"]
-    var source = checked["parameters"]
+    var flat = py_item(fields, nk[].k_flat)
+    var source = py_item(checked, nk[].k_parameters)
     var flat_addr = Int(py=flat._addr)
     if flat is not source:
         var dst = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=flat_addr)
@@ -355,26 +368,26 @@ def _samba_publish_checked(model: PythonObject, checked: PythonObject, context: 
     # audit 2026-11-13: stamped here from the address this write holds, not
     # by the public door re-reading `flat` per call)
     registry_epoch_bump(flat_addr)
-    var first = checked["exp_avg"]
-    var second = checked["exp_avg_sq"]
+    var first = py_item(checked, nk[].k_exp_avg)
+    var second = py_item(checked, nk[].k_exp_avg_sq)
     if owner[].control.handle >= 0:
-        samba_optimizer_transfer(owner[], Int(py=first._addr), Int(py=second._addr), Int(py=fields["n_total"]), True)
+        samba_optimizer_transfer(owner[], Int(py=first._addr), Int(py=second._addr), Int(py=py_item(fields, nk[].k_n_total)), True)
     # Publish moment owners only after upload succeeds, as public AdamW does.
-    py_setitem(opt, "_m", first)
-    py_setitem(opt, "_v", second)
+    py_setitem(opt, nk[].k__m, first)
+    py_setitem(opt, nk[].k__v, second)
     owner[].control.host_fresh = True
     owner[].control.pristine = False
-    py_setitem(opt, "buf_initialized", checked["buf_initialized"])
-    py_setitem(opt, "t", checked["t"])
-    py_setitem(opt, "lr", oc["lr"])
-    py_setitem(opt, "betas", Python.tuple(oc["beta1"], oc["beta2"]))
-    py_setitem(opt, "eps", oc["eps"])
-    py_setitem(opt, "weight_decay", oc["weight_decay"])
-    py_setitem(opt, "lr_schedule", schedule)
-    py_setitem(fields, "max_norm", oc["max_norm"])
-    var generator = samba_fields(fields["generator"])
-    py_setitem(generator, "seed", checked["rng"]["seed"])
-    py_setitem(generator, "counter", checked["rng"]["counter"])
+    py_setitem(opt, nk[].k_buf_initialized, py_item(checked, nk[].k_buf_initialized))
+    py_setitem(opt, nk[].k_t, py_item(checked, nk[].k_t))
+    py_setitem(opt, nk[].k_lr, py_item(oc, nk[].k_lr))
+    py_setitem(opt, nk[].k_betas, Python.tuple(py_item(oc, nk[].k_beta1), py_item(oc, nk[].k_beta2)))
+    py_setitem(opt, nk[].k_eps, py_item(oc, nk[].k_eps))
+    py_setitem(opt, nk[].k_weight_decay, py_item(oc, nk[].k_weight_decay))
+    py_setitem(opt, nk[].k_lr_schedule, schedule)
+    py_setitem(fields, nk[].k_max_norm, py_item(oc, nk[].k_max_norm))
+    var generator = samba_fields(py_item(fields, nk[].k_generator))
+    py_setitem(generator, nk[].k_seed, py_item(py_item(checked, nk[].k_rng), nk[].k_seed))
+    py_setitem(generator, nk[].k_counter, py_item(py_item(checked, nk[].k_rng), nk[].k_counter))
     _ = first
     _ = second
     _ = lease
@@ -382,11 +395,12 @@ def _samba_publish_checked(model: PythonObject, checked: PythonObject, context: 
 
 
 def samba_build_blocks(model: PythonObject, context: PythonObject) raises:
+    var nk = samba_keys()
     var bi = native_loaded_module("builtins")
-    var config = samba_fields(model)["config"]
+    var config = py_item(samba_fields(model), nk[].k_config)
     py_setattr(model, "_blocks", bi.list())
-    var route = PythonObject("cpu" if context["vendor"] is None or String(context["vendor"]) == "cpu" else "gpu")
-    var nc = context["neural"]
+    var route = PythonObject("cpu" if py_item(context, nk[].k_vendor) is None or String(py_item(context, nk[].k_vendor)) == "cpu" else "gpu")
+    var nc = py_item(context, nk[].k_neural)
     # Immutable ABI connection occurs once at model construction/restoration.
     _ = neural_descriptor_cached(samba_fields(model), samba_entries(context, model.numeric_mode),
         "_native_primitives", "neural_primitives_api_v1", String(PRIMITIVE_ABI_NAME), True)
@@ -394,9 +408,9 @@ def samba_build_blocks(model: PythonObject, context: PythonObject) raises:
     # The execution route still selects the installed native CPU kernels; only
     # the Python-facing class differs from checkpoint inference construction.
     var block_context = py_call(bi.dict, nc)
-    var classes = py_call(bi.dict, nc["block_classes"])
-    py_setitem(classes, route, nc["block_classes"]["gpu"])
-    py_setitem(block_context, "block_classes", classes)
+    var classes = py_call(bi.dict, py_item(nc, nk[].k_block_classes))
+    py_setitem(classes, route, py_item(py_item(nc, nk[].k_block_classes), nk[].k_gpu))
+    py_setitem(block_context, nk[].k_block_classes, classes)
     for i in range(len(config.layers)):  # driver-loop: over configured model layers
         var layer_kind = String(config.layers[i])
         var kind = "mamba3" if layer_kind == "mamba3" else "transformer"
@@ -404,36 +418,37 @@ def samba_build_blocks(model: PythonObject, context: PythonObject) raises:
         var names = samba_block_shapes(config, layer_kind)
         for j in range(len(names)):  # driver-loop: over the layer's named parameter views
             py_setitem(weights, names[j][0], model.arrays["layers." + String(i) + "." + String(names[j][0])])
-        var plan = py_call(bi.object.__new__, nc["config_context"]["plan_class"])
+        var plan = py_call(bi.object.__new__, py_item(py_item(nc, nk[].k_config_context), nk[].k_plan_class))
         py_setattr(plan, "kind", PythonObject(kind))
         py_setattr(plan, "d_model", config.d_model)
         py_setattr(plan, "block_options", bi.dict())
         py_setattr(plan, "block_kwargs", bi.dict())
         if kind == "transformer":
             py_setattr(plan, "n_heads", config.n_heads)
-            py_setitem(plan.block_options, "n_kv_heads", config.n_kv_heads)
-            py_setitem(plan.block_options, "head_dim", config.head_dim)
+            py_setitem(plan.block_options, nk[].k_n_kv_heads, config.n_kv_heads)
+            py_setitem(plan.block_options, nk[].k_head_dim, config.head_dim)
             # Samba's attention blocks use TransformerBlock's 1e-6 default.
             # The checkpoint model interface defaults to 1e-5 instead, and
             # SambaConfig.norm_eps controls only the final stack normalization.
-            py_setitem(plan.block_options, "norm_eps", PythonObject(1e-6))
+            py_setitem(plan.block_options, nk[].k_norm_eps, PythonObject(1e-6))
         var bindings = _model_bindings(route, kind, nc, model.numeric_mode)
         var block = _model_block(weights, plan, PythonObject("fp32_v1"), route, bindings, block_context)
         var block_fields = samba_fields(block)
-        py_setitem(block_fields, "numeric_mode", model.numeric_mode)
+        py_setitem(block_fields, nk[].k_numeric_mode, model.numeric_mode)
         if kind == "mamba3":
-            py_setitem(block_fields, "_discard_reports", True)
+            py_setitem(block_fields, nk[].k__discard_reports, True)
         _ = py_call(model._blocks.append, block)
 
 
 def samba_from_state(state: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = samba_keys()
     var checked = samba_validate_state(state, context)
     var bi = native_loaded_module("builtins")
-    var model = py_call(bi.object.__new__, context["model_class"])
-    var config = samba_config_from_dict(context["config_class"], checked["config"])
+    var model = py_call(bi.object.__new__, py_item(context, nk[].k_model_class))
+    var config = samba_config_from_dict(py_item(context, nk[].k_config_class), py_item(checked, nk[].k_config))
     py_setattr(model, "config", config)
-    py_setattr(model, "numeric_mode", checked["numeric_mode"])
-    py_setattr(model, "flat", checked["parameters"])
+    py_setattr(model, "numeric_mode", py_item(checked, nk[].k_numeric_mode))
+    py_setattr(model, "flat", py_item(checked, nk[].k_parameters))
     # lane x56d: the registry a kernel reads is read-only (see samba_view)
     _ = fitted_freeze_any(model.flat)
     py_setattr(model, "n_total", model.flat.size)
@@ -441,44 +456,44 @@ def samba_from_state(state: PythonObject, context: PythonObject) raises -> Pytho
     py_setattr(model, "shapes", bi.dict())
     py_setattr(model, "offsets", bi.list())
     py_setattr(model, "arrays", bi.dict())
-    var registry = checked["registry"]
+    var registry = py_item(checked, nk[].k_registry)
     var params = bi.list()
     for i in range(len(registry)):  # driver-loop: over registry views retaining the flat parameter owner
         var item = registry[i]
         var dims = List[Int]()
-        for j in range(len(item["shape"])):  # driver-loop: over tensor shape metadata
-            dims.append(Int(py=item["shape"][j]))
-        _ = py_call(model.names.append, item["name"])
-        py_setitem(model.shapes, item["name"], py_call(bi.tuple, item["shape"]))
-        _ = py_call(model.offsets.append, item["offset"])
-        var value = samba_view(model.flat, Int(py=item["offset"]), dims, context)
-        py_setitem(model.arrays, item["name"], value)
+        for j in range(len(py_item(item, nk[].k_shape))):  # driver-loop: over tensor shape metadata
+            dims.append(Int(py=py_item(item, nk[].k_shape)[j]))
+        _ = py_call(model.names.append, py_item(item, nk[].k_name))
+        py_setitem(model.shapes, py_item(item, nk[].k_name), py_call(bi.tuple, py_item(item, nk[].k_shape)))
+        _ = py_call(model.offsets.append, py_item(item, nk[].k_offset))
+        var value = samba_view(model.flat, Int(py=py_item(item, nk[].k_offset)), dims, context)
+        py_setitem(model.arrays, py_item(item, nk[].k_name), value)
         _ = py_call(params.append, value)
     _ = py_call(model.offsets.append, model.n_total)
-    var generator = py_call(bi.object.__new__, context["generator_class"])
+    var generator = py_call(bi.object.__new__, py_item(context, nk[].k_generator_class))
     var gen_fields = samba_fields(generator)
-    py_setitem(gen_fields, "seed", checked["rng"]["seed"])
-    py_setitem(gen_fields, "counter", checked["rng"]["counter"])
-    py_setitem(gen_fields, "numeric_mode", checked["numeric_mode"])
+    py_setitem(gen_fields, nk[].k_seed, py_item(py_item(checked, nk[].k_rng), nk[].k_seed))
+    py_setitem(gen_fields, nk[].k_counter, py_item(py_item(checked, nk[].k_rng), nk[].k_counter))
+    py_setitem(gen_fields, nk[].k_numeric_mode, py_item(checked, nk[].k_numeric_mode))
     py_setattr(model, "generator", generator)
-    py_setattr(model, "max_norm", checked["optimizer"]["max_norm"])
-    var optimizer = py_call(bi.object.__new__, context["optimizer_class"])
+    py_setattr(model, "max_norm", py_item(py_item(checked, nk[].k_optimizer), nk[].k_max_norm))
+    var optimizer = py_call(bi.object.__new__, py_item(context, nk[].k_optimizer_class))
     var opt = samba_fields(optimizer)
-    py_setitem(opt, "_resident_wanted", PythonObject(None))
-    py_setitem(opt, "_native_optimizer_owner", optimizer_owner_new(optimizer, 2, False))
-    py_setitem(opt, "params", params)
-    py_setitem(opt, "n_total", model.n_total)
-    py_setitem(opt, "accumulation_steps", checked["optimizer"]["accumulation_steps"])
-    py_setitem(opt, "numeric_mode", checked["numeric_mode"])
-    py_setitem(opt, "maximize", False)
-    py_setitem(opt, "packed_", PythonObject(None))
-    py_setitem(opt, "total_norm_", PythonObject(None))
-    py_setitem(opt, "clip_coef_", PythonObject(None))
+    py_setitem(opt, nk[].k__resident_wanted, PythonObject(None))
+    py_setitem(opt, nk[].k__native_optimizer_owner, optimizer_owner_new(optimizer, 2, False))
+    py_setitem(opt, nk[].k_params, params)
+    py_setitem(opt, nk[].k_n_total, model.n_total)
+    py_setitem(opt, nk[].k_accumulation_steps, py_item(py_item(checked, nk[].k_optimizer), nk[].k_accumulation_steps))
+    py_setitem(opt, nk[].k_numeric_mode, py_item(checked, nk[].k_numeric_mode))
+    py_setitem(opt, nk[].k_maximize, False)
+    py_setitem(opt, nk[].k_packed_, PythonObject(None))
+    py_setitem(opt, nk[].k_total_norm_, PythonObject(None))
+    py_setitem(opt, nk[].k_clip_coef_, PythonObject(None))
     var offsets = generation_array([len(registry) + 1], "i")
     var offset_ptr = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=offsets._addr))
     for i in range(len(registry) + 1):  # driver-loop: over registry offset metadata
         offset_ptr[i] = Int32(Int(py=model.offsets[i]))
-    py_setitem(opt, "offsets", offsets)
+    py_setitem(opt, nk[].k_offsets, offsets)
     py_setattr(model, "optimizer", optimizer)
     samba_build_blocks(model, context)
     py_setattr(model, "last_", PythonObject(None))
@@ -486,27 +501,28 @@ def samba_from_state(state: PythonObject, context: PythonObject) raises -> Pytho
 
 
 def samba_apply_gradients_from_state(state: PythonObject, gradients: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = samba_keys()
     var bi = native_loaded_module("builtins")
     var device_plan = samba_optimizer_device_plan()
-    var entries = samba_entries(context, state["numeric_mode"])
+    var entries = samba_entries(context, py_item(state, nk[].k_numeric_mode))
     if Int(py=py_call(bi.int, device_plan.setting)) > 1:
         for name in [String("optimizer_parallel_available"), String("accumulate_parallel_available"), String("clip_parallel_available")]:  # driver-loop: over cooperative native capability metadata
             if not Bool(py=py_call(bi.hasattr, entries, name)) or Int(py=_native_function(entries, name)()) != 1:
                 raise Error("RuntimeError: native Samba cooperative update is unavailable: " + name)
     var result = samba_validate_state(state, context)
-    var registry = result["registry"]
+    var registry = py_item(result, nk[].k_registry)
     if len(gradients) != len(registry):
         raise Error("Samba: gradients must match the ordered parameter registry")
-    var step = Int(py=result["t"])
+    var step = Int(py=py_item(result, nk[].k_t))
     if step >= 2147483647:
         raise Error("Samba: optimizer step exceeds signed 32-bit range")
-    var config = py_call(bi.dict, result["optimizer"])
-    if result["schedule"] is not None:
-        py_setitem(config, "lr", samba_schedule_rate(result["schedule"], step + 1, context))
-    var max_norm = 0.0 if config["max_norm"] is None else Float64(py=config["max_norm"])
-    if config["max_norm"] is not None and not (max_norm > 0.0):
+    var config = py_call(bi.dict, py_item(result, nk[].k_optimizer))
+    if py_item(result, nk[].k_schedule) is not None:
+        py_setitem(config, nk[].k_lr, samba_schedule_rate(py_item(result, nk[].k_schedule), step + 1, context))
+    var max_norm = 0.0 if py_item(config, nk[].k_max_norm) is None else Float64(py=py_item(config, nk[].k_max_norm))
+    if py_item(config, nk[].k_max_norm) is not None and not (max_norm > 0.0):
         raise Error("Samba: max_norm must be positive or None")
-    var n = Int(py=result["parameters"].size)
+    var n = Int(py=py_item(result, nk[].k_parameters).size)
     var flat_gradient = generation_array([n])
     var offsets = generation_array([len(registry) + 1], "i")
     var gp = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=flat_gradient._addr))
@@ -514,14 +530,14 @@ def samba_apply_gradients_from_state(state: PythonObject, gradients: PythonObjec
     for i in range(len(registry)):  # driver-loop: over registry-ordered gradient buffers
         var item = registry[i]
         var dims = List[Int]()
-        for axis in range(len(item["shape"])):  # driver-loop: over tensor shape metadata
-            dims.append(Int(py=item["shape"][axis]))
-        var value = _model_f32(gradients[i], "gradient", context["neural"])
+        for axis in range(len(py_item(item, nk[].k_shape))):  # driver-loop: over tensor shape metadata
+            dims.append(Int(py=py_item(item, nk[].k_shape)[axis]))
+        var value = _model_f32(gradients[i], "gradient", py_item(context, nk[].k_neural))
         _model_shape(value, dims, "gradient")
-        var offset = Int(py=item["offset"])
+        var offset = Int(py=py_item(item, nk[].k_offset))
         op[i] = Int32(offset)
         var src = Pointer[Float32, ImmUntrackedOrigin](unsafe_from_address=Int(py=value._addr))
-        unsafe_memcpy(dest=gp + offset, src=src, count=Int(py=item["size"]))
+        unsafe_memcpy(dest=gp + offset, src=src, count=Int(py=py_item(item, nk[].k_size)))
         _ = value^
     op[len(registry)] = Int32(n)
     # The per-call AdamW step (primitive op 25, the former `optimizer_step`
@@ -535,19 +551,19 @@ def samba_apply_gradients_from_state(state: PythonObject, gradients: PythonObjec
     floats.append(0.0)
     floats.append(max_norm)
     var info = generation_array([3])
-    var addresses: List[Int] = [Int(py=result["parameters"]._addr), Int(py=flat_gradient._addr),
-        Int(py=result["exp_avg"]._addr), Int(py=result["exp_avg_sq"]._addr), Int(py=offsets._addr),
-        Int(py=result["buf_initialized"]._addr), Int(py=info._addr)]
-    var written = samba_primitive(samba_ref[SAMBA_TABLE_TRAINING](samba_entry_key(context, state["numeric_mode"])),
+    var addresses: List[Int] = [Int(py=py_item(result, nk[].k_parameters)._addr), Int(py=flat_gradient._addr),
+        Int(py=py_item(result, nk[].k_exp_avg)._addr), Int(py=py_item(result, nk[].k_exp_avg_sq)._addr), Int(py=offsets._addr),
+        Int(py=py_item(result, nk[].k_buf_initialized)._addr), Int(py=info._addr)]
+    var written = samba_primitive(samba_ref[SAMBA_TABLE_TRAINING](samba_entry_key(context, py_item(state, nk[].k_numeric_mode))),
         SAMBA_PRIM_OPTIMIZER_STEP, addresses, ints, floats)
     _ = info  # keep the Python owner alive through the native call above
     _ = flat_gradient
     _ = offsets
     if written != n:
         raise Error("RuntimeError: Samba optimizer returned an incomplete update")
-    py_setitem(result, "optimizer", config)
-    py_setitem(result, "t", PythonObject(step + 1))
-    py_setitem(result, "rng", py_call(bi.dict, result["rng"]))
+    py_setitem(result, nk[].k_optimizer, config)
+    py_setitem(result, nk[].k_t, PythonObject(step + 1))
+    py_setitem(result, nk[].k_rng, py_call(bi.dict, py_item(result, nk[].k_rng)))
     _ = flat_gradient^
     _ = offsets^
     _ = info^

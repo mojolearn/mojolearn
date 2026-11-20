@@ -25,11 +25,14 @@ from bindings.neural_block_public_door import neural_block_backward_binding
 from bindings.causal_lm_public_door import _native_function
 from bindings.p3_samba_caps_door import samba_caps, SAMBA_CAP_AFN, SAMBA_CAP_HEAD_LOSS, SAMBA_CAP_CHUNKED
 from bindings.py_balanced import py_call, py_setitem, py_type, py_get
+from bindings.samba_keys_unpack import samba_keys
+from bindings.py_balanced import py_item
 
 
 def samba_ids(value: PythonObject, vocab: Int, targets: Bool, context: PythonObject) raises -> PythonObject:
+    var nk = samba_keys()
     var g = GENERATION_BOUNDARY.get_or_create_ptr()
-    var own = py_type(value) is context["neural"]["array_class"]
+    var own = py_type(value) is py_item(py_item(context, nk[].k_neural), nk[].k_array_class)
     var view = value._mv if own else py_call(g[].bi.memoryview, value)
     var shape = value.shape if own else view.shape
     if len(shape) != 2 or Int(py=shape[0]) < 1 or Int(py=shape[1]) < 1:
@@ -67,10 +70,11 @@ struct SambaDropoutMetadata(Copyable, Movable):
     var stream: Int
 
     def __init__(out self, fields: PythonObject, probability: Float64, stream: PythonObject) raises:
+        var nk = samba_keys()
         self.probability = Float32(probability)
         self.scale = Float32(1.0 / (1.0 - Float64(self.probability)))
-        var rng = samba_fields(fields["generator"])
-        var seed = rng["seed"]
+        var rng = samba_fields(py_item(fields, nk[].k_generator))
+        var seed = py_item(rng, nk[].k_seed)
         self.seed_low = Int(py=seed & PythonObject(0xffffffff))
         self.seed_high = Int(py=(seed >> PythonObject(32)) & PythonObject(0xffffffff))
         self.stream = Int(py=stream)
@@ -109,19 +113,20 @@ def samba_gradients_admitted(model: PythonObject, ids: PythonObject, y: PythonOb
 
 
 def _samba_gradients(model: PythonObject, inputs: PythonObject, targets: PythonObject, num_items: PythonObject, stream: PythonObject, token_offset: Int, admitted: Bool, context: PythonObject) raises -> PythonObject:
-    _ = generation_initialize_binding(context["neural"]["generation_classes"])
+    var nk = samba_keys()
+    _ = generation_initialize_binding(py_item(py_item(context, nk[].k_neural), nk[].k_generation_classes))
     var bi = native_loaded_module("builtins")
     var fields = samba_fields(model)
-    var config = samba_fields(fields["config"])
-    var entries = samba_entries(context, fields["numeric_mode"])
+    var config = samba_fields(py_item(fields, nk[].k_config))
+    var entries = samba_entries(context, py_item(fields, nk[].k_numeric_mode))
     # The training image's primitive entry, resolved once per operation at
     # UNPACK (core/samba_entry_table.mojo); every primitive below that was a
     # Python attribute fetch of `entries` called through CPython is one
     # native call through it (lane entangled-native-modules, 2026-11-12).
     # `entries` stays for the provider route, the caps record and the AFN
     # entries, which the table does not carry.
-    var primitives = samba_ref[SAMBA_TABLE_TRAINING](samba_entry_key(context, fields["numeric_mode"]))
-    var native = py_get(fields, "_native_primitives")
+    var primitives = samba_ref[SAMBA_TABLE_TRAINING](samba_entry_key(context, py_item(fields, nk[].k_numeric_mode)))
+    var native = py_get(fields, nk[].k__native_primitives)
     if native is not None and not neural_descriptor_matches(native, py_call(bi.getattr, entries, "canonical", entries)):
         native = PythonObject(None)
     # The provider id, unpacked once; `fields` keeps the provider pinned for
@@ -129,8 +134,8 @@ def _samba_gradients(model: PythonObject, inputs: PythonObject, targets: PythonO
     var native_id = 0
     if native is not None:
         native_id = neural_descriptor_provider_id(native)
-    var d = Int(py=config["d_model"])
-    var vocab = Int(py=config["vocab"])
+    var d = Int(py=py_item(config, nk[].k_d_model))
+    var vocab = Int(py=py_item(config, nk[].k_vocab))
     var ids = inputs if admitted else samba_ids(inputs, vocab, False, context)
     var y = targets if admitted else samba_ids(targets, vocab, True, context)
     var shape = ids.shape
@@ -139,13 +144,13 @@ def _samba_gradients(model: PythonObject, inputs: PythonObject, targets: PythonO
     var b = Int(py=shape[0])
     var l = Int(py=shape[1])
     var rows = b * l
-    var completed = samba_provider_gradients(fields, config, entries, ids, y, num_items, stream, token_offset, context["neural"])
+    var completed = samba_provider_gradients(fields, config, entries, ids, y, num_items, stream, token_offset, py_item(context, nk[].k_neural))
     if completed is not None:
         return completed
     var count = _samba_count(y, context)
     var items = count if num_items is None else Int(py=num_items)
-    var arrays = fields["arrays"]
-    var tie_embeddings = Bool(py=config["tie_embeddings"])
+    var arrays = py_item(fields, nk[].k_arrays)
+    var tie_embeddings = Bool(py=py_item(config, nk[].k_tie_embeddings))
     var head = arrays["embed.weight"] if tie_embeddings else arrays["lm_head.weight"]
     var norm = arrays["norm_f.weight"]
     # Optional entries and compile-time switches are fixed per binding: one
@@ -154,7 +159,7 @@ def _samba_gradients(model: PythonObject, inputs: PythonObject, targets: PythonO
     var afn = Bool(py=caps[SAMBA_CAP_AFN])
     var fused = not afn and Bool(py=caps[SAMBA_CAP_HEAD_LOSS])
     var chunked = not afn and Bool(py=caps[SAMBA_CAP_CHUNKED])
-    var dropout_probability = Float64(py=config["dropout"])
+    var dropout_probability = Float64(py=py_item(config, nk[].k_dropout))
     var dropout = dropout_probability > 0.0 and stream is not None
     var dropout_metadata: Optional[SambaDropoutMetadata] = None
     if dropout:
@@ -168,9 +173,9 @@ def _samba_gradients(model: PythonObject, inputs: PythonObject, targets: PythonO
             [Int(py=hidden._addr), Int(py=arrays["embed.weight"]._addr), Int(py=ids._addr)], [rows, vocab, d], [])
     if dropout:
         hidden = _samba_dropout(hidden, dropout_metadata.value(), [b, l, d], rows * d, offset, False, primitives)
-    var blocks = fields["_blocks"]
+    var blocks = py_item(fields, nk[].k__blocks)
     var layer_count = len(blocks)
-    if layer_count != len(config["layers"]):
+    if layer_count != len(py_item(config, nk[].k_layers)):
         raise Error("Samba: block registry does not match configured layer count")
     var xs = bi.list()
     var tapes = bi.list()
@@ -178,7 +183,7 @@ def _samba_gradients(model: PythonObject, inputs: PythonObject, targets: PythonO
     try:
         for i in range(layer_count):  # driver-loop: over configured forward layers
             _ = py_call(xs.append, hidden)
-            var forward = neural_prefill_forward(blocks[i], hidden, context["neural"])
+            var forward = neural_prefill_forward(blocks[i], hidden, py_item(context, nk[].k_neural))
             hidden = forward[0]
             _ = py_call(tapes.append, forward[1])
         var loss = generation_array([1])
@@ -188,7 +193,7 @@ def _samba_gradients(model: PythonObject, inputs: PythonObject, targets: PythonO
         var dhead = generation_array([vocab, d])
         if afn:
             var params = py_ints([rows, vocab, d])
-            _ = py_call(params.append, config["norm_eps"])
+            _ = py_call(params.append, py_item(config, nk[].k_norm_eps))
             _ = py_call(params.append, -100)
             _ = py_call(params.append, 1)
             _ = py_call(params.append, items)
@@ -198,7 +203,7 @@ def _samba_gradients(model: PythonObject, inputs: PythonObject, targets: PythonO
                             hidden._addr, norm._addr, head._addr, y._addr), params)
         else:
             var normalized = generation_array([b, l, d])
-            var norm_eps = Float64(py=config["norm_eps"])
+            var norm_eps = Float64(py=py_item(config, nk[].k_norm_eps))
             if native is not None:
                 _ = neural_descriptor_execute_id(native_id, 2, [Int(py=normalized._addr), Int(py=hidden._addr), Int(py=norm._addr)], [rows, d], [norm_eps])
             else:
@@ -250,12 +255,12 @@ def _samba_gradients(model: PythonObject, inputs: PythonObject, targets: PythonO
             var i = layer_count - reverse - 1
             var result = PythonObject(None)
             if tapes[i] is None:
-                result = neural_block_backward_binding(blocks[i], xs[i], dh, context["neural"])
+                result = neural_block_backward_binding(blocks[i], xs[i], dh, py_item(context, nk[].k_neural))
             else:
-                result = neural_prefill_backward(blocks[i], tapes[i], dh, context["neural"])
+                result = neural_prefill_backward(blocks[i], tapes[i], dh, py_item(context, nk[].k_neural))
                 neural_prefill_close(tapes[i])
                 py_setitem(tapes, i, PythonObject(None))
-            dh = result["x"]
+            dh = py_item(result, nk[].k_x)
             var names = py_call(bi.object.__getattribute__, blocks[i], "_W_NAMES")
             for j in range(len(names)):  # driver-loop: over each layer's named gradient registry
                 py_setitem(gradients, "layers." + String(i) + "." + String(names[j]), result[names[j]])
@@ -290,7 +295,7 @@ def _samba_gradients(model: PythonObject, inputs: PythonObject, targets: PythonO
         # The provider id does not retain the provider.
         _ = native
         var ordered = bi.list()
-        var names = fields["names"]
+        var names = py_item(fields, nk[].k_names)
         for i in range(len(names)):  # driver-loop: over the complete ordered gradient registry
             _ = py_call(ordered.append, gradients[names[i]])
         _samba_close_tapes(tapes)
