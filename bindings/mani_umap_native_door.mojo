@@ -42,6 +42,7 @@ from bindings.family_common_pack import (
     family_field,
 )
 from bindings.spectral_umap_routes_pack import spectral_umap_route
+from core.mode_answer import fast_is_answered_by_identical, MODE_FAMILY_SPECTRAL
 from core.neighbors_entry_table import NeighborsEntryKey
 from core.neighbors_entry_table_umap import (
     UmapConfigWords, UmapTargetWords, umap_ops_entry, umap_fit_call, umap_fit_ex_call, umap_transform_call,
@@ -78,8 +79,14 @@ def _umap_check_mode(binding: PythonObject, mode: String, message: String) raise
     (core/neighbors_entry_table_umap.mojo) the image behind `binding` recorded
     as its module attribute `umap_native_key` when it published, one exact
     dictionary read at UNPACK. Returns the key; the UMAP entries are then
-    called natively."""
+    called natively. The word `fast`, where the identical set answers it
+    (core/mode_answer.mojo, family SPECTRAL, the family whose route
+    `spectral_umap_route` handed over the identical binding), is compared as
+    `identical`; the fitted-mode word the transform compares stays the
+    user's."""
     var want = umap_mode_code(mode)
+    if mode == "fast" and fast_is_answered_by_identical(MODE_FAMILY_SPECTRAL):
+        want = umap_mode_code("identical")
     if want < 0:
         raise Error("KeyError: " + family_repr(PythonObject(mode)))
     var b = native_loaded_module("builtins")
