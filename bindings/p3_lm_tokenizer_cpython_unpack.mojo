@@ -25,5 +25,14 @@ def lm_try_index(value: PythonObject, mut word: Int) raises -> Bool:
     if result == -1 and table[].PyErr_Occurred():
         table[].PyErr_Clear()
         return False
+    # NumPy bool scalars implement __index__ (as 0 or 1) before NumPy 2.3, the
+    # NumPy that Python 3.10 resolves; 2.3+ refuses them. Refuse them here on
+    # every NumPy so a bool is never admitted as an integer. Only a 0/1 result
+    # from an object that is not itself the int pays the type-name read;
+    # an exact int comes back from PyNumber_Index as the same object.
+    if (result == 0 or result == 1) and not (owned is value):
+        var type_name = String(py=value.__class__.__name__)
+        if type_name == "bool" or type_name == "bool_":
+            return False
     word = Int(result)
     return True

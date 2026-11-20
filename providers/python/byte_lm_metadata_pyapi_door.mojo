@@ -146,7 +146,7 @@ def _shape_of(state: PythonObject) raises -> _Shape:
             # Fast path through PyNumber_Index resolved once; bools and any
             # refusal take the original checks and wording.
             if not lm_try_index(v, n):
-                if py_type(v) is b.bool or String(py=py_type(v).__name__) == "bool_":
+                if py_type(v) is b.bool or String(py=py_type(v).__name__) == "bool_" or String(py=py_type(v).__name__) == "bool":
                     raise Error("ValueError: Byte-LM shape requires integer dimensions")
                 try:
                     n = Int(py=py_call(native_loaded_module("operator").index, v))
@@ -194,7 +194,7 @@ def byte_lm_lengths(source: PythonObject, batch: Int, length: Int, context: Pyth
                 raise Error("lengths must be in [1, L]")
             result.append(word)
             continue
-        if py_type(value) is bi.bool or String(py=py_type(value).__name__) == "bool_":
+        if py_type(value) is bi.bool or String(py=py_type(value).__name__) == "bool_" or String(py=py_type(value).__name__) == "bool":
             raise Error("TypeError: lengths entries must be integers, not booleans")
         var scalar = PythonObject(None)
         try:
