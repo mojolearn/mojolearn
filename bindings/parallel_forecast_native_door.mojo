@@ -30,6 +30,7 @@ from bindings.native_process_pool_door import (
 from bindings.native_transport_door import transport_close
 from bindings.tsa_hw_native_door import tsa_array, hw_predict, hw_fit, _check_dims, _set_fitted, _commit
 from bindings.tsa_admission_door import tsa_hw_fields
+from core.mode_answer import MODE_FAMILY_TSA, fast_is_answered_by_identical
 from bindings.tsa_arima_native_door import arima_predict, arima_fit, _series_major
 from bindings.parallel_shard_common_door import (
     shard_ranges,
@@ -87,6 +88,24 @@ comptime PARALLEL_FORECAST_BOUNDARY = SharedSlot[ParallelForecastBoundary, "Mojo
 
 def _b() raises -> PythonObject:
     return native_loaded_module("builtins")
+
+
+def _tsa_mode_runs_identical(mode: PythonObject) raises -> Bool:
+    """The parallel ARIMA driver's identical-only admission of the model's own
+    word: None, `identical`, or `fast` where the identical set answers it for
+    TSA (core/mode_answer.mojo; lane fx-fast-mask), so a model fitted under an
+    answered `fast` shards as its own fit ran. Once per driver call, no loop.
+    (It compared `mode == "identical"` through Python before: one rich
+    compare; now one type test and one String read.)"""
+    if mode is None:
+        return True
+    if py_type(mode) is not _b().str:
+        return False
+    var word = String(py=mode)
+    if word == "identical":
+        return True
+    return word == "fast" and fast_is_answered_by_identical(MODE_FAMILY_TSA)
+
 
 
 def _ranges(count: Int, width: PythonObject) raises -> List[Int]:
@@ -150,8 +169,7 @@ def _predict_arima(estimator: PythonObject, start_obj: PythonObject, end_obj: Py
     var nk = parallel_keys()
     if not py_contains(fields, nk[].k_params_):
         raise Error("ValueError: mojolearn ARIMA: call fit() before predict")
-    var mode = py_get(fields, nk[].k_numeric_mode)
-    if mode is not None and not Bool(py=mode == "identical"):
+    if not _tsa_mode_runs_identical(py_get(fields, nk[].k_numeric_mode)):
         raise Error("ValueError: parallel ARIMA requires IDENTICAL numeric mode")
     if Int(py=py_get(fields, nk[].k_n_exog_, PythonObject(0))) != 0 or exog is not None:
         raise Error("NotImplementedError: parallel ARIMA prediction does not shard exogenous regressors")
@@ -338,8 +356,7 @@ def _fit_arima(estimator: PythonObject, y: PythonObject, devices: PythonObject, 
                     + "them on one device")
     var fields = py_fields(estimator)
     var nk = parallel_keys()
-    var mode = py_get(fields, nk[].k_numeric_mode)
-    if mode is not None and not Bool(py=mode == "identical"):
+    if not _tsa_mode_runs_identical(py_get(fields, nk[].k_numeric_mode)):
         raise Error("ValueError: parallel ARIMA requires IDENTICAL numeric mode")
     if py_type(sps) is not b.int or Int(py=sps) < 1:
         raise Error("ValueError: series_per_shard must be a positive integer")

@@ -18,7 +18,7 @@ A host inference class (`HostExponentialSmoothing`) reads its loaded
 forecast host binding from the module table.
 """
 from bindings.mode_answer_door import answer_mode_object
-from core.mode_answer import MODE_FAMILY_TSA
+from core.mode_answer import MODE_FAMILY_TSA, fast_is_answered_by_identical
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
@@ -109,7 +109,10 @@ def _hw_entries(model: PythonObject, fields: PythonObject, context: PythonObject
     var b = _b()
     if tsa_hw_class(model, context):
         var saved = py_get(fields, nk[].k_numeric_mode)
-        if saved is not None and (py_type(saved) is not b.str or String(saved) != "identical"):
+        # lane fx-fast-mask: a model saved under `fast` where the identical set
+        # answered it (TSA) holds identical state; the host runs it.
+        if saved is not None and (py_type(saved) is not b.str or (String(saved) != "identical" and not (
+                String(saved) == "fast" and fast_is_answered_by_identical(MODE_FAMILY_TSA)))):
             raise Error("ValueError: mojolearn: " + String("ExponentialSmoothing")
                         + " runs IDENTICAL only on the host")
         var module = py_get(py_item(context, nk[].k_modules), py_item(context, nk[].k_hw_host_module))

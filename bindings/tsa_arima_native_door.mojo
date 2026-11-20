@@ -15,7 +15,7 @@ A host inference class (`HostARIMA`) reads its loaded forecast host binding
 from the module table.
 """
 from bindings.mode_answer_door import answer_mode_object
-from core.mode_answer import MODE_FAMILY_TSA
+from core.mode_answer import MODE_FAMILY_TSA, fast_is_answered_by_identical
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from arima.tsa_arima_run import _penalties
@@ -89,7 +89,10 @@ def _arima_entries(model: PythonObject, fields: PythonObject, context: PythonObj
         class_admit(mods, _HOST_ONLY_SLOT, cls, PythonObject(host_only))
     if host_only:
         var saved = py_get(fields, nk[].k_numeric_mode)
-        if saved is not None and (py_type(saved) is not b.str or not Bool(py=saved == "identical")):
+        # lane fx-fast-mask: a model saved under `fast` where the identical set
+        # answered it (TSA) holds identical state; the host runs it.
+        if saved is not None and (py_type(saved) is not b.str or (String(py=saved) != "identical" and not (
+                String(py=saved) == "fast" and fast_is_answered_by_identical(MODE_FAMILY_TSA)))):
             raise Error("ValueError: mojolearn: " + String("ARIMA")
                         + " runs IDENTICAL only on the host; this model was saved " + _repr(saved))
         var module = py_get(py_item(context, nk[].k_modules), py_item(context, nk[].k_hw_host_module))
