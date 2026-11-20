@@ -9,6 +9,8 @@ from providers.python.neural_descriptor_pyapi_door import NeuralDescriptorProvid
 from x_metrics.descriptor_schema import METRICS_PROGRAM_ABI, MP_OPERATION_COUNT
 from bindings.family_common_pack import family_array
 from bindings.classical_arrays_door import classical_address
+from bindings.gp_keys_unpack import gp_keys
+from bindings.py_balanced import py_item
 
 
 struct GPRPredictionRoom(Movable):
@@ -46,9 +48,10 @@ def gpr_score_result(values: GPRScoreValues, target: PythonObject,
     var target_address = Int(py=classical_address(target))
     # Finite/copy refusal precedes the metrics-image selection, as in _Reg.
     var program = gpr_score_prepare(values, target_address)
-    var prog_context = context["family_metrics_prog_context"]
+    var nk = gp_keys()
+    var prog_context = py_item(context, nk[].k_family_metrics_prog_context)
     var entries = _family_entries(PythonObject(None), "x_metrics", prog_context)
-    var provider = neural_descriptor_connect_factory_once(entries["metrics_program_native_api_v1"],
+    var provider = neural_descriptor_connect_factory_once(py_item(entries, nk[].k_metrics_program_native_api_v1),
         String(METRICS_PROGRAM_ABI), MP_OPERATION_COUNT)
     var entry = provider.downcast_value_ptr[NeuralDescriptorProvider]()[].record[0].entry
     var ranges = String(getenv("MOJOLEARN_ARENA_RANGES", "1").strip()) != "0"

@@ -58,7 +58,8 @@ def _kernel_class_table(kernel: PythonObject, table: PythonObject) raises -> Pyt
 
 
 def _kernel_class(kernel: PythonObject, context: PythonObject) raises -> PythonObject:
-    return _kernel_class_table(kernel, context["family_gp_kernel_nodes"])
+    var nk = gp_keys()
+    return _kernel_class_table(kernel, py_item(context, nk[].k_family_gp_kernel_nodes))
 
 
 def _kernel_state(kernel: PythonObject, mut snapshot: GPKernelSnapshot) raises -> PythonObject:
@@ -74,7 +75,8 @@ def _kernel_state(kernel: PythonObject, mut snapshot: GPKernelSnapshot) raises -
 def _kernel_read(kernel: PythonObject, fields: PythonObject, name: PythonObject,
                  optional: Bool = False) raises -> PythonObject:
     var b = native_loaded_module("builtins")
-    var ancestry = py_call(b.type.__dict__["__mro__"].__get__, py_type(kernel))
+    var nk = gp_keys()
+    var ancestry = py_call(py_item(b.type.__dict__, nk[].k___mro__).__get__, py_type(kernel))
     for i in range(len(ancestry)):  # driver-loop: reject replaced field descriptors without invoking them
         if py_contains(_class_fields(ancestry[i]), name):
             raise Error("TypeError: native GP kernel state must use instance fields, not class fields or descriptors")
@@ -93,7 +95,8 @@ def _kernel_walk(kernel: PythonObject, context: PythonObject, mut active: List[P
         raise Error("ValueError: GP kernel graph exceeds native traversal depth")
     active.append(kernel)
     var fields = _kernel_state(kernel, snapshot)
-    var layout = context["family_gp_kernel_nodes"][cls]
+    var nk = gp_keys()
+    var layout = py_item(context, nk[].k_family_gp_kernel_nodes)[cls]
     var how = String(layout[0])
     if how == "pair":
         var left = _kernel_read(kernel, fields, layout[1])
@@ -126,7 +129,7 @@ def _kernel_walk(kernel: PythonObject, context: PythonObject, mut active: List[P
             _kernel_sequence(scales)
             for i in range(len(scales)):  # driver-loop: one value per isotropic/ARD scale
                 values.append(_kernel_scalar(scales[i]))
-        var bounds = _kernel_read(kernel, fields, context["family_gp_kernel_bounds"][cls])
+        var bounds = _kernel_read(kernel, fields, py_item(context, nk[].k_family_gp_kernel_bounds)[cls])
         if py_type(bounds) is py_type(PythonObject("")):
             if String(bounds) != "fixed":
                 raise Error("ValueError: GP kernel bounds string must be 'fixed'")
@@ -167,7 +170,8 @@ def gp_kernel_operation(kernel: PythonObject, operation: String, args: PythonObj
         return _kernel_construct(kernel, operation, inputs, context)
     if operation == "family_gp_kernel_add" or operation == "family_gp_kernel_mul":
         # The constructor below admits both operands with one owner snapshot.
-        var combined = context["family_gp_classes"]["combined"]
+        var nk = gp_keys()
+        var combined = py_item(py_item(context, nk[].k_family_gp_classes), nk[].k_combined)
         _kernel_allocation_class(combined)
         var out = native_storage_allocate(combined)
         var op = 4 if operation == "family_gp_kernel_add" else 5
@@ -217,6 +221,8 @@ from core.native_scalar_decode import native_scalar_real
 from bindings.sequential_admission_door import _one_of
 from bindings.native_owner_lifetime_door import native_release_admit, native_release_weakrefs
 from bindings.py_balanced import py_get, py_setitem
+from bindings.gp_keys_unpack import gp_keys
+from bindings.py_balanced import py_item
 
 def _kernel_input(value: PythonObject, context: PythonObject, depth: Int = 0) raises -> GPKernelInput:
     if depth > 64:
@@ -243,7 +249,8 @@ def _kernel_input(value: PythonObject, context: PythonObject, depth: Int = 0) ra
     if cls is b.float or cls is b.int or cls is b.bool or cls is b.str or cls is b.bytes or cls is b.bytearray:
         result.values.append(Float64(py=py_call(b.float, value)))
         return result^
-    if py_get(context, "ndarray") is not None:
+    var nk = gp_keys()
+    if py_get(context, nk[].k_ndarray) is not None:
         var dtype = native_numpy_dtype(context)
         for code in ["q", "Q", "g", "U", "S"]:  # driver-loop: native long-long/long-double and text scalar aliases
             if cls is py_call(dtype, code).type:
@@ -253,7 +260,7 @@ def _kernel_input(value: PythonObject, context: PythonObject, depth: Int = 0) ra
                     result.values.append(bitcast[DType.float64](native_scalar_buffer(value).real.float64_bits()))
                 return result^
     classical_admit_value(value, context)
-    if _one_of(cls, context["scalar_types"]):
+    if _one_of(cls, py_item(context, nk[].k_scalar_types)):
         var decoded = native_scalar_buffer(value)
         if decoded.complex:
             raise Error("TypeError: GP kernel input requires real numeric values")
@@ -307,7 +314,7 @@ def _kernel_input(value: PythonObject, context: PythonObject, depth: Int = 0) ra
                 little = prefix != ">" and prefix != "!"
                 var unprefixed = String(code[byte=1:])
                 code = unprefixed^
-        if cls is py_get(context, "ndarray") and (code == "O" or code.endswith("w") or code.endswith("s")):
+        if cls is py_get(context, nk[].k_ndarray) and (code == "O" or code.endswith("w") or code.endswith("s")):
             # Read owned scalar references through native indexing; conversion
             # and flattening stay here, without ndarray.tolist/astype callbacks.
             return _kernel_boxed_array(value, shape, context, depth + 1)
@@ -382,7 +389,8 @@ def _kernel_bounds_input(value: PythonObject, count: Int, context: PythonObject)
 
 
 def _kernel_release(value: PythonObject, context: PythonObject, mut active: List[PythonObject]) raises:
-    var classes = gp_mapping_snapshot[False](context["family_gp_kernel_nodes"])
+    var nk = gp_keys()
+    var classes = gp_mapping_snapshot[False](py_item(context, nk[].k_family_gp_kernel_nodes))
     var connected = False
     for i in range(len(classes.keys)):  # driver-loop: exact kernel owners need recursive lifecycle admission
         connected = connected or py_type(value) is classes.keys[i]
@@ -393,9 +401,9 @@ def _kernel_release(value: PythonObject, context: PythonObject, mut active: List
         if value is active[i]:
             raise Error("TypeError: native kernel replacement cannot release a cyclic owner graph")
     native_release_weakrefs(value, context)
-    var ancestry = py_call(native_loaded_module("builtins").type.__dict__["__mro__"].__get__, py_type(value))
+    var ancestry = py_call(py_item(native_loaded_module("builtins").type.__dict__, nk[].k___mro__).__get__, py_type(value))
     for i in range(len(ancestry)):  # driver-loop: destruction cannot invoke a Python finalizer
-        if py_contains(_class_fields(ancestry[i]), "__del__"):
+        if py_contains(_class_fields(ancestry[i]), nk[].k___del__):
             raise Error("TypeError: native kernel replacement cannot release Python finalizers")
     active.append(value)
     var fields = _fields(value)
@@ -421,7 +429,8 @@ def _kernel_construct(kernel: PythonObject, operation: String, args: GPArgumentP
                       context: PythonObject) raises -> PythonObject:
     classical_connect_numpy(context)
     var cls = _kernel_class(kernel, context)
-    var layout = context["family_gp_kernel_nodes"][cls]
+    var nk = gp_keys()
+    var layout = py_item(context, nk[].k_family_gp_kernel_nodes)[cls]
     var how = String(layout[0])
     var updates = GPFieldUpdates()
     if how == "leaf":
@@ -439,7 +448,7 @@ def _kernel_construct(kernel: PythonObject, operation: String, args: GPArgumentP
                 if len(nu.shape) != 0 or len(nu.values) != 1:
                     raise Error("TypeError: Matern nu must be a native scalar")
                 updates.put(layout[2], PythonObject(nu.values[0]))
-        updates.put(context["family_gp_kernel_bounds"][cls], _kernel_bounds_input(args[1], len(input.values), context))
+        updates.put(py_item(context, nk[].k_family_gp_kernel_bounds)[cls], _kernel_bounds_input(args[1], len(input.values), context))
     elif how == "pair":
         # Shared leaves retain one dictionary capture across both operands.
         var snapshot = GPKernelSnapshot()
@@ -488,7 +497,8 @@ def _kernel_name(kernel: PythonObject, context: PythonObject, snapshot: GPKernel
     if not captured:
         raise Error("TypeError: native GP kernel state was not captured by admission")
     var fields = captured.value()
-    var layout = context["family_gp_kernel_nodes"][cls]
+    var nk = gp_keys()
+    var layout = py_item(context, nk[].k_family_gp_kernel_nodes)[cls]
     var how = String(layout[0])
     var b = native_loaded_module("builtins")
     if how == "pair":
@@ -512,9 +522,10 @@ def _kernel_allocation_class(cls: PythonObject) raises:
     var b = native_loaded_module("builtins")
     if py_type(cls) is not b.type:
         raise Error("TypeError: native GP kernel allocation refuses Python metaclass protocols")
-    var ancestry = py_call(b.type.__dict__["__mro__"].__get__, cls)
+    var nk = gp_keys()
+    var ancestry = py_call(py_item(b.type.__dict__, nk[].k___mro__).__get__, cls)
     for i in range(len(ancestry)):  # driver-loop: an owned construction failure must not invoke a finalizer
-        if py_contains(_class_fields(ancestry[i]), "__del__"):
+        if py_contains(_class_fields(ancestry[i]), nk[].k___del__):
             raise Error("TypeError: native GP kernel allocation refuses Python finalizers")
 
 

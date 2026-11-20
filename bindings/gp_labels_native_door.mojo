@@ -51,6 +51,7 @@ from bindings.gp_label_input_boundary_unpack import gp_label_input
 from bindings.gp_label_order_boundary_unpack import gp_integer_classes
 from bindings.gp_mixed_label_boundary_door import gp_mixed_classes, gp_mixed_index, gp_mixed_codes
 from core.labels_native_api import LabelsPrepareRequest, LabelsGatherRequest
+from bindings.gp_keys_unpack import gp_keys
 
 comptime _NAN_LABEL = "mojolearn: y contains a NaN label; NaN is not a class"
 
@@ -107,7 +108,8 @@ def _gp_buffer_labels[S: _TextCodeStorage](y: PythonObject, base: PythonObject, 
     (a list, a strided or non-native buffer, a matrix, an empty vector: every
     one of them yields the same classes and codes there)."""
     var ty = py_type(y)
-    var ndarray = py_get(context, "ndarray")
+    var nk = gp_keys()
+    var ndarray = py_get(context, nk[].k_ndarray)
     var is_array = classical_is_array(y, context)
     if not is_array and (ndarray is None or not (ty is ndarray)):
         return None
@@ -139,7 +141,8 @@ def _gp_float_storage_labels[S: _TextCodeStorage](y: PythonObject, base: PythonO
     step and its refusals."""
     if labels_float_storage(y, context, integral=False) != 0:
         return None
-    var ndarray = py_get(context, "ndarray")
+    var nk = gp_keys()
+    var ndarray = py_get(context, nk[].k_ndarray)
     var wide: Bool
     var address: Int
     if ndarray is not None and py_type(y) is ndarray:
@@ -189,7 +192,8 @@ def _gp_integer_storage_labels[S: _TextCodeStorage](y: PythonObject, base: Pytho
     with a bounded number of CPython calls (lane thin-unpack-kit, 2026-11-11).
     Classes, codes and refusals are unchanged. Bool storage (the walk's
     sorted route), uint64, empty and 0-D targets return None and keep the walk."""
-    var ndarray = py_get(context, "ndarray")
+    var nk = gp_keys()
+    var ndarray = py_get(context, nk[].k_ndarray)
     var layout: BufferLayout
     var kind: Int
     if ndarray is not None and py_type(y) is ndarray:
@@ -320,7 +324,8 @@ def gp_encode_labels_into[S: _TextCodeStorage](y: PythonObject, base: PythonObje
     # exact ndarray lists the same Python numbers in the same order (other
     # storage, e.g. datetime, lists differently and keeps the walk).
     var stored = labels_storage_source(y, context)
-    if stored is not None and stored is not y and py_type(stored) is py_get(context, "ndarray"):
+    var nk = gp_keys()
+    if stored is not None and stored is not y and py_type(stored) is py_get(context, nk[].k_ndarray):
         var kind = String(stored.dtype.kind)
         if kind == "i" or kind == "u" or kind == "b" or kind == "f":
             return gp_encode_labels_into[S](stored, base, context)
@@ -389,7 +394,8 @@ def _gp_number_kind(value: PythonObject, context: PythonObject) raises -> Int:
         return 2
     if cls is b.str or cls is b.bytes:
         return 3
-    var scalars = py_get(context, "scalar_types")
+    var nk = gp_keys()
+    var scalars = py_get(context, nk[].k_scalar_types)
     if scalars is not None:
         for i in range(len(scalars)):  # driver-loop: over the connected NumPy scalar types, by identity
             if cls is scalars[i]:

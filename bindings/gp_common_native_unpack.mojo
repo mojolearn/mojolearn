@@ -20,6 +20,8 @@ from bindings.family_common_pack import family_call, family_array
 from bindings.classical_arrays_door import classical_address
 from bindings.archive_schema_native_door import _schema_kernel_layouts
 from bindings.gp_kernel_public_native_door import gp_kernel_native_nodes
+from bindings.gp_keys_unpack import gp_keys
+from bindings.py_balanced import py_item
 
 
 
@@ -31,7 +33,8 @@ def gp_caps(binding: PythonObject) raises -> Int:
 
 def gp_kernel_arrays(kernel: PythonObject, context: PythonObject) raises -> PythonObject:
     """UNPACK the admitted postfix graph into one native storage owner."""
-    var table = context["family_gp_kernel_nodes"]
+    var nk = gp_keys()
+    var table = py_item(context, nk[].k_family_gp_kernel_nodes)
     _schema_kernel_layouts(table)
     var nodes = gp_kernel_native_nodes(kernel, table)
     var storage = GPKernelStorage()
@@ -86,11 +89,12 @@ def _gp_kernel_class(kernel: PythonObject, table: PythonObject) raises -> Python
     """The class of `kernel`'s ancestry that `table` connects (the walk
     archive_schema_native's layout lookup makes)."""
     var b = native_loaded_module("builtins")
-    var mro = py_call(b.type.__dict__["__mro__"].__get__, py_type(kernel))
+    var nk = gp_keys()
+    var mro = py_call(py_item(b.type.__dict__, nk[].k___mro__).__get__, py_type(kernel))
     for i in range(len(mro)):  # driver-loop: over the kernel class ancestry metadata
         if py_contains(table, mro[i]):
             return mro[i]
-        if py_contains(py_call(b.type.__dict__["__dict__"].__get__, mro[i]), "_nodes"):
+        if py_contains(py_call(py_item(b.type.__dict__, nk[].k___dict__).__get__, mro[i]), nk[].k__nodes):
             break
     raise Error("TypeError: mojolearn: a " + String(py_type(kernel).__name__) + " kernel has no saved node layout")
 
@@ -102,7 +106,8 @@ def _gp_fixed(bounds: PythonObject) raises -> Bool:
 
 def gp_free(kernel: PythonObject, mut result: GPFreeParameters, context: PythonObject) raises:
     """Unpack admitted kernel hyperparameters in their original postfix order."""
-    var nodes_table = context["family_gp_kernel_nodes"]
+    var nk = gp_keys()
+    var nodes_table = py_item(context, nk[].k_family_gp_kernel_nodes)
     var cls = _gp_kernel_class(kernel, nodes_table)
     var layout = nodes_table[cls]
     var fields = py_fields(kernel)
@@ -116,7 +121,7 @@ def gp_free(kernel: PythonObject, mut result: GPFreeParameters, context: PythonO
         for _ in range(len(saved)):  # driver-loop: saved kernel nodes are fixed
             result.flags.append(Int32(0))
     elif how == "leaf":
-        var pairs = fields[context["family_gp_kernel_bounds"][cls]]
+        var pairs = fields[py_item(context, nk[].k_family_gp_kernel_bounds)[cls]]
         if _gp_fixed(pairs):
             result.flags.append(Int32(0))
             return
@@ -135,9 +140,10 @@ def gp_free(kernel: PythonObject, mut result: GPFreeParameters, context: PythonO
 
 
 def gp_n_dims(kernel: PythonObject, context: PythonObject) raises -> Int:
+    var nk = gp_keys()
     # Count metadata without narrowing a bound/value that the caller does not
     # otherwise consume yet. This preserves the former count-only refusal order.
-    var table = context["family_gp_kernel_nodes"]
+    var table = py_item(context, nk[].k_family_gp_kernel_nodes)
     var cls = _gp_kernel_class(kernel, table)
     var layout = table[cls]
     var fields = py_fields(kernel)
@@ -147,7 +153,7 @@ def gp_n_dims(kernel: PythonObject, context: PythonObject) raises -> Int:
     if how == "nodes":
         return 0
     if how == "leaf":
-        if _gp_fixed(fields[context["family_gp_kernel_bounds"][cls]]):
+        if _gp_fixed(fields[py_item(context, nk[].k_family_gp_kernel_bounds)[cls]]):
             return 0
         return len(fields[layout[3]]) if layout[3] is not None else 1
     raise Error("RuntimeError: unknown kernel node layout " + how)

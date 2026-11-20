@@ -54,6 +54,8 @@ from bindings.gp_score_labels_boundary_door import gpc_score_result
 from bindings.gp_labels_native_door import gp_decode_score_labels
 from bindings.mcls_common_unpack import mc_shape_of
 from bindings.host_inference_scalars_door import host_inference_scalar
+from bindings.gp_keys_unpack import gp_keys
+from bindings.py_balanced import py_item
 
 comptime _NAME = "mojolearn GaussianProcessClassifier"
 comptime _K_PROD = 5
@@ -68,22 +70,23 @@ def _gpc_ext(model: PythonObject, binding: PythonObject, context: PythonObject) 
 def _gpc_default_kernel(context: PythonObject) raises -> PythonObject:
     """`ConstantKernel(1.0) * RBF(1.0)` with scikit-learn's default bounds."""
     var b = native_loaded_module("builtins")
-    var classes = context["family_gp_classes"]
-    var pair_bounds = context["family_gp_default_bounds"]
-    var const = family_call(b.object.__new__, classes["const"])
+    var nk = gp_keys()
+    var classes = py_item(context, nk[].k_family_gp_classes)
+    var pair_bounds = py_item(context, nk[].k_family_gp_default_bounds)
+    var const = family_call(b.object.__new__, py_item(classes, nk[].k_const))
     var cf = py_fields(const)
-    py_setitem(cf, "constant_value", PythonObject(Float64(1.0)))
-    py_setitem(cf, "constant_value_bounds", Python.list(pair_bounds))
-    var rbf = family_call(b.object.__new__, classes["rbf"])
+    py_setitem(cf, nk[].k_constant_value, PythonObject(Float64(1.0)))
+    py_setitem(cf, nk[].k_constant_value_bounds, Python.list(pair_bounds))
+    var rbf = family_call(b.object.__new__, py_item(classes, nk[].k_rbf))
     var rf = py_fields(rbf)
-    py_setitem(rf, "length_scale", Python.list(PythonObject(Float64(1.0))))
-    py_setitem(rf, "length_scale_bounds", Python.list(pair_bounds))
-    var pair = family_call(b.object.__new__, classes["combined"])
+    py_setitem(rf, nk[].k_length_scale, Python.list(PythonObject(Float64(1.0))))
+    py_setitem(rf, nk[].k_length_scale_bounds, Python.list(pair_bounds))
+    var pair = family_call(b.object.__new__, py_item(classes, nk[].k_combined))
     var pf = py_fields(pair)
-    py_setitem(pf, "a", const)
-    py_setitem(pf, "b", rbf)
-    py_setitem(pf, "op", PythonObject(_K_PROD))
-    py_setitem(pf, "sym", PythonObject("*"))
+    py_setitem(pf, nk[].k_a, const)
+    py_setitem(pf, nk[].k_b, rbf)
+    py_setitem(pf, nk[].k_op, PythonObject(_K_PROD))
+    py_setitem(pf, nk[].k_sym, PythonObject("*"))
     return pair
 
 
@@ -106,7 +109,8 @@ def gpc_validate(model: PythonObject, context: PythonObject) raises:
     var n_jobs = family_field(fields, "n_jobs")
     if kernel is None:
         kernel = _gpc_default_kernel(context)
-    if not family_isinstance(kernel, context["family_gp_kernel_base"]):
+    var nk = gp_keys()
+    if not family_isinstance(kernel, py_item(context, nk[].k_family_gp_kernel_base)):
         raise Error("TypeError: " + String(_NAME) + ": kernel must be a composition of mojolearn's RBF, "
                     + "Matern, ConstantKernel and WhiteKernel (DEVIATION 1761)")
     if not (optimizer is None or (family_is_str(optimizer) and String(family_call(optimizer.lower)) == "none")):
@@ -143,8 +147,8 @@ def gpc_validate(model: PythonObject, context: PythonObject) raises:
     if n_jobs is not None:
         raise Error("NotImplementedError: " + String(_NAME) + ": n_jobs=" + family_repr(n_jobs) + " is refused; the one-vs-rest "
                     + "binary fits run one after another on one device")
-    py_setitem(fields, "_kernel", kernel)
-    py_setitem(fields, "_max_iter_predict", family_call(b.int, max_iter))
+    py_setitem(fields, nk[].k__kernel, kernel)
+    py_setitem(fields, nk[].k__max_iter_predict, family_call(b.int, max_iter))
 
 
 @fieldwise_init
@@ -177,16 +181,17 @@ def _gpc_binary_result(context: PythonObject, y01: PythonObject, l_out: PythonOb
                 wsr: PythonObject, lml: Float64, n_iter: Int, nb: Int) raises -> GPCBinaryPublication:
     """A `_BinaryLaplace(y_train, L, pi, W_sr, lml, n_iter, nb)`, its fields set."""
     var b = native_loaded_module("builtins")
-    var fit = family_call(b.object.__new__, context["family_gp_binary_laplace"])
+    var nk = gp_keys()
+    var fit = family_call(b.object.__new__, py_item(context, nk[].k_family_gp_binary_laplace))
     var f = py_fields(fit)
-    py_setitem(f, "y_train_", y01)
-    py_setitem(f, "L_", l_out)
-    py_setitem(f, "pi_", pi)
-    py_setitem(f, "W_sr_", wsr)
-    py_setitem(f, "log_marginal_likelihood_value_", PythonObject(lml))
+    py_setitem(f, nk[].k_y_train_, y01)
+    py_setitem(f, nk[].k_L_, l_out)
+    py_setitem(f, nk[].k_pi_, pi)
+    py_setitem(f, nk[].k_W_sr_, wsr)
+    py_setitem(f, nk[].k_log_marginal_likelihood_value_, PythonObject(lml))
     var iterations = PythonObject(n_iter)
-    py_setitem(f, "n_iter_", iterations)
-    py_setitem(f, "nb_", PythonObject(nb))
+    py_setitem(f, nk[].k_n_iter_, iterations)
+    py_setitem(f, nk[].k_nb_, PythonObject(nb))
     return GPCBinaryPublication(fit, iterations, lml)
 
 
@@ -328,13 +333,14 @@ def gpc_worker_fit(binding: PythonObject, x: PythonObject, codes: PythonObject, 
     var fit = _gpc_fit_binary_run(connection, x, Int(py=classical_address(codes)), arrays, max_iter, k, context)
     _ = codes
     var fields = Python.dict()
-    py_setitem(fields, "y_train_", fit.targets)
-    py_setitem(fields, "L_", fit.factor)
-    py_setitem(fields, "pi_", fit.pi)
-    py_setitem(fields, "W_sr_", fit.wsr)
-    py_setitem(fields, "log_marginal_likelihood_value_", PythonObject(fit.likelihood))
-    py_setitem(fields, "n_iter_", PythonObject(fit.iterations))
-    py_setitem(fields, "nb_", PythonObject(fit.nb))
+    var nk = gp_keys()
+    py_setitem(fields, nk[].k_y_train_, fit.targets)
+    py_setitem(fields, nk[].k_L_, fit.factor)
+    py_setitem(fields, nk[].k_pi_, fit.pi)
+    py_setitem(fields, nk[].k_W_sr_, fit.wsr)
+    py_setitem(fields, nk[].k_log_marginal_likelihood_value_, PythonObject(fit.likelihood))
+    py_setitem(fields, nk[].k_n_iter_, PythonObject(fit.iterations))
+    py_setitem(fields, nk[].k_nb_, PythonObject(fit.nb))
     return fields
 
 
@@ -344,26 +350,27 @@ def _gpc_set_fitted(fields: PythonObject, x: PythonObject, classes: PythonObject
     lifecycle_admit_fields(fields)
     var b = native_loaded_module("builtins")
     var n_classes = len(classes)
-    py_setitem(fields, "X_train_", x)
-    py_setitem(fields, "n_features_in_", PythonObject(Int(py=x.shape[1])))
-    py_setitem(fields, "classes_", py_call(b.list, classes))
-    py_setitem(fields, "n_classes_", PythonObject(n_classes))
-    py_setitem(fields, "estimators_", fits.members)
-    py_setitem(fields, "kernel_", fields["_kernel"])
+    var nk = gp_keys()
+    py_setitem(fields, nk[].k_X_train_, x)
+    py_setitem(fields, nk[].k_n_features_in_, PythonObject(Int(py=x.shape[1])))
+    py_setitem(fields, nk[].k_classes_, py_call(b.list, classes))
+    py_setitem(fields, nk[].k_n_classes_, PythonObject(n_classes))
+    py_setitem(fields, nk[].k_estimators_, fits.members)
+    py_setitem(fields, nk[].k_kernel_, py_item(fields, nk[].k__kernel))
     if n_classes == 2:
         var only = py_fields(fits.members[0])
-        py_setitem(fields, "y_train_", only["y_train_"])
-        py_setitem(fields, "L_", only["L_"])
-        py_setitem(fields, "pi_", only["pi_"])
-        py_setitem(fields, "W_sr_", only["W_sr_"])
-        py_setitem(fields, "n_iter_", only["n_iter_"])
-        py_setitem(fields, "log_marginal_likelihood_value_", only["log_marginal_likelihood_value_"])
+        py_setitem(fields, nk[].k_y_train_, py_item(only, nk[].k_y_train_))
+        py_setitem(fields, nk[].k_L_, py_item(only, nk[].k_L_))
+        py_setitem(fields, nk[].k_pi_, py_item(only, nk[].k_pi_))
+        py_setitem(fields, nk[].k_W_sr_, py_item(only, nk[].k_W_sr_))
+        py_setitem(fields, nk[].k_n_iter_, py_item(only, nk[].k_n_iter_))
+        py_setitem(fields, nk[].k_log_marginal_likelihood_value_, py_item(only, nk[].k_log_marginal_likelihood_value_))
         return
     var iters = Python.list()
     for i in range(len(fits.iterations)):  # driver-loop: public n_iter_ retains each member's exact scalar object
         _ = py_call(iters.append, fits.iterations[i])
-    py_setitem(fields, "n_iter_", iters)
-    py_setitem(fields, "log_marginal_likelihood_value_", PythonObject(fits.summary.likelihood()))
+    py_setitem(fields, nk[].k_n_iter_, iters)
+    py_setitem(fields, nk[].k_log_marginal_likelihood_value_, PythonObject(fits.summary.likelihood()))
 
 
 def _gpc_fit(model: PythonObject, args: GPArgumentPins, context: PythonObject) raises:
@@ -372,7 +379,8 @@ def _gpc_fit(model: PythonObject, args: GPArgumentPins, context: PythonObject) r
     gpc_validate(model, context)
     var fields = py_fields(model)
     var source = admit_family(args[2], 2, "X", context).array
-    py_setitem(fields, "input_copied_", PythonObject(not (source is args[2])))
+    var nk = gp_keys()
+    py_setitem(fields, nk[].k_input_copied_, PythonObject(not (source is args[2])))
     var x = gp_fit_owned(source, args[2], context)
     _ = source^
     var n_rows = Int(py=x.shape[0])
@@ -387,7 +395,7 @@ def _gpc_fit(model: PythonObject, args: GPArgumentPins, context: PythonObject) r
     if n_classes == 1:
         raise Error(String(_NAME) + " requires 2 or more distinct classes; got 1 class "
                     + "(only class " + family_repr(classes[0]) + " is present)")
-    var arrays = gp_kernel_arrays(fields["_kernel"], context)
+    var arrays = gp_kernel_arrays(py_item(fields, nk[].k__kernel), context)
     var ext = _gpc_ext(model, args[0], context)
     var columns = List[Int]()
     if n_classes == 2:
@@ -395,7 +403,7 @@ def _gpc_fit(model: PythonObject, args: GPArgumentPins, context: PythonObject) r
     else:
         for k in range(n_classes):  # driver-loop: over the one-vs-rest classes
             columns.append(k)
-    var max_iter = Int(py=fields["_max_iter_predict"])
+    var max_iter = Int(py=py_item(fields, nk[].k__max_iter_predict))
     var fits: GPCFitPublication
     if (gp_caps(ext) & 1) == 1:
         fits = _gpc_fit_all(ext, x, codes, arrays, max_iter, columns, context)
@@ -415,12 +423,13 @@ def _gpc_query(fields: PythonObject, source: PythonObject, context: PythonObject
     `entry_tests` (the gpc_predict_all entries, which return the query's
     status words) keeps a cross-validation fold on the device; any other
     route tests the query first (gp_query_scan)."""
-    if not py_contains(fields, PythonObject("estimators_")):
+    var nk = gp_keys()
+    if not py_contains(fields, nk[].k_estimators_):
         raise Error(String(_NAME) + ": call fit() or load() first")
     # The public door already admitted this X as C-order float32 and
     # registered it (bindings/gp_svm_records.mojo): no second snapshot.
     var q = gp_query(source, "GaussianProcessClassifier", context, entry_tests)
-    var fitted = Int(py=fields["n_features_in_"])
+    var fitted = Int(py=py_item(fields, nk[].k_n_features_in_))
     if q.cols != fitted:
         raise Error(String(_NAME) + ": X has " + String(q.cols) + " features, fit saw " + String(fitted))
     if not entry_tests:
@@ -441,7 +450,8 @@ def _gpc_latent(ext: PythonObject, fields: PythonObject, est: PythonObject, q: P
     var xt = gp_f32(fields, "X_train_", 2, context)
     var arrays = kernel_arrays
     if arrays is None:
-        arrays = gp_kernel_arrays(fields["_kernel"], context)
+        var nk = gp_keys()
+        arrays = gp_kernel_arrays(py_item(fields, nk[].k__kernel), context)
     var own = py_fields(est)
     var y01 = gp_f32(own, "y_train_", -1, context)
     var pi = gp_f32(own, "pi_", -1, context)
@@ -550,7 +560,8 @@ def _gpc_predict_all(model: PythonObject, ext: PythonObject, fields: PythonObjec
     var n_train = Int(py=xt.shape[0])
     var n_features = Int(py=xt.shape[1])
     var arrays = kernel_arrays
-    var fits = fields["estimators_"]
+    var nk = gp_keys()
+    var fits = py_item(fields, nk[].k_estimators_)
     var k = len(fits)
     var probabilities = PythonObject(None)
     var codes = List[Int64]()
@@ -564,7 +575,7 @@ def _gpc_predict_all(model: PythonObject, ext: PythonObject, fields: PythonObjec
     var tables = GPCQueryTables(k)
     var kept = List[PythonObject]()
     var mirrors = List[PythonObject]()
-    var can_mirror = xt is fields["X_train_"]
+    var can_mirror = xt is py_item(fields, nk[].k_X_train_)
     if can_mirror:
         mirrors.append(xt)
     var names = Python.tuple("y_train_", "pi_", "W_sr_", "L_")
@@ -659,7 +670,8 @@ def _gpc_ovr_combine(ext: PythonObject, cols: List[List[Float64]], n_star: Int,
 def _gpc_columns(ext: PythonObject, fields: PythonObject, q: PythonObject, context: PythonObject,
                  kernel_arrays: PythonObject) raises -> List[List[Float64]]:
     var cols = List[List[Float64]]()
-    var fits = fields["estimators_"]
+    var nk = gp_keys()
+    var fits = py_item(fields, nk[].k_estimators_)
     for i in range(len(fits)):  # driver-loop: preserve the existing non-fused OVR route
         var latent = _gpc_latent(ext, fields, fits[i], q, True, 0, context, kernel_arrays, 0)
         var probability = List[Float64]()
@@ -675,14 +687,15 @@ def _gpc_predict_proba(model: PythonObject, args: GPArgumentPins, context: Pytho
     var ext = _gpc_ext(model, args[0], context)
     var all_entry = (gp_caps(ext) & 1) == 1
     var gq = _gpc_query(fields, args[1], context, all_entry)
+    var nk = gp_keys()
     # Packed once per kernel state of this model (bindings/gp_svm_records.mojo).
-    var arrays = gp_kernel_arrays_reused(model, fields["_kernel"], context)
+    var arrays = gp_kernel_arrays_reused(model, py_item(fields, nk[].k__kernel), context)
     if all_entry:
         return _gpc_predict_all(model, ext, fields, gq, 2, context, arrays).probabilities
     var q = gq.q
-    if Int(py=fields["n_classes_"]) == 2:
+    if Int(py=py_item(fields, nk[].k_n_classes_)) == 2:
         # `[1 - p, p]` from the binding (`gpc_binary_out`)
-        return _gpc_latent(ext, fields, fields["estimators_"][0], q, True, 2, context, arrays).output
+        return _gpc_latent(ext, fields, py_item(fields, nk[].k_estimators_)[0], q, True, 2, context, arrays).output
     var cols = _gpc_columns(ext, fields, q, context, arrays)
     return _gpc_ovr_combine(ext, cols, Int(py=q.shape[0]), context).probabilities
 
@@ -702,15 +715,16 @@ def _gpc_prediction_codes(model: PythonObject, binding: PythonObject,
     var all_entry = (gp_caps(ext) & 1) == 1
     var gq = _gpc_query(fields, source, context, all_entry)
     var q = gq.q
+    var nk = gp_keys()
     # Packed once per kernel state of this model (bindings/gp_svm_records.mojo).
-    var arrays = gp_kernel_arrays_reused(model, fields["_kernel"], context)
+    var arrays = gp_kernel_arrays_reused(model, py_item(fields, nk[].k__kernel), context)
     var codes = List[Int64]()
     if all_entry:
         var result = _gpc_predict_all(model, ext, fields, gq, 1, context, arrays)
         swap(codes, result.codes)
-    elif Int(py=fields["n_classes_"]) == 2:
+    elif Int(py=py_item(fields, nk[].k_n_classes_)) == 2:
         # `mean > 0` codes from the binding (`gpc_binary_out`)
-        var result = _gpc_latent(ext, fields, fields["estimators_"][0], q, False, 1, context, arrays, 0, True)
+        var result = _gpc_latent(ext, fields, py_item(fields, nk[].k_estimators_)[0], q, False, 1, context, arrays, 0, True)
         swap(codes, result.codes)
     else:
         var n_star = Int(py=q.shape[0])
@@ -723,7 +737,7 @@ def _gpc_prediction_codes(model: PythonObject, binding: PythonObject,
         _ = cast_elements(codes32.address(), HP_I32, Int(codes.unsafe_ptr()), HP_I64, n_star)
         _ = codes32  # keep the Python object alive through the native call above
         _ = codes32^
-    return GPCPredictionCodes(codes^, fields["classes_"])
+    return GPCPredictionCodes(codes^, py_item(fields, nk[].k_classes_))
 
 
 def _gpc_latent_mean_and_variance(model: PythonObject, args: GPArgumentPins, context: PythonObject) raises -> PythonObject:
@@ -731,14 +745,15 @@ def _gpc_latent_mean_and_variance(model: PythonObject, args: GPArgumentPins, con
     classical_connect_numpy(context)
     var fields = py_fields(model)
     var q = _gpc_query(fields, args[1], context).q
-    var n_classes = Int(py=fields["n_classes_"])
+    var nk = gp_keys()
+    var n_classes = Int(py=py_item(fields, nk[].k_n_classes_))
     if n_classes > 2:
         raise Error("Returning the mean and variance of the latent function f is "
                     + "only supported for binary classification, received "
                     + String(n_classes) + " classes.")
     var ext = _gpc_ext(model, args[0], context)
-    var latent = _gpc_latent(ext, fields, fields["estimators_"][0], q, True, 0, context,
-                             gp_kernel_arrays_reused(model, fields["_kernel"], context), 3)
+    var latent = _gpc_latent(ext, fields, py_item(fields, nk[].k_estimators_)[0], q, True, 0, context,
+                             gp_kernel_arrays_reused(model, py_item(fields, nk[].k__kernel), context), 3)
     return Python.tuple(latent.mean, latent.variance)
 
 
@@ -757,11 +772,12 @@ def gp_classifier_operation(model: PythonObject, operation: String, args: GPArgu
         if Bool(py=args[1]):
             raise Error("Gradient can only be evaluated for theta!=None")
         var fields = _fields(model)
-        if not py_contains(fields, "estimators_"):
+        var nk = gp_keys()
+        if not py_contains(fields, nk[].k_estimators_):
             raise Error(String(_NAME) + ": call fit() first")
         # Return the stored native scalar without calling a descriptor or
         # conversion protocol; clone_kernel remains accepted and unused.
-        var result = fields["log_marginal_likelihood_value_"]
+        var result = py_item(fields, nk[].k_log_marginal_likelihood_value_)
         host_inference_scalar(result, context)
         return result
     if operation == "family_gp_gpc_fit":

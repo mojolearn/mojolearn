@@ -8,6 +8,8 @@ from bindings.mode_metadata_native_door import _class_fields
 from bindings.classical_attributes_door import _type_mro
 from bindings.host_inference_scalars_door import host_inference_scalar
 from bindings.classical_pandas_door import classical_admit_value
+from bindings.gp_keys_unpack import gp_keys
+from bindings.py_balanced import py_item
 
 
 def _gp_scalar_fields(fields: PythonObject, names: PythonObject, context: PythonObject) raises:
@@ -27,7 +29,8 @@ comptime _BINARY_CLASS_SLOT = "gp_binary_class_namespace_v1"
 
 def _gp_admit_binary_class(context: PythonObject) raises:
     var b = native_loaded_module("builtins")
-    var cls = context["family_gp_binary_laplace"]
+    var nk = gp_keys()
+    var cls = py_item(context, nk[].k_family_gp_binary_laplace)
     if py_type(cls) is not b.type:
         raise Error("TypeError: GP binary state requires ordinary native class metadata")
     # The namespace comparison below depends only on the class rows (watched,
@@ -35,13 +38,13 @@ def _gp_admit_binary_class(context: PythonObject) raises:
     # once per class state instead of on every GP call.
     var mods = NativeModules()
     var admitted = class_record(mods, _BINARY_CLASS_SLOT, cls)
-    if admitted is not None and admitted is context["family_gp_binary_namespace"]:
+    if admitted is not None and admitted is py_item(context, nk[].k_family_gp_binary_namespace):
         return
     var ancestry = _type_mro(cls)
     if len(ancestry) != 2 or ancestry[1] is not b.object:
         raise Error("TypeError: GP binary state ancestry changed after connection")
     var names = _class_fields(cls)
-    var snapshot = context["family_gp_binary_namespace"]
+    var snapshot = py_item(context, nk[].k_family_gp_binary_namespace)
     if py_type(snapshot) is not b.dict or len(names) != len(snapshot):
         raise Error("TypeError: GP binary state class changed after connection")
     var keys = py_call(b.list, names)

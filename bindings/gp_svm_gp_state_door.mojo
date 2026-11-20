@@ -21,6 +21,8 @@ from bindings.gp_kernel_cache_boundary_door import gp_packed_kernel_reused, GPKe
 from bindings.gp_state_cache_boundary_unpack import GPPreparedState
 from bindings.gp_svm_records_door import gpsvm_builtin_scalar
 from core.shared_slot import SharedSlot
+from bindings.gp_keys_unpack import gp_keys
+from bindings.py_balanced import py_item
 
 
 comptime _KERNEL_CLASS_SLOT = "gp_kernel_class_admitted_v1"
@@ -88,12 +90,13 @@ def _gp_state_stamp(model: PythonObject, fields: PythonObject,
         return
     var content = ContentRecord()
     content_fields(content, fields, 4)
-    var fits = py_get(fields, "estimators_")
+    var nk = gp_keys()
+    var fits = py_get(fields, nk[].k_estimators_)
     if fits is not None:
         var b = native_loaded_module("builtins")
         if py_type(fits) is b.list or py_type(fits) is b.tuple:
             for i in range(len(fits)):  # driver-loop: retained one-vs-rest content words
-                if py_type(fits[i]) is context["family_gp_binary_laplace"]:
+                if py_type(fits[i]) is py_item(context, nk[].k_family_gp_binary_laplace):
                     content_object(content, fits[i], 4)
     for i in range(len(held.nodes)):  # driver-loop: recorded kernel content words
         content_object(content, held.nodes[i], 4)
@@ -149,7 +152,8 @@ def _gp_state_key(mut mods: NativeModules, fields: PythonObject,
                   nodes: List[PythonObject], context: PythonObject) raises -> GPKernelKey:
     var key = _gp_state_context_key(context)
     gp_key_fields(key, fields, _gp_skip())
-    var fits = py_get(fields, "estimators_")
+    var nk = gp_keys()
+    var fits = py_get(fields, nk[].k_estimators_)
     if fits is not None:
         var b = mods.module("builtins")
         if py_type(fits) is b.list or py_type(fits) is b.tuple:
@@ -158,7 +162,7 @@ def _gp_state_key(mut mods: NativeModules, fields: PythonObject,
                 var member = fits[i]
                 key.pin(member)
                 key.pin(py_type(member))
-                if py_type(member) is context["family_gp_binary_laplace"]:
+                if py_type(member) is py_item(context, nk[].k_family_gp_binary_laplace):
                     gp_key_fields(key, _fields(mods, member), none)
     key.count(len(nodes))
     for i in range(len(nodes)):  # driver-loop: recorded kernel owner identities
@@ -170,9 +174,10 @@ def _gp_state_key(mut mods: NativeModules, fields: PythonObject,
 
 
 def _gp_residual_scalars(fields: PythonObject, names: PythonObject, context: PythonObject) raises:
+    var nk = gp_keys()
     # host_inference_scalar admits builtin and NumPy scalars by type; a 0-d
     # ndarray also by its size and rank, which an in-place reshape can change.
-    var array_type = py_get(context, "ndarray")
+    var array_type = py_get(context, nk[].k_ndarray)
     if array_type is None:
         return
     for i in range(len(names)):  # driver-loop: fixed scalar-state field schema
@@ -182,10 +187,11 @@ def _gp_residual_scalars(fields: PythonObject, names: PythonObject, context: Pyt
 
 
 def _gp_residual_arrays(fields: PythonObject, names: PythonObject, context: PythonObject) raises:
+    var nk = gp_keys()
     # An exact ndarray or Array is admitted by its type alone; anything else
     # (torch, memoryview, containers) is admitted again.
-    var array_type = py_get(context, "ndarray")
-    var array_class = context["array_class"]
+    var array_type = py_get(context, nk[].k_ndarray)
+    var array_class = py_item(context, nk[].k_array_class)
     for i in range(len(names)):  # driver-loop: fixed retained-buffer schema
         var value = py_get(fields, names[i])
         if value is None:
@@ -228,6 +234,7 @@ def gp_state_admitted(model: PythonObject, fields: PythonObject, scalar_names: P
         _ = held.downcast_value_ptr[GPPreparedState]()
     except:
         return False  # The prior private tuple record is admitted afresh.
+    var nk = gp_keys()
     try:
         var record = held.downcast_value_ptr[GPPreparedState]()
         # Generation/content fast path retains exactly its former eligibility.
@@ -249,10 +256,10 @@ def gp_state_admitted(model: PythonObject, fields: PythonObject, scalar_names: P
                     gp_admit_kernel(value, context)
         _gp_residual_scalars(fields, scalar_names, context)
         _gp_residual_arrays(fields, array_names, context)
-        var classes = py_get(fields, "classes_")
+        var classes = py_get(fields, nk[].k_classes_)
         if classes is not None and not _gp_classes_settled(mods, classes, context):
             classical_admit_value(classifier_label_list(classes, context), context)
-        var fits = py_get(fields, "estimators_")
+        var fits = py_get(fields, nk[].k_estimators_)
         if fits is not None:
             for i in range(len(fits)):  # driver-loop: retained one-vs-rest binary fit owners
                 var own = _fields(mods, fits[i])
@@ -327,7 +334,8 @@ def gp_x_deferred(value: PythonObject) raises -> Bool:
 def gp_x_known(value: PythonObject, context: PythonObject) raises -> Bool:
     """`value` is the C-order float32 X the running public door admitted."""
     var cls = py_type(value)
-    if cls is not context["array_class"] and cls is not py_get(context, "ndarray"):
+    var nk = gp_keys()
+    if cls is not py_item(context, nk[].k_array_class) and cls is not py_get(context, nk[].k_ndarray):
         return False
     var g = GP_ADMITTED_X.get_or_create_ptr()
     for i in range(len(g[].items)):  # small-loop(items: the running doors' admitted inputs, usually one)

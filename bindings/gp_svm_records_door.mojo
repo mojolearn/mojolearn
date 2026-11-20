@@ -36,6 +36,8 @@ from bindings.py_model_records import records_get, records_put, records_drop, re
 from bindings.py_balanced import py_call, py_type, py_get, py_contains
 from bindings.mode_metadata_native_door import _class_fields
 from bindings.classical_attributes_door import _type_mro
+from bindings.gp_keys_unpack import gp_keys
+from bindings.py_balanced import py_item
 
 
 comptime _CALLBACK_SLOT = "gpsvm_no_fit_callback_class_v1"
@@ -50,14 +52,15 @@ def gpsvm_no_fit_callbacks(model: PythonObject, fields: PythonObject, message: S
     scan runs once per class state; the instance field is read every call."""
     var mods = NativeModules()
     var cls = py_type(model)
+    var nk = gp_keys()
     if class_record(mods, _CALLBACK_SLOT, cls) is None:
         var ancestry = _type_mro(cls)
         for i in range(len(ancestry)):  # driver-loop: no completion callback may execute from a native operation
-            if py_contains(_class_fields(ancestry[i]), "_mojolearn_after_fit"):
+            if py_contains(_class_fields(ancestry[i]), nk[].k__mojolearn_after_fit):
                 raise Error(message)
         # The payload never retains the class (a weak-keyed record).
         class_admit(mods, _CALLBACK_SLOT, cls, PythonObject(True))
-    if py_contains(fields, "_mojolearn_after_fit"):
+    if py_contains(fields, nk[].k__mojolearn_after_fit):
         raise Error(message)
 
 
@@ -158,9 +161,10 @@ def gpsvm_key_value(mut mods: NativeModules, key: PythonObject, residual: Python
                 return False
         return True
     records_key_append(key, cls)
-    if cls is context["array_class"] or cls is py_get(context, "ndarray"):
+    var nk = gp_keys()
+    if cls is py_item(context, nk[].k_array_class) or cls is py_get(context, nk[].k_ndarray):
         return True
-    var scalars = py_get(context, "scalar_types")
+    var scalars = py_get(context, nk[].k_scalar_types)
     if scalars is not None and py_type(scalars) is b.tuple:
         for i in range(len(scalars)):  # driver-loop: over the connected NumPy scalar types, by identity
             if cls is scalars[i]:
