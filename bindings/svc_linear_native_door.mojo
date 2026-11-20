@@ -28,6 +28,10 @@ from bindings.family_common_pack import (
     family_call,
     family_array,
 )
+from bindings.operation_names_svc import (
+    SVC_OPN_FAMILY_SVC_LINEAR_SVR_FIT, SVC_OPN_FAMILY_SVC_LINEAR_SVR_SCORE, SVC_OPN_FAMILY_SVC_LINEAR_SVC_FIT,
+    SVC_OPN_FAMILY_SVC_LINEAR_SVC_PREDICT, SVC_OPN_FAMILY_SVC_LINEAR_SVC_SCORE,
+)
 from bindings.svm_mixture_native_door import _qn_scores, _qn_scores_native
 from core.admitted_weights import admitted_fill
 from bindings.class_weight_boundary_unpack import CLASS_WEIGHT_SVC
@@ -49,6 +53,7 @@ from bindings.svc_common_door import (
 )
 
 from bindings.svc_score_boundary_door import svc_decode_score, svc_accuracy_native
+from bindings.svm_keys_unpack import svm_keys
 
 comptime _PY2MOJO_ROWS = 2
 
@@ -61,36 +66,39 @@ def _linear_check_common(model: PythonObject, fields: PythonObject) raises:
     var b = svc_builtins()
     var operator = native_loaded_module("operator")
     var name = svc_name(model)
-    var penalty = svc_field(fields, "penalty")
-    var loss = svc_field(fields, "loss")
-    var c = svc_field(fields, "C")
+    var nk = svm_keys()
+    var penalty = svc_field(fields, nk[].k_penalty, "penalty")
+    var loss = svc_field(fields, nk[].k_loss, "loss")
+    var c = svc_field(fields, nk[].k_C, "C")
     if not py_contains(Python.tuple(PythonObject("l1"), PythonObject("l2")), penalty):
         raise Error("Expected penalty to be one of ['l1', 'l2'], got " + family_repr(penalty))
-    var losses = svc_attr(model, "_LOSSES")
+    var losses = svc_attr(model, nk[].k__LOSSES)
     if not py_contains(losses, loss):
         raise Error("Expected loss to be one of " + family_repr(family_call(b.list, losses)) + ", got "
                     + family_repr(loss))
     if not Bool(py=family_call(operator.gt, c, PythonObject(0))):
         raise Error("mojolearn " + name + ": C must be positive, got " + family_str(c))
-    if svc_truthy(svc_field(fields, "penalized_intercept")):
+    if svc_truthy(svc_field(fields, nk[].k_penalized_intercept, "penalized_intercept")):
         raise Error("NotImplementedError: mojolearn " + name + ": penalized_intercept=True is not implemented "
                     + "(the reference appends a column of ones to X and fits without "
                     + "a bias, linear.cu:150-163); the intercept is never penalized here")
     # `_check_qn_solver_fields`
-    var tol = svc_field(fields, "tol")
+    var tol = svc_field(fields, nk[].k_tol, "tol")
     if not Bool(py=family_call(operator.gt, tol, PythonObject(0))):
         raise Error("mojolearn " + name + ": tol must be positive, got " + family_str(tol))
     var names: List[String] = ["max_iter", "linesearch_max_iter", "lbfgs_memory"]
     for i in range(3):  # small-loop(solver fields: three integer checks)
-        var value = svc_field(fields, names[i])
+        var key = nk[].k_max_iter if i == 0 else (nk[].k_linesearch_max_iter if i == 1 else nk[].k_lbfgs_memory)
+        var value = svc_field(fields, key, names[i])
         if (Bool(py=family_call(operator.ne, family_call(b.int, value), value))
                 or Bool(py=family_call(operator.lt, value, PythonObject(1)))):
             raise Error("mojolearn " + name + ": " + names[i] + " must be a positive integer, got " + family_str(value))
 
 
 def _linear_strengths_values(fields: PythonObject) raises -> Array[Float64, 2]:
-    var inv_c = 1.0 / svc_float(svc_field(fields, "C"))
-    if String(svc_field(fields, "penalty")) == "l1":
+    var nk = svm_keys()
+    var inv_c = 1.0 / svc_float(svc_field(fields, nk[].k_C, "C"))
+    if String(svc_field(fields, nk[].k_penalty, "penalty")) == "l1":
         var values: Array[Float64, 2] = [inv_c, 0.0]
         return values^
     var values: Array[Float64, 2] = [0.0, inv_c]
@@ -158,14 +166,15 @@ def _linear_svr_fit_target(fields: PythonObject, binding: PythonObject, x: Pytho
     context: PythonObject) raises -> LinearSvrFitResult:
     var rows = Int(py=x.shape[0])
     var cols = Int(py=x.shape[1])
-    var intercept = svc_truthy(svc_field(fields, "fit_intercept"))
+    var nk = svm_keys()
+    var intercept = svc_truthy(svc_field(fields, nk[].k_fit_intercept, "fit_intercept"))
     var weights = family_array(Python.tuple(PythonObject(cols + Int(intercept))), "<f4", context)
     var plan = QnSingleFitPlan()
     # Preserve parameter conversion, optional weight address, then X/y/w
     # address admission in the original single-target fit order.
-    var max_iter = svc_int(svc_field(fields, "max_iter"))
-    var linesearch = svc_int(svc_field(fields, "linesearch_max_iter"))
-    var memory = svc_int(svc_field(fields, "lbfgs_memory"))
+    var max_iter = svc_int(svc_field(fields, nk[].k_max_iter, "max_iter"))
+    var linesearch = svc_int(svc_field(fields, nk[].k_linesearch_max_iter, "linesearch_max_iter"))
+    var memory = svc_int(svc_field(fields, nk[].k_lbfgs_memory, "lbfgs_memory"))
     var sw_address = 0 if sw is None else Int(py=classical_address(sw))
     var request = QnFitRequest(Int(py=classical_address(x)), Int(py=classical_address(target)),
         Int(py=classical_address(weights)), 0, sw_address, 0, rows, cols, 1,
@@ -188,14 +197,15 @@ def _linear_svr_fit(model: PythonObject, args: PythonObject, context: PythonObje
     var operator = native_loaded_module("operator")
     var binding = args[0]
     var fields = py_fields(model)
-    var epsilon = svc_field(fields, "epsilon")
+    var nk = svm_keys()
+    var epsilon = svc_field(fields, nk[].k_epsilon, "epsilon")
     if not (Bool(py=family_call(operator.le, PythonObject(0.0), epsilon))
             and Bool(py=family_call(operator.lt, epsilon, family_call(svc_builtins().float, PythonObject("inf"))))):
         raise Error("mojolearn LinearSVR: epsilon must be finite and non-negative, got " + family_str(epsilon))
     _linear_check_common(model, fields)
     var xc_pin = ArrayPin()
     var xc = admit_family_meta(args[1], 2, "X", context, xc_pin)
-    py_setitem(fields, PythonObject("input_copied_"), PythonObject(admit_family_copied(xc, args[1])))
+    py_setitem(fields, nk[].k_input_copied_, PythonObject(admit_family_copied(xc, args[1])))
     var x = xc_pin.keep
     var rows = Int(py=x.shape[0])
     var cols = Int(py=x.shape[1])
@@ -209,31 +219,31 @@ def _linear_svr_fit(model: PythonObject, args: PythonObject, context: PythonObje
     var sw = PythonObject(None)
     if args[3] is not None:
         sw = admit_family_weights_array(args[3], rows, False, context)
-    var tol = svc_float(svc_field(fields, "tol"))
-    var loss = Int(py=svc_attr(model, "_LOSSES")[svc_field(fields, "loss")])
+    var tol = svc_float(svc_field(fields, nk[].k_tol, "tol"))
+    var loss = Int(py=svc_attr(model, nk[].k__LOSSES)[svc_field(fields, nk[].k_loss, "loss")])
     var result = _linear_svr_fit_target(fields, binding, x, t, loss, strengths[0], strengths[1], tol, 0.1 * tol,
-                                    svc_float(epsilon), sw, svc_truthy(svc_attr(model, "penalty_normalized")), context)
+                                    svc_float(epsilon), sw, svc_truthy(svc_attr(model, nk[].k_penalty_normalized)), context)
     var w = result.weights
-    py_setitem(fields, PythonObject("objective_"), PythonObject(result.state.objective()))
-    py_setitem(fields, PythonObject("retcode_"), PythonObject(result.state.retcode()))
-    py_setitem(fields, PythonObject("_w"), w)
+    py_setitem(fields, nk[].k_objective_, PythonObject(result.state.objective()))
+    py_setitem(fields, nk[].k_retcode_, PythonObject(result.state.retcode()))
+    py_setitem(fields, nk[].k__w, w)
     var coef = family_array(Python.tuple(PythonObject(cols)), "<f4", context)
     unsafe_memcpy(dest=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(coef))),
            src=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(w))), count=cols)
     _ = coef  # keep the Python object alive through the native call above
     _ = w  # keep the Python object alive through the native call above
-    py_setitem(fields, PythonObject("coef_"), coef)
-    if svc_truthy(svc_field(fields, "fit_intercept")):
-        py_setitem(fields, PythonObject("intercept_"),
+    py_setitem(fields, nk[].k_coef_, coef)
+    if svc_truthy(svc_field(fields, nk[].k_fit_intercept, "fit_intercept")):
+        py_setitem(fields, nk[].k_intercept_,
                    PythonObject(Float64(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(w)))[cols])))
         _ = w  # keep the Python object alive through the native call above
     else:
-        py_setitem(fields, PythonObject("intercept_"), PythonObject(0.0))
+        py_setitem(fields, nk[].k_intercept_, PythonObject(0.0))
     var n_iter = family_array(Python.tuple(PythonObject(1)), "<i8", context)
     FAMILY_I64P(unsafe_from_address=Int(py=classical_address(n_iter)))[0] = Int64(result.state.iterations)
     _ = n_iter  # keep the Python object alive through the native call above
-    py_setitem(fields, PythonObject("n_iter_"), n_iter)
-    py_setitem(fields, PythonObject("n_features_in_"), PythonObject(cols))
+    py_setitem(fields, nk[].k_n_iter_, n_iter)
+    py_setitem(fields, nk[].k_n_features_in_, PythonObject(cols))
     _ = x^
     _ = t^
     _ = sw^
@@ -241,7 +251,8 @@ def _linear_svr_fit(model: PythonObject, args: PythonObject, context: PythonObje
 
 def _linear_svr_predict(model: PythonObject, binding: PythonObject, source: PythonObject,
                         context: PythonObject) raises -> PythonObject:
-    if not svc_has(py_fields(model), "_w"):
+    var nk = svm_keys()
+    if not svc_has(py_fields(model), nk[].k__w):
         raise Error("mojolearn LinearSVR: call fit before predict")
     return _qn_scores(model, binding, source, 1, context)
 
@@ -265,13 +276,14 @@ def _linear_svc_fit(model: PythonObject, args: PythonObject, context: PythonObje
     var operator = native_loaded_module("operator")
     var binding = args[0]
     var fields = py_fields(model)
-    var multi_class = svc_field(fields, "multi_class")
+    var nk = svm_keys()
+    var multi_class = svc_field(fields, nk[].k_multi_class, "multi_class")
     if Bool(py=family_call(operator.ne, multi_class, PythonObject("ovr"))):
         raise Error("mojolearn LinearSVC: multi_class must be 'ovr', got " + family_repr(multi_class))
     _linear_check_common(model, fields)
     var xc_pin = ArrayPin()
     var xc = admit_family_meta(args[1], 2, "X", context, xc_pin)
-    py_setitem(fields, PythonObject("input_copied_"), PythonObject(admit_family_copied(xc, args[1])))
+    py_setitem(fields, nk[].k_input_copied_, PythonObject(admit_family_copied(xc, args[1])))
     var x = xc_pin.keep
     var rows = Int(py=x.shape[0])
     var cols = Int(py=x.shape[1])
@@ -282,27 +294,27 @@ def _linear_svc_fit(model: PythonObject, args: PythonObject, context: PythonObje
         raise Error("mojolearn LinearSVC X and y lengths differ")
     var classes = encoded.classes
     var codes = encoded.codes
-    py_setitem(fields, PythonObject("classes_"), classes)
+    py_setitem(fields, nk[].k_classes_, classes)
     var n_classes = len(classes)
     if n_classes < 2:
         raise Error("mojolearn LinearSVC: y has one class")
     var strengths = _linear_strengths_values(fields)
-    var sw = _qn_row_weights(model, fields, args[3], svc_field(fields, "class_weight"), classes, codes, rows, context)
+    var sw = _qn_row_weights(model, fields, args[3], svc_field(fields, nk[].k_class_weight, "class_weight"), classes, codes, rows, context)
     # The original OVR selection: binary fits class 1 once.
     var first = 1 if n_classes == 2 else 0
     var n_fits = 1 if n_classes == 2 else n_classes
-    var fi = 1 if svc_truthy(svc_field(fields, "fit_intercept")) else 0
+    var fi = 1 if svc_truthy(svc_field(fields, nk[].k_fit_intercept, "fit_intercept")) else 0
     var n_coefs = cols + fi
-    var pn = 1 if svc_truthy(svc_attr(model, "penalty_normalized")) else 0
-    var tol = svc_float(svc_field(fields, "tol"))
-    var loss = Int(py=svc_attr(model, "_LOSSES")[svc_field(fields, "loss")])
+    var pn = 1 if svc_truthy(svc_attr(model, nk[].k_penalty_normalized)) else 0
+    var tol = svc_float(svc_field(fields, nk[].k_tol, "tol"))
+    var loss = Int(py=svc_attr(model, nk[].k__LOSSES)[svc_field(fields, nk[].k_loss, "loss")])
     var plan = LinearSvcFitPlan(n_fits, n_coefs)
     var connection = linear_svc_connection(binding)
     plan.storage[0].prepare_info(n_fits)
     var options = LinearSvcOptions(rows, cols, first, n_fits,
-        svc_int(svc_field(fields, "max_iter")),
-        svc_int(svc_field(fields, "linesearch_max_iter")),
-        svc_int(svc_field(fields, "lbfgs_memory")), fi != 0, pn != 0,
+        svc_int(svc_field(fields, nk[].k_max_iter, "max_iter")),
+        svc_int(svc_field(fields, nk[].k_linesearch_max_iter, "linesearch_max_iter")),
+        svc_int(svc_field(fields, nk[].k_lbfgs_memory, "lbfgs_memory")), fi != 0, pn != 0,
         loss, strengths[0], strengths[1], tol, 0.1 * tol)
     var request = LinearSvcFitRequest(Int(py=classical_address(x)),
         Int(py=classical_address(codes)), sw.state.address, options.copy())
@@ -328,16 +340,16 @@ def _linear_svc_fit(model: PythonObject, args: PythonObject, context: PythonObje
         linear_svc_pack(plan.storage[0], n_fits, cols, fi != 0,
             w_address, coef_address, intercept_address)
     _ = plan
-    py_setitem(fields, PythonObject("_w"), w)
-    py_setitem(fields, PythonObject("coef_"), coef)
-    py_setitem(fields, PythonObject("intercept_"), intercept)
+    py_setitem(fields, nk[].k__w, w)
+    py_setitem(fields, nk[].k_coef_, coef)
+    py_setitem(fields, nk[].k_intercept_, intercept)
     var it = family_array(Python.tuple(PythonObject(1)), "<i8", context)
     FAMILY_I64P(unsafe_from_address=Int(py=classical_address(it)))[0] = Int64(n_iter)
     _ = it
-    py_setitem(fields, PythonObject("n_iter_"), it)
-    py_setitem(fields, PythonObject("objective_"), objectives[0] if n_fits == 1 else objectives)
-    py_setitem(fields, PythonObject("retcode_"), retcodes[0] if n_fits == 1 else retcodes)
-    py_setitem(fields, PythonObject("n_features_in_"), PythonObject(cols))
+    py_setitem(fields, nk[].k_n_iter_, it)
+    py_setitem(fields, nk[].k_objective_, objectives[0] if n_fits == 1 else objectives)
+    py_setitem(fields, nk[].k_retcode_, retcodes[0] if n_fits == 1 else retcodes)
+    py_setitem(fields, nk[].k_n_features_in_, PythonObject(cols))
     _ = x
     _ = sw
     _ = codes
@@ -346,16 +358,17 @@ def _linear_svc_fit(model: PythonObject, args: PythonObject, context: PythonObje
 
 def _linear_svc_codes(model: PythonObject, fields: PythonObject, connection: LinearSvcConnection,
     source: PythonObject, operation: Int, n_classes: Int, context: PythonObject) raises -> List[Int64]:
-    if not svc_has(fields, "_w"):
+    var nk = svm_keys()
+    if not svc_has(fields, nk[].k__w):
         raise Error("mojolearn LinearSVC: call fit first")
     var x = admit_family(source, 2, "X", context, False).array
     var n = Int(py=x.shape[0])
     var d = Int(py=x.shape[1])
-    if d != svc_int(svc_field(fields, "n_features_in_")):
+    if d != svc_int(svc_field(fields, nk[].k_n_features_in_, "n_features_in_")):
         raise Error("mojolearn " + svc_name(model) + " feature count differs from fit")
     var codes = List[Int64](length=n, fill=0)
-    var fi = 1 if svc_truthy(svc_field(fields, "fit_intercept")) else 0
-    var w = svc_field(fields, "_w")
+    var fi = 1 if svc_truthy(svc_field(fields, nk[].k_fit_intercept, "fit_intercept")) else 0
+    var w = svc_field(fields, nk[].k__w, "_w")
     if n > 0:
         var request = QnQueryRequest(Int(py=classical_address(x)), Int(py=classical_address(w)),
             Int(codes.unsafe_ptr()), 0, n, d, n_classes if n_classes > 2 else 1, fi != 0, False)
@@ -368,9 +381,10 @@ def _linear_svc_codes(model: PythonObject, fields: PythonObject, connection: Lin
 def _linear_svc_prediction(model: PythonObject, binding: PythonObject, source: PythonObject,
                         context: PythonObject) raises -> LinearSvcPrediction:
     var fields = py_fields(model)
-    var fitted = svc_has(fields, "classes_")
+    var nk = svm_keys()
+    var fitted = svc_has(fields, nk[].k_classes_)
     if fitted:
-        var classes = svc_field(fields, "classes_")
+        var classes = svc_field(fields, nk[].k_classes_, "classes_")
         var k = len(classes)
         var connection = linear_svc_connection(binding)
         if k == 2 and (connection.driver.flags() & _PY2MOJO_ROWS) != 0:
@@ -379,9 +393,9 @@ def _linear_svc_prediction(model: PythonObject, binding: PythonObject, source: P
         if k > 2 and connection.driver.metadata(QN_NATIVE_MULTICLASS_AVAILABLE) != 0:
             var codes = _linear_svc_codes(model, fields, connection, source, QN_NATIVE_MULTICLASS, k, context)
             return LinearSvcPrediction(classes, codes^)
-    if not svc_has(fields, "_w"):
+    if not svc_has(fields, nk[].k__w):
         raise Error("mojolearn LinearSVC: call fit first")
-    var classes = svc_field(fields, "classes_")
+    var classes = svc_field(fields, nk[].k_classes_, "classes_")
     var k = len(classes)
     var connection = linear_svc_connection(binding)
     var scores = _qn_scores_native(model, connection, source, 1 if k == 2 else k, context)
@@ -406,23 +420,24 @@ def _linear_svc_predict(model: PythonObject, binding: PythonObject, source: Pyth
     return svc_decode(model, result.classes, result.codes, context)
 
 
-def svc_linear_operation(model: PythonObject, operation: String, args: PythonObject,
+def svc_linear_operation(model: PythonObject, operation: Int, args: PythonObject,
                          context: PythonObject) raises -> PythonObject:
-    """The linear machines; args[0] is the resolved estimators binding."""
+    """The linear machines; args[0] is the resolved estimators binding;
+    `operation` is the leaf code of bindings/operation_names_svc.mojo."""
     classical_connect_numpy(context)
-    if operation == "family_svc_linear_svr_fit":
+    if operation == SVC_OPN_FAMILY_SVC_LINEAR_SVR_FIT:
         _linear_svr_fit(model, args, context)
         return model
-    if operation == "family_svc_linear_svr_score":
+    if operation == SVC_OPN_FAMILY_SVC_LINEAR_SVR_SCORE:
         var pred = _linear_svr_predict(model, args[0], args[1], context)
         return _r2_host(pred, args[2], context)
-    if operation == "family_svc_linear_svc_fit":
+    if operation == SVC_OPN_FAMILY_SVC_LINEAR_SVC_FIT:
         _linear_svc_fit(model, args, context)
         return model
-    if operation == "family_svc_linear_svc_predict":
+    if operation == SVC_OPN_FAMILY_SVC_LINEAR_SVC_PREDICT:
         return _linear_svc_predict(model, args[0], args[1], context)
-    if operation == "family_svc_linear_svc_score":
+    if operation == SVC_OPN_FAMILY_SVC_LINEAR_SVC_SCORE:
         var result = _linear_svc_prediction(model, args[0], args[1], context)
         var prediction = svc_decode_score(model, result.classes, result.codes, context)
         return PythonObject(svc_accuracy_native(args[2], prediction, context))
-    raise Error("RuntimeError: unknown linear SVM operation " + operation)
+    raise Error("RuntimeError: unknown linear SVM operation " + String(operation))

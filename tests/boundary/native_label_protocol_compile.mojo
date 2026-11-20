@@ -42,7 +42,7 @@ def native_label_compile(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> 
 def native_svm_compile(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
     try:
         var a = PythonObject(from_borrowed=packed)
-        return svc_operation(a[0], String(a[1]), a[2], a[3]).steal_data()
+        return svc_operation(a[0], Int(py=a[1]), a[2], a[3]).steal_data()
     except error:
         return raise_python_exception(error)
 

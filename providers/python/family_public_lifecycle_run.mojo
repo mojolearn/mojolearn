@@ -55,17 +55,9 @@ struct FamilyLifecycle(Copyable, Movable):
 def family_lifecycle_spec(operation: String) -> FamilyLifecycle:
     """The lifecycle of a connected public operation. The positions are the
     owner argument tuple's: 0 the resolved binding, 1 X, then the rest."""
-    # OneClassSVM (bindings/svc_ocsvm_native_door.mojo). sample_weight is not a target.
-    if operation == "family_svc_ocsvm_fit":
-        return FamilyLifecycle("fit", scan=True, keeps_x=False)
-    if operation == "family_svc_ocsvm_fit_predict":
-        return FamilyLifecycle("fit_predict", scan=True, keeps_x=False)
-    if operation == "family_svc_ocsvm_score_samples":
-        return FamilyLifecycle("score_samples", scan=True, widen=True)
-    if operation == "family_svc_ocsvm_decision":
-        return FamilyLifecycle("decision_function", scan=True, widen=True)
-    if operation == "family_svc_ocsvm_predict":
-        return FamilyLifecycle("predict", scan=True)
+    # OneClassSVM, LinearSVC and LinearSVR: coded in their owners (lane
+    # bw2-svm, bindings/svc_native_pack.mojo `_svc_lifecycle`,
+    # bindings/svm_mixture_native_door.mojo `_svm_lifecycle`).
     # AdditiveChi2Sampler is stateless (transform needs no fit); a sparse
     # input keeps its sparse result, so X passes through unreplaced when sparse.
     if operation == "family_xn_semi_achi2_fit":
@@ -120,21 +112,6 @@ def family_lifecycle_spec(operation: String) -> FamilyLifecycle:
         return FamilyLifecycle("predict", device_x=True)
     if operation == "family_kmeans_transform":
         return FamilyLifecycle("transform", device_x=True)
-    # LinearSVC / LinearSVR (bindings/svc_linear_native_door.mojo, svm_mixture_native.mojo).
-    if operation == "family_svc_linear_svc_fit":
-        return FamilyLifecycle("fit", scan=True, replace=False, target=2, classifier=True, required=True)
-    if operation == "family_svm_linear_svc_decision":
-        return FamilyLifecycle("decision_function", scan=True, replace=False)
-    if operation == "family_svc_linear_svc_predict":
-        return FamilyLifecycle("predict", scan=True, replace=False)
-    if operation == "family_svc_linear_svc_score":
-        return FamilyLifecycle("score", scan=True, replace=False)
-    if operation == "family_svc_linear_svr_fit":
-        return FamilyLifecycle("fit", scan=True, replace=False, target=2, required=True)
-    if operation == "family_svm_linear_svr_predict":
-        return FamilyLifecycle("predict", scan=True, replace=False, widen=True)
-    if operation == "family_svc_linear_svr_score":
-        return FamilyLifecycle("score", scan=True, replace=False)
     return FamilyLifecycle("")
 
 

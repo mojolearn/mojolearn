@@ -30,8 +30,13 @@ from bindings.family_common_pack import (
     family_array,
 )
 from providers.python.family_public_lifecycle_pyapi_door import family_lifecycle_begin, family_lifecycle_finish
-from providers.python.family_public_lifecycle_run import family_lifecycle_spec
+from providers.python.family_public_lifecycle_run import FamilyLifecycle
+from bindings.operation_names_svm import (
+    SVM_OPN_FAMILY_SVM_LINEAR_SVC_DECISION, SVM_OPN_FAMILY_SVM_LINEAR_SVR_PREDICT, SVM_OPN_FAMILY_SVM_GMM_SAMPLE,
+)
 from providers.python.neighbors_public_lifecycle_pyapi_door import neighbors_public_end, neighbors_public_refusal
+from bindings.svm_keys_unpack import svm_keys
+from bindings.py_balanced import py_item
 
 
 @fieldwise_init
@@ -128,17 +133,18 @@ def _gmm_sample(model: PythonObject, binding: PythonObject, n_samples: PythonObj
     var y = family_array(Python.tuple(rows), "<i4", context)
     # `_extension`: the binary's own compile-time mode must be the one requested.
     var fields = py_fields(model)
-    var want = py_get(fields, PythonObject("numeric_mode"), PythonObject(None))
+    var nk = svm_keys()
+    var want = py_get(fields, nk[].k_numeric_mode, PythonObject(None))
     if want is None or not Bool(py=py_call(b.bool, want)):
-        want = context["backend_fields"]["_DEFAULT_MODE"]
+        want = py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)
     var getter = neural_descriptor_entry(binding, "mixture_numeric_mode", False)
     if getter is not None:
         var got = Int(py=family_call(b.int, family_call(getter)))
-        var wanted = py_get(context["family_gmm_mode_codes"], want, PythonObject(None))
+        var wanted = py_get(py_item(context, nk[].k_family_gmm_mode_codes), want, PythonObject(None))
         if (wanted is None or Int(py=wanted) != got) and not fast_answers_compiled_code(
-                want, context["family_gmm_mode_codes"], got, MODE_FAMILY_MIXTURE):
+                want, py_item(context, nk[].k_family_gmm_mode_codes), got, MODE_FAMILY_MIXTURE):
             raise Error("RuntimeError: mojolearn GaussianMixture: numeric_mode=" + family_repr(want) + " was requested "
-                        + "but " + String(py_fields(binding)["__name__"]) + " reports compile-time mode code "
+                        + "but " + String(py_item(py_fields(binding), nk[].k___name__)) + " reports compile-time mode code "
                         + String(got) + "; rebuild it with bash bindings/build_mixture.sh")
     var converged = 1 if Bool(py=py_call(b.bool, family_raw_get(model, "converged_"))) else 0
     # ORDER MATCHES bindings/_mojolearn_mixture.mojo::gmm_sample_binding:
@@ -169,35 +175,54 @@ def _gmm_sample(model: PythonObject, binding: PythonObject, n_samples: PythonObj
     return Python.tuple(x, y)
 
 
-def _svm_mixture_operation_route(model: PythonObject, operation: String, args: PythonObject,
+def _svm_mixture_operation_route(model: PythonObject, operation: Int, args: PythonObject,
                                  context: PythonObject) raises -> PythonObject:
     """args[0] is the resolved binding."""
     classical_connect_numpy(context)
     var b = native_loaded_module("builtins")
-    if operation == "family_svm_linear_svc_decision":
+    if operation == SVM_OPN_FAMILY_SVM_LINEAR_SVC_DECISION:
         if not Bool(py=family_call(b.hasattr, model, PythonObject("_w"))):
             raise Error("mojolearn LinearSVC: call fit first")
         var n_classes = _class_count(py_call(b.getattr, model, PythonObject("classes_")))
         return _qn_scores(model, args[0], args[1], 1 if n_classes == 2 else n_classes, context)
-    if operation == "family_svm_linear_svr_predict":
+    if operation == SVM_OPN_FAMILY_SVM_LINEAR_SVR_PREDICT:
         if not Bool(py=family_call(b.hasattr, model, PythonObject("_w"))):
             raise Error("mojolearn LinearSVR: call fit before predict")
         return _qn_scores(model, args[0], args[1], 1, context)
-    if operation == "family_svm_gmm_sample":
+    if operation == SVM_OPN_FAMILY_SVM_GMM_SAMPLE:
         return _gmm_sample(model, args[0], args[1], context)
+    raise Error("RuntimeError: unknown svm/mixture operation " + String(operation))
+
+
+def svm_mixture_unknown_operation(operation: String) raises:
+    """A `family_svm_*` name the operation table does not hold (the shells
+    pass table names only): the text the name chain raised."""
     raise Error("RuntimeError: unknown svm/mixture operation " + operation)
 
 
-def svm_mixture_operation(model: PythonObject, operation: String, args: PythonObject,
+def _svm_lifecycle(operation: Int) -> FamilyLifecycle:
+    """The lifecycle of LinearSVC's decision and LinearSVR's predict (lane
+    bw2-svm: moved from the shared name chain of
+    providers/python/family_public_lifecycle_run.mojo, same flags)."""
+    if operation == SVM_OPN_FAMILY_SVM_LINEAR_SVC_DECISION:
+        return FamilyLifecycle("decision_function", scan=True, replace=False)
+    if operation == SVM_OPN_FAMILY_SVM_LINEAR_SVR_PREDICT:
+        return FamilyLifecycle("predict", scan=True, replace=False, widen=True)
+    return FamilyLifecycle("")
+
+
+def svm_mixture_operation(model: PythonObject, operation: Int, args: PythonObject,
                           context: PythonObject) raises -> PythonObject:
     """The public operation: the estimators that formerly took the `_mode`
     class-creation wrappers run their whole lifecycle around the owner
     (providers/python/family_public_lifecycle_pyapi.mojo); every other
-    operation goes straight to the owner."""
-    var lifecycle = family_lifecycle_spec(operation)
+    operation goes straight to the owner. `operation` is the leaf code of
+    bindings/operation_names_svm.mojo."""
+    var lifecycle = _svm_lifecycle(operation)
     if lifecycle.method.byte_length() == 0:
         return _svm_mixture_operation_route(model, operation, args, context)
-    var call = family_lifecycle_begin(model, operation, lifecycle, args, 1, context)
+    # The lifecycle's operation parameter is not read (its text is the spec's method).
+    var call = family_lifecycle_begin(model, "", lifecycle, args, 1, context)
     var result = PythonObject(None)
     try:
         result = _svm_mixture_operation_route(model, operation, call.args, context)

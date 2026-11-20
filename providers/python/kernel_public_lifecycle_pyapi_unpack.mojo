@@ -40,6 +40,8 @@ from bindings.py_model_records import (
 )
 from bindings.gp_svm_records_door import gpsvm_key_value
 from bindings.py_optional import py_present
+from bindings.svm_keys_unpack import svm_keys
+from bindings.py_balanced import py_item
 
 
 comptime _KM_ADMIT_SLOT = "kernel_public_admitted_v1"
@@ -157,17 +159,19 @@ def kernel_public_fit_complete(model: PythonObject, names: PythonObject) raises:
     # Publish only the retained operation metadata, never reread the caller's
     # input after native execution. Preserve the ordinary estimator fit flags.
     var fields = _fields(model)
+    var nk = svm_keys()
     if names is None:
         _ = py_call(fields.pop, "feature_names_in_", PythonObject(None))
     else:
-        py_setitem(fields, "feature_names_in_", names)
-    py_setitem(fields, "_mojolearn_fitted", PythonObject(True))
+        py_setitem(fields, nk[].k_feature_names_in_, names)
+    py_setitem(fields, nk[].k__mojolearn_fitted, PythonObject(True))
 
 
 def kernel_public_column_target(source: PythonObject, value: ArrayMetadata,
                                 context: PythonObject) raises -> Bool:
     var cls = py_type(source)
-    var reshape = cls is py_get(context, "ndarray") or cls is context["array_class"] or _ordinary_torch(cls, context)
+    var nk = svm_keys()
+    var reshape = cls is py_get(context, nk[].k_ndarray) or cls is py_item(context, nk[].k_array_class) or _ordinary_torch(cls, context)
     if len(value.shape) == 2 and value.source.cols == 1 and reshape:
         classical_warn_column(context)
         return True
@@ -181,8 +185,9 @@ def kernel_public_ignored_target(source: PythonObject, rows: Int, context: Pytho
     if source is None:
         return
     var b = native_loaded_module("builtins")
+    var nk = svm_keys()
     if host_sparse_format(source).byte_length() > 0:
-        var shape = _sparse_fields(source)["_shape"]
+        var shape = py_item(_sparse_fields(source), nk[].k__shape)
         if py_type(shape) is not b.tuple or len(shape) != 2 or py_type(shape[0]) is not b.int:
             raise Error("TypeError: sparse target shape requires native dimensions")
         if Int(py=shape[0]) != rows:
@@ -190,7 +195,7 @@ def kernel_public_ignored_target(source: PythonObject, rows: Int, context: Pytho
                         + String(rows) + ", " + String(Int(py=shape[0])) + "]")
         return
     classical_admit_value(source, context)
-    if py_type(source) is py_get(context, "ndarray") and String(source.dtype.kind) == "c":
+    if py_type(source) is py_get(context, nk[].k_ndarray) and String(source.dtype.kind) == "c":
         raise Error("ValueError: Complex data not supported: kernel method got a complex y.")
     var shape = labels_shape_of(source, context)
     if len(shape) > 0 and shape[0] != rows:
@@ -221,7 +226,7 @@ def kernel_public_ignored_target(source: PythonObject, rows: Int, context: Pytho
     # 81): the walk refuses only a non-finite item, so one packed float64
     # copy (one C-level conversion) and one native finite pass stand in.
     if walk and labels_list_scalar_kind(source) == LABELS_LIST_FLOAT:
-        var array_type = py_get(context, "array_type")
+        var array_type = py_get(context, nk[].k_array_type)
         if array_type is not None:
             var packed = py_call(array_type, PythonObject("d"), source)
             var count = len(source)
@@ -242,7 +247,7 @@ def kernel_public_ignored_target(source: PythonObject, rows: Int, context: Pytho
                 if not isfinite(metric_float(flat[i], context)):
                     raise Error("ValueError: Input y contains NaN or infinity")
     var cls = py_type(source)
-    var reshape = cls is py_get(context, "ndarray") or cls is context["array_class"] or _ordinary_torch(cls, context)
+    var reshape = cls is py_get(context, nk[].k_ndarray) or cls is py_item(context, nk[].k_array_class) or _ordinary_torch(cls, context)
     if len(shape) == 2 and shape[1] == 1 and reshape:
         classical_warn_column(context)
 

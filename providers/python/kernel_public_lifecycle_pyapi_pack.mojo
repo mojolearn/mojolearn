@@ -50,13 +50,16 @@ from providers.python.kernel_public_lifecycle_pyapi_unpack import (
     _km_admitted,
     _km_remember,
 )
+from bindings.svm_keys_unpack import svm_keys
+from bindings.py_balanced import py_item
 
 
 def kernel_public_admit(model: PythonObject, method: String, fitting: Bool,
                         source: PythonObject, context: PythonObject) raises -> PythonObject:
     classical_connect_numpy(context)
     var fields = _fields(model)
-    var attributes = py_get(py_fields(native_loaded_module("mojolearn._native_public_attributes")), "_CONTEXT")
+    var nk = svm_keys()
+    var attributes = py_get(py_fields(native_loaded_module("mojolearn._native_public_attributes")), nk[].k__CONTEXT)
     if py_type(attributes) is not py_type(Python.dict()):
         raise Error("TypeError: kernel methods require their native attribute metadata")
     _string_keys(attributes)
@@ -67,7 +70,7 @@ def kernel_public_admit(model: PythonObject, method: String, fitting: Bool,
     var found_parameters = Optional[PythonObject]()
     for i in range(len(ancestry)):  # driver-loop: passive subclasses inherit the connected schema
         if not found_parameters:
-            var candidate = py_get(context["family_km_public_parameters"], ancestry[i])
+            var candidate = py_get(py_item(context, nk[].k_family_km_public_parameters), ancestry[i])
             if candidate is not None:
                 found_parameters = candidate
     # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
@@ -101,10 +104,10 @@ def kernel_public_admit(model: PythonObject, method: String, fitting: Bool,
         if direct:
             # Every value came from plain instance storage: record it.
             _km_remember(modules, model, fields, parameters.value(), learned, plan.plan, attributes, context)
-    var flag = py_get(fields, "_mojolearn_fitted", PythonObject(False))
+    var flag = py_get(fields, nk[].k__mojolearn_fitted, PythonObject(False))
     if py_type(flag) is not py_type(PythonObject(True)) and py_type(flag) is not py_type(PythonObject(0)):
         raise Error("TypeError: kernel fitted flags must be native booleans or integers")
-    var depth = py_get(fields, "_mojolearn_fitting", PythonObject(0))
+    var depth = py_get(fields, nk[].k__mojolearn_fitting, PythonObject(0))
     if py_type(depth) is not py_type(PythonObject(0)):
         raise Error("TypeError: kernel fit depth must be a native integer")
     if not fitting:
@@ -112,7 +115,7 @@ def kernel_public_admit(model: PythonObject, method: String, fitting: Bool,
             _ = classical_not_fitted_class(context)
             raise Error("NotFittedError: This " + String(py_type(model).__name__) +
                         " instance is not fitted yet. Call 'fit' with appropriate arguments before using " + method + ".")
-        var kernel = py_get(fields, "kernel")
+        var kernel = py_get(fields, nk[].k_kernel)
         var precomputed = py_type(kernel) is py_type(PythonObject("")) and String(kernel) == "precomputed"
         if Int(py=depth) == 0 and not precomputed:
             estimator_feature_check(model, fields, source, context)
@@ -121,7 +124,8 @@ def kernel_public_admit(model: PythonObject, method: String, fitting: Bool,
 
 def kernel_public_result(result: PythonObject, prediction: Bool, outside: Bool,
                          context: PythonObject) raises -> PythonObject:
-    if not outside or py_get(context, "ndarray") is None or py_type(result) is not context["array_class"]:
+    var nk = svm_keys()
+    if not outside or py_get(context, nk[].k_ndarray) is None or py_type(result) is not py_item(context, nk[].k_array_class):
         return result
     if not prediction:
         return native_array_ndarray_view(result, context)

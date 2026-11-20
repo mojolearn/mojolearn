@@ -46,6 +46,12 @@ from providers.python.neural_descriptor_pyapi_door import (
 )
 from core.scale_gamma_exact import scale_gamma_from_limbs, SGX_BAD
 from bindings.mcls_cluster_door import mcls_cluster_operation
+from bindings.operation_names_km import (
+    KM_OPN_FAMILY_KM_GETSTATE, KM_OPN_FAMILY_KM_SETSTATE, KM_OPN_FAMILY_KM_PAR_FIT, KM_OPN_FAMILY_KM_PAR_APPLY,
+    KM_OPN_FAMILY_KM_KRR_FIT, KM_OPN_FAMILY_KM_KRR_PREDICT, KM_OPN_FAMILY_KM_KRR_SCORE, KM_OPN_FAMILY_KM_NYS_FIT,
+    KM_OPN_FAMILY_KM_NYS_FIT_TRANSFORM, KM_OPN_FAMILY_KM_NYS_TRANSFORM, KM_OPN_FAMILY_KM_RBF_FIT,
+    KM_OPN_FAMILY_KM_RBF_FIT_TRANSFORM, KM_OPN_FAMILY_KM_RBF_TRANSFORM,
+)
 from bindings.parallel_plan_door import plan_devices, plan_enter, plan_exit, plan_field, plan_require_identical
 from core.device_plan import DEVICE_PLAN_WORKER, DEVICE_PLAN_CHOLESKY
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem, py_setattr
@@ -65,6 +71,8 @@ from bindings.family_common_pack import (
     family_array,
     family_field,
 )
+from bindings.svm_keys_unpack import svm_keys
+from bindings.py_balanced import py_item
 
 comptime _KM_MODE_SLOT = "p3_km_binding_mode_checked_v1"
 comptime _KERNEL_PRECOMPUTED = 4
@@ -85,7 +93,8 @@ def _km_warning_location() raises -> PythonObject:
         raise cpy.unsafe_get_error()
     var code = PythonObject(from_owned=raw)
     var line = cpy.lib.get_function[Int32]("PyFrame_GetLineNumber")(frame._obj_ptr)
-    var module = py_get(native_frame_globals(frame), "__name__", "")
+    var nk = svm_keys()
+    var module = py_get(native_frame_globals(frame), nk[].k___name__, "")
     if py_type(module) is not py_type(PythonObject("")):
         module = PythonObject("")
     return Python.tuple(code.co_filename, Int(line), module)
@@ -194,9 +203,10 @@ def _km_extension(fields: PythonObject, binding: PythonObject, where: String, co
     """`_KernelMethodBase._extension`: the binary's own compile-time mode
     must be the one requested."""
     var b = native_loaded_module("builtins")
-    var want = py_get(fields, PythonObject("numeric_mode"), PythonObject(None))
+    var nk = svm_keys()
+    var want = py_get(fields, nk[].k_numeric_mode, PythonObject(None))
     if want is None:
-        want = context["backend_fields"]["_DEFAULT_MODE"]
+        want = py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)
     if py_type(want) is not py_type(PythonObject("")):
         raise Error("TypeError: numeric_mode must be a native string or None")
     # The spelling is normalized natively (lane p3-svm-gp-kernel, row 472):
@@ -221,10 +231,10 @@ def _km_extension(fields: PythonObject, binding: PythonObject, where: String, co
         getter = py_present(neural_descriptor_entry(binding, "kernel_methods_numeric_mode", False))
     if native is not None or Bool(getter):
         var got = kernel_method_metadata(native, 13) if native is not None else _km_int(family_call(getter.value()), "numeric mode")
-        var codes = context["family_km_mode_codes"]
+        var codes = py_item(context, nk[].k_family_km_mode_codes)
         var wanted = py_get(codes, want, PythonObject(None))
         if wanted is None or Int(py=wanted) != got:
-            var owner_name = py_get(py_fields(binding), "__name__", PythonObject("kernel methods binding"))
+            var owner_name = py_get(py_fields(binding), nk[].k___name__, PythonObject("kernel methods binding"))
             if py_type(owner_name) is not b.str:
                 raise Error("TypeError: kernel methods binding name must be a native string")
             raise Error("RuntimeError: mojolearn " + where + ": numeric_mode=" + family_repr(want) + " was requested "
@@ -379,13 +389,14 @@ def _krr_fit(model: PythonObject, args: PythonObject, context: PythonObject, x_m
     _ = weights_owner^
     _ = target^
     _ = target_pin
-    py_setitem(fields, "X_fit_", kept)
-    py_setitem(fields, "n_features_in_", PythonObject(d))
-    py_setitem(fields, "n_targets_", PythonObject(t))
-    py_setitem(fields, "_squeeze", PythonObject(squeeze))
-    py_setitem(fields, "dual_coef_", dual)
-    py_setitem(fields, "info_", PythonObject(_km_int(info, "info_")))
-    py_setitem(fields, "_kernel_params", Python.tuple(PythonObject(kernel), PythonObject(degree), gamma, coef0, alpha))
+    var nk = svm_keys()
+    py_setitem(fields, nk[].k_X_fit_, kept)
+    py_setitem(fields, nk[].k_n_features_in_, PythonObject(d))
+    py_setitem(fields, nk[].k_n_targets_, PythonObject(t))
+    py_setitem(fields, nk[].k__squeeze, PythonObject(squeeze))
+    py_setitem(fields, nk[].k_dual_coef_, dual)
+    py_setitem(fields, nk[].k_info_, PythonObject(_km_int(info, "info_")))
+    py_setitem(fields, nk[].k__kernel_params, Python.tuple(PythonObject(kernel), PythonObject(degree), gamma, coef0, alpha))
     _ = x^
     # The last fit's resident arrays are released; the next predict uploads
     # the new ones once (`_km_resident_krr`).
@@ -414,7 +425,8 @@ def _krr_predict(model: PythonObject, args: PythonObject, context: PythonObject,
     var where = String("KernelRidge")
     var b = native_loaded_module("builtins")
     var fields = py_fields(model)
-    if not py_contains(fields, PythonObject("dual_coef_")):
+    var nk = svm_keys()
+    if not py_contains(fields, nk[].k_dual_coef_):
         raise Error("mojolearn " + where + ": call fit before predict")
     var xq = xq_pin.keep
     var q = xq_meta.source.rows
@@ -676,14 +688,15 @@ def _nys_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     _ = indices  # keep the Python object alive through the native call above
     _ = components  # keep the Python object alive through the native call above
     _ = x  # keep the Python object alive through the native call above
-    py_setitem(fields, "n_features_in_", PythonObject(d))
-    py_setitem(fields, "components_", components)
-    py_setitem(fields, "component_indices_", indices)
-    py_setitem(fields, "normalization_", normalization)
-    py_setitem(fields, "eigenvalues_", eigenvalues)
-    py_setitem(fields, "eigenvectors_", eigenvectors)
-    py_setitem(fields, "sweeps_", PythonObject(_km_int(sweeps, "sweeps_")))
-    py_setitem(fields, "_kernel_params", Python.tuple(PythonObject(kernel), PythonObject(degree), gamma, coef0, seed))
+    var nk = svm_keys()
+    py_setitem(fields, nk[].k_n_features_in_, PythonObject(d))
+    py_setitem(fields, nk[].k_components_, components)
+    py_setitem(fields, nk[].k_component_indices_, indices)
+    py_setitem(fields, nk[].k_normalization_, normalization)
+    py_setitem(fields, nk[].k_eigenvalues_, eigenvalues)
+    py_setitem(fields, nk[].k_eigenvectors_, eigenvectors)
+    py_setitem(fields, nk[].k_sweeps_, PythonObject(_km_int(sweeps, "sweeps_")))
+    py_setitem(fields, nk[].k__kernel_params, Python.tuple(PythonObject(kernel), PythonObject(degree), gamma, coef0, seed))
     if transform and not out:
         out = family_array(Python.tuple(n, q), "<f4", context)
         var transform_addresses = Python.list(classical_address(components), classical_address(indices),
@@ -712,7 +725,8 @@ def _nys_transform(model: PythonObject, args: PythonObject, context: PythonObjec
     classical_connect_numpy(context)
     var where = String("Nystroem")
     var fields = py_fields(model)
-    if not py_contains(fields, PythonObject("components_")):
+    var nk = svm_keys()
+    if not py_contains(fields, nk[].k_components_):
         raise Error("mojolearn " + where + ": call fit before transform")
     var x = x_pin.keep
     var m = x_meta.source.rows
@@ -802,7 +816,8 @@ def _rbf_transform(model: PythonObject, args: PythonObject, context: PythonObjec
     classical_connect_numpy(context)
     var where = String("RBFSampler")
     var fields = py_fields(model)
-    if not py_contains(fields, PythonObject("random_weights_")):
+    var nk = svm_keys()
+    if not py_contains(fields, nk[].k_random_weights_):
         raise Error("mojolearn " + where + ": call fit before transform")
     var x = x_pin.keep
     var m = x_meta.source.rows
@@ -868,14 +883,15 @@ def _km_release(model: PythonObject, release: String) raises:
     var holder = py_get(py_fields(model), PythonObject(_HOLDER), PythonObject(None))
     if holder is None or py_type(holder) is not b.dict:
         return
-    var held = py_get(holder, PythonObject("index"), PythonObject(None))
+    var nk = svm_keys()
+    var held = py_get(holder, nk[].k_index, PythonObject(None))
     if held is None:
         return
     if py_type(held) is not py_type(Python.tuple()):
         raise Error("TypeError: kernel resident ownership must be a native tuple")
     if len(held) != 3 and len(held) != 5:
         raise Error("ValueError: kernel resident ownership has an invalid size")
-    py_setitem(holder, "index", PythonObject(None))
+    py_setitem(holder, nk[].k_index, PythonObject(None))
     try:
         if len(held) == 5:
             neural_descriptor_resource_close(held[3], [])
@@ -934,7 +950,8 @@ def _km_resident_hit(model: PythonObject, binding: PythonObject, native: PythonO
     var holder = py_get(py_fields(model), PythonObject(_HOLDER), PythonObject(None))
     if holder is None or py_type(holder) is not b.dict:
         return -1
-    var held = py_get(holder, PythonObject("index"), PythonObject(None))
+    var nk = svm_keys()
+    var held = py_get(holder, nk[].k_index, PythonObject(None))
     if held is None or py_type(held) is not b.tuple or (len(held) != 3 and len(held) != 5):
         return -1
     var key = held[0]
@@ -971,7 +988,8 @@ def _km_resident_krr(model: PythonObject, binding: PythonObject, x_fit_obj: Pyth
     if holder is None or py_type(holder) is not b.dict:
         holder = Python.dict()
         py_setitem(fields, _HOLDER, holder)
-    var held = py_get(holder, PythonObject("index"), PythonObject(None))
+    var nk = svm_keys()
+    var held = py_get(holder, nk[].k_index, PythonObject(None))
     if held is not None:
         if py_type(held) is not py_type(Python.tuple()):
             raise Error("TypeError: kernel resident ownership must be a native tuple")
@@ -996,9 +1014,9 @@ def _km_resident_krr(model: PythonObject, binding: PythonObject, x_fit_obj: Pyth
     var handle = kernel_method_execute(native, "kernel_ridge_resident_prepare", addresses, parameters) if native is not None else family_call(prepare.value(), addresses, parameters)
     if native is not None:
         var owner = neural_descriptor_adopt(native, Int(py=handle), 5, [])
-        py_setitem(holder, "index", Python.tuple(key, handle, binding, owner, native))
+        py_setitem(holder, nk[].k_index, Python.tuple(key, handle, binding, owner, native))
     else:
-        py_setitem(holder, "index", Python.tuple(key, handle, binding))
+        py_setitem(holder, nk[].k_index, Python.tuple(key, handle, binding))
     return handle
 
 
@@ -1109,16 +1127,17 @@ def _rbf_fit(model: PythonObject, args: PythonObject, transform: Bool, context: 
         _ = weights  # keep the Python object alive through the native call above
     var sp = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(scalars)))
     _ = scalars  # keep the Python object alive through the native call above
-    py_setitem(fields, "n_features_in_", PythonObject(d))
-    py_setitem(fields, "random_weights_", weights)
-    py_setitem(fields, "random_offset_", offset)
+    var nk = svm_keys()
+    py_setitem(fields, nk[].k_n_features_in_, PythonObject(d))
+    py_setitem(fields, nk[].k_random_weights_, weights)
+    py_setitem(fields, nk[].k_random_offset_, offset)
     var sigma = sp[0]
     var scale = sp[1]
-    py_setitem(fields, "sigma_", PythonObject(sigma))
+    py_setitem(fields, nk[].k_sigma_, PythonObject(sigma))
     _ = scalars  # keep the Python object alive through the native call above
-    py_setitem(fields, "scale_", PythonObject(scale))
+    py_setitem(fields, nk[].k_scale_, PythonObject(scale))
     _ = scalars  # keep the Python object alive through the native call above
-    py_setitem(fields, "_params", Python.tuple(gamma, seed))
+    py_setitem(fields, nk[].k__params, Python.tuple(gamma, seed))
     _ = scalars^
     if not transform:
         _ = x^
@@ -1160,7 +1179,8 @@ def _rbf_fit(model: PythonObject, args: PythonObject, transform: Bool, context: 
 def _km_par_admit(model: PythonObject, context: PythonObject) raises -> Bool:
     """`parallel_classical._admit_kernel_method`, in its order and wording;
     True for a KernelRidge, False for a Nystroem."""
-    var classes = context["family_km_par_classes"]
+    var nk = svm_keys()
+    var classes = py_item(context, nk[].k_family_km_par_classes)
     var cls = py_type(model)
     var ridge = cls is classes[0]
     if not ridge and cls is not classes[1]:
@@ -1222,19 +1242,43 @@ def _km_par_apply(model: PythonObject, args: PythonObject, context: PythonObject
     _ = x_pin
     return out
 
-def kernel_methods_operation(model: PythonObject, operation: String, args: PythonObject,
+def kernel_methods_unknown_operation(operation: String) raises:
+    """A `family_km_*` name the operation table does not hold (the shells
+    pass table names only): the text the name chain raised."""
+    raise Error("RuntimeError: unknown kernel methods operation " + operation)
+
+
+def _km_method(operation: Int) -> String:
+    """The public method an operation serves, for the not-fitted text (a
+    static literal; the old door built it per call from four suffix tests)."""
+    if operation == KM_OPN_FAMILY_KM_NYS_FIT_TRANSFORM or operation == KM_OPN_FAMILY_KM_RBF_FIT_TRANSFORM:
+        return "fit_transform"
+    if (operation == KM_OPN_FAMILY_KM_KRR_FIT or operation == KM_OPN_FAMILY_KM_NYS_FIT
+            or operation == KM_OPN_FAMILY_KM_RBF_FIT):
+        return "fit"
+    if operation == KM_OPN_FAMILY_KM_KRR_PREDICT:
+        return "predict"
+    if operation == KM_OPN_FAMILY_KM_KRR_SCORE:
+        return "score"
+    return "transform"
+
+
+def kernel_methods_operation(model: PythonObject, operation: Int, args: PythonObject,
                              context: PythonObject) raises -> PythonObject:
-    if operation == "family_km_par_fit" or operation == "family_km_par_apply":
+    """`operation` is the leaf code of bindings/operation_names_km.mojo
+    (lane bw2-svm: one range test or integer compare per step; the door
+    resolved the caller's str once)."""
+    if operation == KM_OPN_FAMILY_KM_PAR_FIT or operation == KM_OPN_FAMILY_KM_PAR_APPLY:
         var admitted = estimator_arguments(model, "_mojolearn_kernel_methods", args, context)
-        if operation == "family_km_par_fit":
+        if operation == KM_OPN_FAMILY_KM_PAR_FIT:
             return _km_par_fit(model, admitted, context)
         return _km_par_apply(model, admitted, context)
-    if operation == "family_km_getstate":
+    if operation == KM_OPN_FAMILY_KM_GETSTATE:
         var state = py_call(native_loaded_module("builtins").dict, _fields(model))
         _ = py_call(state.pop, PythonObject(_HOLDER), PythonObject(None))
         _ = py_call(state.pop, "_native_kernel_method_provider", PythonObject(None))
         return state
-    if operation == "family_km_setstate":
+    if operation == KM_OPN_FAMILY_KM_SETSTATE:
         var fields = _fields(model)
         if py_type(args[0]) is not native_loaded_module("builtins").dict:
             raise Error("TypeError: kernel state requires an ordinary native dictionary")
@@ -1242,25 +1286,19 @@ def kernel_methods_operation(model: PythonObject, operation: String, args: Pytho
         _ = py_call(fields.update, args[0])
         py_setitem(fields, _HOLDER, Python.dict())
         return PythonObject(None)
-    var fitting = operation.endswith("fit") or operation.endswith("fit_transform")
-    var method = String("transform")
-    if operation.endswith("fit_transform"):
-        method = "fit_transform"
-    elif fitting:
-        method = "fit"
-    elif operation.endswith("predict"):
-        method = "predict"
-    elif operation.endswith("score"):
-        method = "score"
-    var fields = kernel_public_admit(model, method, fitting, args[1], context)
+    # The fits: the old suffix test `endswith("fit") or endswith("fit_transform")`.
+    var fitting = (operation == KM_OPN_FAMILY_KM_KRR_FIT or operation == KM_OPN_FAMILY_KM_NYS_FIT
+                   or operation == KM_OPN_FAMILY_KM_RBF_FIT or operation == KM_OPN_FAMILY_KM_NYS_FIT_TRANSFORM
+                   or operation == KM_OPN_FAMILY_KM_RBF_FIT_TRANSFORM)
+    var fields = kernel_public_admit(model, _km_method(operation), fitting, args[1], context)
     # Lane a7a: a KernelRidge predict / score of a cross-validation fold
     # keeps the fold on the device (admit_x `device_x`: its store ids, no
     # host gather); `_krr_predict` gathers it there or, on a route that
     # reads host words, gathers its host rows.
     var fold = DoorRowsStore.none()
-    var krr_query = operation == "family_km_krr_predict" or operation == "family_km_krr_score"
+    var krr_query = operation == KM_OPN_FAMILY_KM_KRR_PREDICT or operation == KM_OPN_FAMILY_KM_KRR_SCORE
     # Lane a8a: the fit takes a fold on the device too (`_krr_fit`).
-    var krr_device_x = krr_query or operation == "family_km_krr_fit"
+    var krr_device_x = krr_query or operation == KM_OPN_FAMILY_KM_KRR_FIT
     var x: ArrayMetadata
     var x_pin = ArrayPin()  # the door's pin of X, held through the operation
     if krr_device_x and door_is_device_rows(args[1], context):
@@ -1272,9 +1310,9 @@ def kernel_methods_operation(model: PythonObject, operation: String, args: Pytho
             x = admit_family_meta(fx.array, 2, "X", context, x_pin, True)
     else:
         x = admit_family_meta(args[1], 2, "X", context, x_pin, True)
-    if operation.startswith("family_km_rbf_"):
+    if operation >= KM_OPN_FAMILY_KM_RBF_FIT and operation <= KM_OPN_FAMILY_KM_RBF_TRANSFORM:
         kernel_public_finite(x, "X")
-    if fitting and not operation.startswith("family_km_krr_"):
+    if fitting and not (operation >= KM_OPN_FAMILY_KM_KRR_FIT and operation <= KM_OPN_FAMILY_KM_KRR_SCORE):
         kernel_public_ignored_target(args[2] if len(args) > 2 else PythonObject(None), x.source.rows, context)
     var feature_names = kernel_public_feature_snapshot(args[1], context) if fitting else PythonObject(None)
     var admitted = estimator_arguments(model, "_mojolearn_kernel_methods", args, context)
@@ -1294,35 +1332,36 @@ def kernel_methods_operation(model: PythonObject, operation: String, args: Pytho
     _ = feature_names^
     _ = x^
     _ = x_pin
-    return kernel_public_result(result, method == "predict", outside, context)
+    return kernel_public_result(result, operation == KM_OPN_FAMILY_KM_KRR_PREDICT, outside, context)
 
 
-def _kernel_methods_operation(model: PythonObject, operation: String, args: PythonObject,
+def _kernel_methods_operation(model: PythonObject, operation: Int, args: PythonObject,
                               context: PythonObject, x: ArrayMetadata, x_pin: ArrayPin,
                               fold: DoorRowsStore = DoorRowsStore.none()) raises -> PythonObject:
-    if operation == "family_km_krr_fit":
+    if operation == KM_OPN_FAMILY_KM_KRR_FIT:
         _krr_fit(model, args, context, x, x_pin, fold)
         return model
-    if operation == "family_km_krr_predict":
+    if operation == KM_OPN_FAMILY_KM_KRR_PREDICT:
         return _krr_predict(model, args, context, x, x_pin, True, fold)
-    if operation == "family_km_krr_score":
+    if operation == KM_OPN_FAMILY_KM_KRR_SCORE:
         var truth = admit_family(args[2], -1, "y", context, finite=True).array
         var prediction = _krr_predict(model, args, context, x, x_pin, True, fold)
-        var mode = py_get(py_fields(model), PythonObject("numeric_mode"), PythonObject(None))
+        var nk = svm_keys()
+        var mode = py_get(py_fields(model), nk[].k_numeric_mode, PythonObject(None))
         var metrics = estimator_binding(model, "_mojolearn_metrics", context)
         return mcls_cluster_operation("family_mcls_r2", Python.tuple(metrics, truth, prediction, args[3],
                                       PythonObject("uniform_average"), PythonObject(True), mode), context)
-    if operation == "family_km_nys_fit":
+    if operation == KM_OPN_FAMILY_KM_NYS_FIT:
         _ = _nys_fit(model, args, context, x, x_pin)
         return model
-    if operation == "family_km_nys_transform":
+    if operation == KM_OPN_FAMILY_KM_NYS_TRANSFORM:
         return _nys_transform(model, args, context, x, x_pin)
-    if operation == "family_km_rbf_transform":
+    if operation == KM_OPN_FAMILY_KM_RBF_TRANSFORM:
         return _rbf_transform(model, args, context, x, x_pin)
-    if operation == "family_km_nys_fit_transform":
+    if operation == KM_OPN_FAMILY_KM_NYS_FIT_TRANSFORM:
         return _nys_fit(model, args, context, x, x_pin, True)
-    if operation == "family_km_rbf_fit":
+    if operation == KM_OPN_FAMILY_KM_RBF_FIT:
         return _rbf_fit(model, args, False, context, x, x_pin)
-    if operation == "family_km_rbf_fit_transform":
+    if operation == KM_OPN_FAMILY_KM_RBF_FIT_TRANSFORM:
         return _rbf_fit(model, args, True, context, x, x_pin)
-    raise Error("RuntimeError: unknown kernel methods operation " + operation)
+    raise Error("RuntimeError: unknown kernel methods operation " + String(operation))

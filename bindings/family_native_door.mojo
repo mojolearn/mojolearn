@@ -11,13 +11,13 @@ from std.python import PythonObject
 from bindings.py_balanced import py_type, py_get
 from bindings.family_common_pack import family_call
 from bindings.kmeans_native_pack import kmeans_operation
-from bindings.kernel_methods_native_door import kernel_methods_operation
+from bindings.kernel_methods_native_door import kernel_methods_operation, kernel_methods_unknown_operation
 from bindings.linalg_native_door import linalg_operation
 from bindings.neighbors_native_pack import neighbors_operation
 from bindings.metrics_reg_door import metrics_reg_operation
 from bindings.cluster_native_door import cluster_operation
-from bindings.svm_mixture_native_door import svm_mixture_operation
-from bindings.svc_native_pack import svc_operation
+from bindings.svm_mixture_native_door import svm_mixture_operation, svm_mixture_unknown_operation
+from bindings.svc_native_pack import svc_operation, svc_unknown_operation
 from bindings.gp_native_pack import gp_operation, gp_unknown_operation
 from bindings.metrics_cls_native_unpack import metrics_cls_operation
 from bindings.metrics_exp_native_unpack import metrics_exp_operation
@@ -25,7 +25,7 @@ from bindings.cluster_fit_a_native_door import cluster_fit_a_operation
 from providers.python.hdbscan_public_lifecycle_pyapi_door import hdbscan_public_operation
 from providers.python.density_public_lifecycle_pyapi_pack import density_public_operation
 from bindings.cluster_fit_b_native_unpack import cluster_fit_b_operation
-from bindings.mixture_native_door import mixture_operation
+from bindings.mixture_native_door import mixture_operation, mixture_unknown_operation
 from bindings.linalg_ops_native_unpack import linalg_ops_operation
 from providers.python.lowbit_weight_pyapi_door import lowbit_weight_operation
 from bindings.parallel_public_native_door import parallel_public_operation
@@ -159,13 +159,15 @@ def _family_owner_call(model: PythonObject, route: Int, leaf: Int, operation: St
     # same order (the halves split the former chain at FR_MSEL).
     var owner = family_route_owner(route)
     if owner < FR_MSEL:
-        return _family_owner_first(model, owner, operation, args, context)
+        return _family_owner_first(model, owner, leaf, operation, args, context)
     return _family_owner_second(model, owner, leaf, operation, args, context)
 
 
-def _family_owner_first(model: PythonObject, owner: Int, operation: String, args: PythonObject,
+def _family_owner_first(model: PythonObject, owner: Int, leaf: Int, operation: String, args: PythonObject,
                         context: PythonObject) raises -> PythonObject:
-    """Owners FR_DENSITY .. FR_CHOL (and FR_UNKNOWN, refused)."""
+    """Owners FR_DENSITY .. FR_CHOL (and FR_UNKNOWN, refused). `leaf` is
+    the operation's leaf code for a converted owner (FR_KM, FR_SVM); the
+    others match `operation`."""
     if owner == FR_DENSITY:
         return density_public_operation(model, operation, args, context)
     if owner == FR_PAR_PUBLIC:
@@ -173,9 +175,13 @@ def _family_owner_first(model: PythonObject, owner: Int, operation: String, args
     if owner == FR_KMEANS:
         return kmeans_operation(model, operation, args, context)
     if owner == FR_KM:
-        return kernel_methods_operation(model, operation, args, context)
+        if leaf == OP_LEAF_NONE:
+            kernel_methods_unknown_operation(operation)
+        return kernel_methods_operation(model, leaf, args, context)
     if owner == FR_SVM:
-        return svm_mixture_operation(model, operation, args, context)
+        if leaf == OP_LEAF_NONE:
+            svm_mixture_unknown_operation(operation)
+        return svm_mixture_operation(model, leaf, args, context)
     if owner == FR_XC:
         if operation == "family_xc_dbscan_predict":
             return cluster_fit_b_operation(model, operation, args, context)
@@ -192,7 +198,7 @@ def _family_owner_first(model: PythonObject, owner: Int, operation: String, args
 def _family_owner_second(model: PythonObject, owner: Int, leaf: Int, operation: String, args: PythonObject,
                          context: PythonObject) raises -> PythonObject:
     """Owners FR_MSEL .. FR_LINALG_OPS. `leaf` is the operation's leaf code
-    for a converted owner (FR_GP); the others match `operation`."""
+    for a converted owner (FR_SVC, FR_GP, FR_MIX); the others match `operation`."""
     if owner == FR_MSEL:
         # Preserve the existing generic entry ABI without importing the
         # independently compiled model-selection owner. Import setup retains
@@ -204,7 +210,9 @@ def _family_owner_second(model: PythonObject, owner: Int, leaf: Int, operation: 
             raise Error("TypeError: model selection requires its compiled native entry")
         return family_call(entry, model, PythonObject(operation), args, context)
     if owner == FR_SVC:
-        return svc_operation(model, operation, args, context)
+        if leaf == OP_LEAF_NONE:
+            svc_unknown_operation(operation)
+        return svc_operation(model, leaf, args, context)
     if owner == FR_GP:
         if leaf == OP_LEAF_NONE:
             # Not a name of the table: the unchanged unknown-operation error.
@@ -221,7 +229,9 @@ def _family_owner_second(model: PythonObject, owner: Int, leaf: Int, operation: 
     if owner == FR_CFB:
         return cluster_fit_b_operation(model, operation, args, context)
     if owner == FR_MIX:
-        return mixture_operation(model, operation, args, context)
+        if leaf == OP_LEAF_NONE:
+            mixture_unknown_operation(operation)
+        return mixture_operation(model, leaf, args, context)
     if owner == FR_MANI:
         # The shared import-time context retains the independently compiled
         # owner. Forward through its verified C entry without a source import

@@ -18,7 +18,8 @@ def peer1_family_compile(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> 
         _ = classical_family_admit(args[0])
         var operation = String(args[1])
         if operation.startswith("family_km_"):
-            return kernel_methods_operation(args[0], operation, args[2], args[3]).steal_data()
+            # The km owner takes its leaf code (bindings/operation_names_km.mojo), passed after the context.
+            return kernel_methods_operation(args[0], Int(py=args[4]), args[2], args[3]).steal_data()
         return neighbors_operation(args[0], operation, args[2], args[3]).steal_data()
     except error:
         return raise_python_exception(error)

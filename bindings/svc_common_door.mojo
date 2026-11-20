@@ -50,6 +50,8 @@ from bindings.metrics_program_door import metric_plan_run
 from core.metrics_program_plan import metric_term
 from core.host_finite_scan import host_all_finite_f32
 from bindings.svc_common_run import svc_r2_check
+from bindings.svm_keys_unpack import svm_keys
+from bindings.py_balanced import py_item
 
 comptime SVC_NONE = -1
 # cm_epi COUNT (x_metrics/cm_epi.mojo), `_expansion_metrics._CM_COUNT`.
@@ -63,24 +65,27 @@ def svc_builtins() raises -> PythonObject:
     return native_loaded_module("builtins")
 
 
-def svc_field(fields: PythonObject, name: String) raises -> PythonObject:
+def svc_field(fields: PythonObject, key: PythonObject, name: String) raises -> PythonObject:
     """`self.<name>` of an instance attribute (the instance dictionary, so no
-    attribute hook runs); refused as the lookup refused it."""
-    var value = py_get(fields, PythonObject(name), PythonObject(None))
-    if value is None and not py_contains(fields, PythonObject(name)):
+    attribute hook runs); refused as the lookup refused it. `key` is the held
+    interned name (bindings/svm_keys_unpack.mojo; lane bw2-svm: it built the
+    str from `name` up to twice per call); `name` is the refusal text only."""
+    var value = py_get(fields, key, PythonObject(None))
+    if value is None and not py_contains(fields, key):
         raise Error("AttributeError: object has no attribute '" + name + "'")
     return value
 
 
-def svc_attr(model: PythonObject, name: String) raises -> PythonObject:
-    """`getattr(model, name)` for a class-level constant or a parameter a
-    subclass may define on the class."""
-    return family_call(svc_builtins().getattr, model, PythonObject(name))
+def svc_attr(model: PythonObject, key: PythonObject) raises -> PythonObject:
+    """`getattr(model, key)` for a class-level constant or a parameter a
+    subclass may define on the class; `key` is a held interned name."""
+    return family_call(svc_builtins().getattr, model, key)
 
 
-def svc_has(fields: PythonObject, name: String) raises -> Bool:
-    """`hasattr(self, name)` for an attribute fit sets on the instance."""
-    return py_contains(fields, PythonObject(name))
+def svc_has(fields: PythonObject, key: PythonObject) raises -> Bool:
+    """`hasattr(self, key)` for an attribute fit sets on the instance; `key`
+    is a held interned name."""
+    return py_contains(fields, key)
 
 
 def svc_name(model: PythonObject) raises -> String:
@@ -112,20 +117,23 @@ def svc_base(name: String, context: PythonObject) raises -> PythonObject:
     frame per decode / threshold / argmax / class-ratio step of every SVC
     fit and predict."""
     var key = PythonObject(name)
-    var cached = py_get(context["family_svc_native_cache"], key)
+    var nk = svm_keys()
+    var cached = py_get(py_item(context, nk[].k_family_svc_native_cache), key)
     if cached is not None:
         return cached
-    return family_call(context["family_svc_native"], key)
+    return family_call(py_item(context, nk[].k_family_svc_native), key)
 
 
 def svc_mode(fields: PythonObject) raises -> PythonObject:
     """`getattr(self, "numeric_mode", None)`."""
-    return py_get(fields, PythonObject("numeric_mode"), PythonObject(None))
+    var nk = svm_keys()
+    return py_get(fields, nk[].k_numeric_mode, PythonObject(None))
 
 
 def svc_binding(name: String, mode: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_backend.binding(name, mode)`: binding acquisition."""
-    return family_call(context["backend_fields"]["binding"], PythonObject(name), mode)
+    var nk = svm_keys()
+    return family_call(py_item(py_item(context, nk[].k_backend_fields), nk[].k_binding), PythonObject(name), mode)
 
 
 def svc_zero_division(float_division: Bool) raises:
@@ -208,7 +216,8 @@ def svc_shape_of(obj: PythonObject, context: PythonObject) raises -> PythonObjec
         # A label Series may hold strings: read its block storage's shape
         # (the f32 frame reader would refuse non-numeric labels).
         var values = _pandas_values(obj)
-        var ndarray = py_get(context, "ndarray")
+        var nk = svm_keys()
+        var ndarray = py_get(context, nk[].k_ndarray)
         if ndarray is not None and py_type(values) is ndarray:
             return py_call(svc_builtins().tuple, values.shape)
     var shape = labels_shape_of(obj, context)
@@ -292,8 +301,9 @@ def _svc_decode_with(classes: PythonObject, kind: Int, table: PythonObject, code
     var values = family_call(b.list, family_call(b.map, py_attr(classes, "__getitem__"), codes._store))
     if kind == 2:
         return values
+    var nk = svm_keys()
     try:
-        var store = py_call(context["array_type"], PythonObject("q" if kind == 0 else "d"),
+        var store = py_call(py_item(context, nk[].k_array_type), PythonObject("q" if kind == 0 else "d"),
                             py_call(b.map, b.int if kind == 0 else b.float, values))
         return classical_wrap_array(store, Python.tuple(PythonObject(n)), "<i8" if kind == 0 else "<f8", "C", context)
     except:
@@ -360,8 +370,9 @@ def svc_decode(owner: PythonObject, var classes: PythonObject, codes: List[Int64
     # Preserve the old numeric-label PACK attempt and overflow behavior:
     # an integer outside int64 remains a list of its original Python labels.
     var b = svc_builtins()
+    var nk = svm_keys()
     try:
-        var store = py_call(context["array_type"], PythonObject("q" if kind == 0 else "d"),
+        var store = py_call(py_item(context, nk[].k_array_type), PythonObject("q" if kind == 0 else "d"),
             py_call(b.map, b.int if kind == 0 else b.float, values))
         return classical_wrap_array(store, Python.tuple(n), "<i8" if kind == 0 else "<f8", "C", context)
     except:

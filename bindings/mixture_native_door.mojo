@@ -75,6 +75,7 @@ from core.bgmm_native_api import (
 from core.kmeans_variants_api import VariantsSpan
 from core.mixture_native_api import (
     MIXTURE_NATIVE_ABI, MIXTURE_NATIVE_COUNT, MIXTURE_NATIVE_CAPABILITIES, MIXTURE_CAP_FIT_PREDICT,
+    MIXTURE_NATIVE_SCORE_SAMPLES, MIXTURE_NATIVE_PREDICT_PROBA, MIXTURE_NATIVE_PREDICT, MIXTURE_NATIVE_SCORE_BIC_AIC,
     GmmDriver, GmmFitRequest, GmmScoreRequest,
 )
 from bindings.kmeans_variants_boundary_door import variants_span
@@ -84,7 +85,19 @@ from providers.python.estimator_tabular_boundary_pyapi_unpack import _target, _r
 from bindings.py_optional import py_or_none
 from bindings.mode_answer_door import fast_answers_compiled_code
 from core.mode_answer import MODE_FAMILY_MIXTURE
-from mixture.mixture_native_run import _gmm_operation
+from bindings.operation_names_mix import (
+    MIX_OPN_FAMILY_MIX_GMM_FIT, MIX_OPN_FAMILY_MIX_GMM_FIT_PREDICT, MIX_OPN_FAMILY_MIX_GMM_SCORE_SAMPLES,
+    MIX_OPN_FAMILY_MIX_GMM_PREDICT_PROBA, MIX_OPN_FAMILY_MIX_GMM_PREDICT, MIX_OPN_FAMILY_MIX_GMM_BIC,
+    MIX_OPN_FAMILY_MIX_GMM_AIC, MIX_OPN_FAMILY_MIX_BGMM_FIT, MIX_OPN_FAMILY_MIX_BGMM_FIT_PREDICT,
+    MIX_OPN_FAMILY_MIX_BGMM_PREDICT, MIX_OPN_FAMILY_MIX_BGMM_PREDICT_PROBA, MIX_OPN_FAMILY_MIX_BGMM_SCORE_SAMPLES,
+    MIX_OPN_FAMILY_MIX_BGMM_SCORE, MIX_OPN_FAMILY_MIX_GMM_PUBLIC_FIT, MIX_OPN_FAMILY_MIX_GMM_PUBLIC_FIT_PREDICT,
+    MIX_OPN_FAMILY_MIX_GMM_PUBLIC_SCORE_SAMPLES, MIX_OPN_FAMILY_MIX_GMM_PUBLIC_PREDICT_PROBA, MIX_OPN_FAMILY_MIX_GMM_PUBLIC_PREDICT,
+    MIX_OPN_FAMILY_MIX_GMM_PUBLIC_BIC, MIX_OPN_FAMILY_MIX_GMM_PUBLIC_AIC, MIX_OPN_FAMILY_MIX_GMM_PUBLIC_SCORE,
+    MIX_OPN_FAMILY_MIX_GMM_PUBLIC_INITIALIZE, MIX_OPN_FAMILY_MIX_GMM_PUBLIC_BINDING, MIX_OPN_FAMILY_MIX_GMM_PUBLIC_SAMPLE,
+)
+from bindings.operation_names_svm import SVM_OPN_FAMILY_SVM_GMM_SAMPLE
+from bindings.svm_keys_unpack import svm_keys
+from bindings.py_balanced import py_item
 
 comptime _GMM = "mojolearn GaussianMixture: "
 # The by-name refusals of the options `GmmParams` does not carry
@@ -159,7 +172,8 @@ def _f32_ready(source: PythonObject, context: PythonObject) raises -> Bool:
     reads pass such arrays (the public door's admitted X, the fitted blocks)
     on every query; they skip a second view admission."""
     var cls = py_type(source)
-    if cls is not context["array_class"] and cls is not py_get(context, "ndarray"):
+    var nk = svm_keys()
+    if cls is not py_item(context, nk[].k_array_class) and cls is not py_get(context, nk[].k_ndarray):
         return False
     return Int(py=source.size) > 0 and classical_is_f32(source, context) and classical_c_order(source, context)
 
@@ -214,7 +228,8 @@ def _any_f32_kept(source: PythonObject, name: String, context: PythonObject, mut
     var result = _any_f32_view(view, name, context)
     if kept:
         var cls = py_type(source)
-        kept = result is view and (cls is context["array_class"] or cls is py_get(context, "ndarray"))
+        var nk = svm_keys()
+        kept = result is view and (cls is py_item(context, nk[].k_array_class) or cls is py_get(context, nk[].k_ndarray))
     _ = view^
     return result
 
@@ -417,8 +432,9 @@ def _check_mode(binding: PythonObject, model: PythonObject, context: PythonObjec
     """`GaussianMixture._extension`: the binary's own compile-time mode must
     be the one requested."""
     var want = _get_or(model, "numeric_mode", PythonObject(None))
+    var nk = svm_keys()
     if not read_bool(want):
-        want = context["backend_fields"]["_DEFAULT_MODE"]
+        want = py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)
     var getter = neural_descriptor_entry(binding, "mixture_numeric_mode", False)
     if getter is None:
         return
@@ -427,12 +443,12 @@ def _check_mode(binding: PythonObject, model: PythonObject, context: PythonObjec
     # (`_estimator_mode_word`, as estimator_checked_mode reads it), not
     # called on every fit and query.
     var got = _estimator_mode_word(binding, getter)
-    var wanted = py_get(context["family_gmm_mode_codes"], want, PythonObject(None))
+    var wanted = py_get(py_item(context, nk[].k_family_gmm_mode_codes), want, PythonObject(None))
     if wanted is None or Int(py=wanted) != got:
-        if fast_answers_compiled_code(want, context["family_gmm_mode_codes"], got, MODE_FAMILY_MIXTURE):
+        if fast_answers_compiled_code(want, py_item(context, nk[].k_family_gmm_mode_codes), got, MODE_FAMILY_MIXTURE):
             return
         raise Error("RuntimeError: " + _GMM + "numeric_mode=" + family_repr(want) + " was requested "
-                    + "but " + String(py_fields(binding)["__name__"])
+                    + "but " + String(py_item(py_fields(binding), nk[].k___name__))
                     + " reports compile-time mode code " + String(got)
                     + "; rebuild it with bash bindings/build_mixture.sh")
 
@@ -558,9 +574,11 @@ def _gmm_default_fit(model: PythonObject, binding: PythonObject, source: PythonO
     return Python.tuple(x, py_or_none(labels))
 
 
-def _gmm_score_call(model: PythonObject, binding: PythonObject, x: PythonObject, name: String, what: String,
+def _gmm_score_call(model: PythonObject, binding: PythonObject, x: PythonObject, operation: Int, what: String,
                     out_buf: PythonObject, context: PythonObject, key: PythonObject) raises:
-    """`_model_lists` then the scoring entry `name` writing `out`: the
+    """`_model_lists` then the scoring `operation` (MIXTURE_NATIVE_*; lane
+    bw2-svm: the callers pass the word, the former entry name and its
+    four-compare map `_gmm_operation` are gone) writing `out`: the
     fitted check, the feature count, the mode check and the call.
 
     Perf (lane perf2-cluster): with a record `key` (a public query whose
@@ -578,7 +596,7 @@ def _gmm_score_call(model: PythonObject, binding: PythonObject, x: PythonObject,
         if Bool(py=family_call(native_loaded_module("operator").ne, PythonObject(d), width)):
             raise Error(_GMM + "X has " + String(d) + " features, the fit had " + family_str(width))
         # ORDER MATCHES bindings/_mojolearn_mixture.mojo::_rebuild_model.
-        _gmm_score_run(binding, _gmm_operation(name), GmmScoreRequest(
+        _gmm_score_run(binding, operation, GmmScoreRequest(
             Int(py=classical_address(held[1])), Int(py=classical_address(held[2])),
             Int(py=classical_address(held[3])), Int(py=classical_address(held[4])),
             Int(py=classical_address(held[5])), Int(py=classical_address(x)), Int(py=classical_address(out_buf)),
@@ -615,7 +633,7 @@ def _gmm_score_call(model: PythonObject, binding: PythonObject, x: PythonObject,
         Int(py=classical_address(weights)), Int(py=classical_address(flat_m)), Int(py=classical_address(flat_c)),
         Int(py=classical_address(flat_p)), Int(py=classical_address(log_det)), Int(py=classical_address(x)),
         Int(py=classical_address(out_buf)), k, d, Int(py=n_iter), converged != 0, n, Float64(py=lower))
-    _gmm_score_run(binding, _gmm_operation(name), request)
+    _gmm_score_run(binding, operation, request)
     _ = x
     _ = out_buf
     _ = log_det  # keep the Python object alive through the native call above
@@ -627,10 +645,11 @@ def _gmm_score_call(model: PythonObject, binding: PythonObject, x: PythonObject,
         # Every operand must be the value the instance dictionary stores (no
         # class attribute or descriptor in between) and a native array, so
         # the record's identities cover exactly what was read.
+        var nk = svm_keys()
         var fields = py_fields(model)
         var missing = Python.list()
-        var array_class = context["array_class"]
-        var ndarray = py_get(context, "ndarray")
+        var array_class = py_item(context, nk[].k_array_class)
+        var ndarray = py_get(context, nk[].k_ndarray)
         var weights_class = py_type(weights)
         var log_det_class = py_type(log_det)
         kept = (weights_class is array_class or weights_class is ndarray) and (
@@ -659,8 +678,9 @@ def _gmm_ext_fit(model: PythonObject, xc_binding: PythonObject, source: PythonOb
     float32 X it read."""
     var b = native_loaded_module("builtins")
     var operator = native_loaded_module("operator")
-    var ctypes = context["family_mix_ctypes"]
-    var inits = context["family_mix_inits"]
+    var nk = svm_keys()
+    var ctypes = py_item(context, nk[].k_family_mix_ctypes)
+    var inits = py_item(context, nk[].k_family_mix_inits)
     var covariance_type = _get(model, "covariance_type")
     if not py_contains(ctypes, covariance_type):
         raise Error("covariance_type must be one of " + _sorted_repr(ctypes) + ", got " + family_repr(covariance_type))
@@ -683,9 +703,9 @@ def _gmm_ext_fit(model: PythonObject, xc_binding: PythonObject, source: PythonOb
     var prev = _get_or(model, "_ext", PythonObject(None))
     var warm = read_bool(_get(model, "warm_start")) and prev is not None
     if warm:
-        warm = Bool(py=family_call(operator.eq, prev["key"], key))
+        warm = Bool(py=family_call(operator.eq, py_item(prev, nk[].k_key), key))
     if warm:
-        _ = py_call(parts.append, prev["state"])
+        _ = py_call(parts.append, py_item(prev, nk[].k_state))
     var flag_w = 0
     var flag_m = 0
     var flag_p = 0
@@ -756,12 +776,12 @@ def _gmm_ext_fit(model: PythonObject, xc_binding: PythonObject, source: PythonOb
     # entry), the full per-component Cholesky block and log constants, and
     # the state a warm_start refit resumes from.
     var ext = Python.dict()
-    ext["key"] = key
-    ext["binding"] = xc_binding
-    ext["pchol"] = _pack_f(f[3], [k, d, d], context)
-    ext["consts"] = _pack_f(f[8], [k], context)
+    ext[nk[].k_key] = key
+    ext[nk[].k_binding] = xc_binding
+    ext[nk[].k_pchol] = _pack_f(f[3], [k, d, d], context)
+    ext[nk[].k_consts] = _pack_f(f[8], [k], context)
     var order: List[Int] = [11, 4, -1, 6, 1, 7, 2, 3]
-    ext["state"] = _state(f, order, -1, k, context)
+    ext[nk[].k_state] = _state(f, order, -1, k, context)
     _ = result^
     py_setattr(model, "_ext", ext)
     return x
@@ -779,9 +799,10 @@ def _gmm_ext_score(model: PythonObject, x: PythonObject, context: PythonObject) 
         raise Error(_GMM + "X has " + String(d) + " features, the fit had " + family_str(fitted))
     var means = _get(model, "means_")
     var k = Int(py=means.shape[0])
-    var aux = _aux(Python.list(_any_f32(means, "aux", context), _any_f32(ext["pchol"], "aux", context),
-                               _any_f32(ext["consts"], "aux", context)))
-    return _bgmm_score_call(ext["binding"], x, aux, n, d, k, 3)
+    var nk = svm_keys()
+    var aux = _aux(Python.list(_any_f32(means, "aux", context), _any_f32(py_item(ext, nk[].k_pchol), "aux", context),
+                               _any_f32(py_item(ext, nk[].k_consts), "aux", context)))
+    return _bgmm_score_call(py_item(ext, nk[].k_binding), x, aux, n, d, k, 3)
 
 
 def _gmm_bic_aic(model: PythonObject, binding: PythonObject, source: PythonObject,
@@ -804,7 +825,8 @@ def _gmm_bic_aic(model: PythonObject, binding: PythonObject, source: PythonObjec
         var means = _get(model, "means_")
         var k = Int(py=means.shape[0])
         var d = Int(py=means.shape[1])
-        var ct = Int(py=context["family_mix_ctypes"][_get(model, "covariance_type")])
+        var nk = svm_keys()
+        var ct = Int(py=py_item(context, nk[].k_family_mix_ctypes)[_get(model, "covariance_type")])
         # The covariance parameter counts are whole numbers (d * (d + 1) is
         # even), so the integer sums equal the former float ones exactly.
         var cov: Int
@@ -825,7 +847,7 @@ def _gmm_bic_aic(model: PythonObject, binding: PythonObject, source: PythonObjec
         return result^
     var x = source if admitted else admit_family(source, 2, "X", context).array
     var out = family_array(Python.tuple(3), "<f8", context)
-    _gmm_score_call(model, binding, x, "gmm_score_bic_aic", "score", out, context, key)
+    _gmm_score_call(model, binding, x, MIXTURE_NATIVE_SCORE_BIC_AIC, "score", out, context, key)
     var words = FAMILY_F64P(unsafe_from_address=Int(py=classical_address(out)))
     _ = out  # keep the Python object alive through the native call above
     result.append(words[0])
@@ -868,7 +890,7 @@ def _gmm_default_infer(model: PythonObject, binding: PythonObject, x: PythonObje
     var n = Int(py=x.shape[0])
     if which == 0:
         var out = family_array(Python.tuple(n), "<f4", context)
-        _gmm_score_call(model, binding, x, "gmm_score_samples", "score_samples", out, context, key)
+        _gmm_score_call(model, binding, x, MIXTURE_NATIVE_SCORE_SAMPLES, "score_samples", out, context, key)
         return out
     if which == 1:
         var k = 0
@@ -878,10 +900,10 @@ def _gmm_default_infer(model: PythonObject, binding: PythonObject, x: PythonObje
         elif family_raw_has(model, "weights_"):
             k = Int(py=_get(model, "weights_").shape[0])
         var out = family_array(Python.tuple(n, k), "<f4", context)
-        _gmm_score_call(model, binding, x, "gmm_predict_proba", "predict_proba", out, context, key)
+        _gmm_score_call(model, binding, x, MIXTURE_NATIVE_PREDICT_PROBA, "predict_proba", out, context, key)
         return out
     var out = family_array(Python.tuple(n), "<i4", context)
-    _gmm_score_call(model, binding, x, "gmm_predict", "predict", out, context, key)
+    _gmm_score_call(model, binding, x, MIXTURE_NATIVE_PREDICT, "predict", out, context, key)
     return out
 
 
@@ -899,8 +921,9 @@ def _bgmm_fit(model: PythonObject, binding: PythonObject, source: PythonObject,
     """`BayesianGaussianMixture._fit`: ENTRY_BGMM; returns the labels."""
     var b = native_loaded_module("builtins")
     var operator = native_loaded_module("operator")
-    var ctypes = context["family_mix_ctypes"]
-    var inits = context["family_mix_inits"]
+    var nk = svm_keys()
+    var ctypes = py_item(context, nk[].k_family_mix_ctypes)
+    var inits = py_item(context, nk[].k_family_mix_inits)
     var covariance_type = _get(model, "covariance_type")
     if not py_contains(ctypes, covariance_type):
         raise Error("covariance_type must be one of " + _sorted_repr(ctypes) + ", got " + family_repr(covariance_type))
@@ -1057,20 +1080,60 @@ def _bgmm_score(model: PythonObject, binding: PythonObject, source: PythonObject
 
 
 # ------------------------------------------------------------------- door
+def mixture_unknown_operation(operation: String) raises:
+    """A `family_mix_*` name the operation table does not hold (the shells
+    pass table names only): the text the name chain raised (a public name
+    reached the chain as its `family_mix_gmm_<method>` name)."""
+    if operation.startswith("family_mix_gmm_public_"):
+        raise Error("RuntimeError: unknown family operation family_mix_gmm_"
+                    + String(operation[byte=String("family_mix_gmm_public_").byte_length():]))
+    raise Error("RuntimeError: unknown family operation " + operation)
+
+
 def mixture_operation(model: PythonObject, operation: String, args: PythonObject,
+         context: PythonObject, admitted: Bool = False) raises -> PythonObject:
+    """The named form for the one caller that still holds the name: the
+    public cluster door's BayesianGaussianMixture step
+    (providers/python/cluster_public_lifecycle_pyapi_door.mojo, the cluster
+    lane's file; only `family_mix_bgmm_*` names reach it). It maps the name
+    to its leaf code (at most six compares; the chain it replaces made up to
+    fourteen) and runs the coded form. Delete it when that door passes the
+    code."""
+    var code = -1
+    if operation == "family_mix_bgmm_fit":
+        code = MIX_OPN_FAMILY_MIX_BGMM_FIT
+    elif operation == "family_mix_bgmm_fit_predict":
+        code = MIX_OPN_FAMILY_MIX_BGMM_FIT_PREDICT
+    elif operation == "family_mix_bgmm_predict":
+        code = MIX_OPN_FAMILY_MIX_BGMM_PREDICT
+    elif operation == "family_mix_bgmm_predict_proba":
+        code = MIX_OPN_FAMILY_MIX_BGMM_PREDICT_PROBA
+    elif operation == "family_mix_bgmm_score_samples":
+        code = MIX_OPN_FAMILY_MIX_BGMM_SCORE_SAMPLES
+    elif operation == "family_mix_bgmm_score":
+        code = MIX_OPN_FAMILY_MIX_BGMM_SCORE
+    else:
+        classical_connect_numpy(context)
+        mixture_unknown_operation(operation)
+    return mixture_operation(model, code, args, context, admitted)
+
+
+def mixture_operation(model: PythonObject, operation: Int, args: PythonObject,
          context: PythonObject, admitted: Bool = False) raises -> PythonObject:
     """args[0] is the resolved binding; GaussianMixture fit and fit_predict
     also take the `_mojolearn_x_cluster` binding as args[1]; X is last.
     `admitted`: the public cluster door (providers/python/
     cluster_public_lifecycle_pyapi.mojo) admitted args[1] with
-    classical_check_x; the BayesianGaussianMixture queries use it as is."""
+    classical_check_x; the BayesianGaussianMixture queries use it as is.
+    `operation` is the leaf code of bindings/operation_names_mix.mojo
+    (lane bw2-svm; the public block is last: one range test)."""
     classical_connect_numpy(context)
-    if operation.startswith("family_mix_gmm_public_"):
+    if operation >= MIX_OPN_FAMILY_MIX_GMM_PUBLIC_FIT:
         return _gmm_public_operation(model, operation, args, context)
-    if operation == "family_mix_gmm_fit":
+    if operation == MIX_OPN_FAMILY_MIX_GMM_FIT:
         _ = _gmm_fit(model, args, context)
         return model
-    if operation == "family_mix_gmm_fit_predict":
+    if operation == MIX_OPN_FAMILY_MIX_GMM_FIT_PREDICT:
         # `fit(X).predict(X)` on the float32 X the fit read; on the GPU
         # binding the fit returns those labels itself (N401).
         if not _gmm_needs_ext(model):
@@ -1082,53 +1145,54 @@ def mixture_operation(model: PythonObject, operation: String, args: PythonObject
         if _get_or(model, "_ext", PythonObject(None)) is not None:
             return _gmm_ext_labels(model, x, 2, context)
         return _gmm_default_infer(model, args[0], x, 2, context, PythonObject(None))
-    if operation == "family_mix_gmm_score_samples":
+    if operation == MIX_OPN_FAMILY_MIX_GMM_SCORE_SAMPLES:
         return _gmm_infer(model, args[0], args[1], 0, context, False, PythonObject(None))
-    if operation == "family_mix_gmm_predict_proba":
+    if operation == MIX_OPN_FAMILY_MIX_GMM_PREDICT_PROBA:
         return _gmm_infer(model, args[0], args[1], 1, context, False, PythonObject(None))
-    if operation == "family_mix_gmm_predict":
+    if operation == MIX_OPN_FAMILY_MIX_GMM_PREDICT:
         return _gmm_infer(model, args[0], args[1], 2, context, False, PythonObject(None))
-    if operation == "family_mix_gmm_bic":
+    if operation == MIX_OPN_FAMILY_MIX_GMM_BIC:
         return PythonObject(_gmm_bic_aic(model, args[0], args[1], context, False, PythonObject(None))[1])
-    if operation == "family_mix_gmm_aic":
+    if operation == MIX_OPN_FAMILY_MIX_GMM_AIC:
         return PythonObject(_gmm_bic_aic(model, args[0], args[1], context, False, PythonObject(None))[2])
-    if operation == "family_mix_bgmm_fit":
+    if operation == MIX_OPN_FAMILY_MIX_BGMM_FIT:
         _ = _bgmm_fit(model, args[0], args[1], context)
         return model
-    if operation == "family_mix_bgmm_fit_predict":
+    if operation == MIX_OPN_FAMILY_MIX_BGMM_FIT_PREDICT:
         return _bgmm_fit(model, args[0], args[1], context)
-    if operation == "family_mix_bgmm_predict":
+    if operation == MIX_OPN_FAMILY_MIX_BGMM_PREDICT:
         # the labels come from the device score (`bodies.argmax_row`: the
         # first largest log responsibility, the lowest index on a tie)
         var n = 0
         var k = 0
         var got = _bgmm_score(model, args[0], args[1], 0, context, admitted, n, k)
         return _pack_i(got.storage[0].i[0], [n], context)
-    if operation == "family_mix_bgmm_predict_proba":
+    if operation == MIX_OPN_FAMILY_MIX_BGMM_PREDICT_PROBA:
         # the exp of every log responsibility in the binding (bodies.exp_cell)
         var n = 0
         var k = 0
         var got = _bgmm_score(model, args[0], args[1], 1, context, admitted, n, k)
         return _pack_f(got.storage[0].f[2], [n, k], context)
-    if operation == "family_mix_bgmm_score_samples":
+    if operation == MIX_OPN_FAMILY_MIX_BGMM_SCORE_SAMPLES:
         var n = 0
         var k = 0
         var got = _bgmm_score(model, args[0], args[1], 0, context, admitted, n, k)
         return _pack_f(got.storage[0].f[1], [n], context)
-    if operation == "family_mix_bgmm_score":
+    if operation == MIX_OPN_FAMILY_MIX_BGMM_SCORE:
         # the float-float fold of log_prob_norm in the binding
         var n = 0
         var k = 0
         var got = _bgmm_score(model, args[0], args[1], 2, context, admitted, n, k)
         return PythonObject(got.storage[0].s[0] / Float64(n))
-    raise Error("RuntimeError: unknown family operation " + operation)
+    raise Error("RuntimeError: unknown family operation " + String(operation))
 
 
 # Public GaussianMixture lifecycle. The old Python _mode wrappers selected
 # bindings, validated X/y, tracked fitted state and converted returned Arrays.
 # This envelope preserves those responsibilities inside the native operation.
 def _gmm_public_initialize(model: PythonObject, values: PythonObject, context: PythonObject) raises -> PythonObject:
-    var names = context["gmm_public_parameters"]
+    var nk = svm_keys()
+    var names = py_item(context, nk[].k_gmm_public_parameters)
     var b = native_loaded_module("builtins")
     if py_type(names) is not b.tuple or py_type(values) is not b.tuple:
         raise Error("TypeError: GaussianMixture requires its connected constructor tuples")
@@ -1160,13 +1224,14 @@ def _gmm_public_ext(ext: PythonObject, context: PythonObject, releasing: Bool) r
     for i in range(len(keys)):  # driver-loop: exact extension-state keys before hashing or indexing
         if py_type(keys[i]) is not b.str:
             raise Error("TypeError: GaussianMixture state keys require exact strings")
-    var binding = ext["binding"]
-    var connections = context["family_binding_connections"]["_mojolearn_x_cluster"]
+    var nk = svm_keys()
+    var binding = py_item(ext, nk[].k_binding)
+    var connections = py_item(py_item(context, nk[].k_family_binding_connections), nk[].k__mojolearn_x_cluster)
     var connected = False
     for mode in ["identical", "fast"]:  # driver-loop: the two import-connected provider identities
         var record = connections[mode]
         connected = connected or binding is record[0]
-    var retained = context["gmm_retained_cluster_bindings"]
+    var retained = py_item(context, nk[].k_gmm_retained_cluster_bindings)
     if py_type(retained) is not b.list:
         raise Error("TypeError: GaussianMixture requires its native retained-provider list")
     for i in range(len(retained)):  # driver-loop: native modules previously selected for this family's extended solver
@@ -1180,7 +1245,7 @@ def _gmm_public_ext(ext: PythonObject, context: PythonObject, releasing: Bool) r
             classical_admit_value(ext[keys[i]], context)
             if releasing:
                 native_release_admit(ext[keys[i]], context)
-    var key = ext["key"]
+    var key = py_item(ext, nk[].k_key)
     if py_type(key) is not b.tuple or len(key) != 3:
         raise Error("TypeError: GaussianMixture extension key requires its native scalar tuple")
     for i in range(len(key)):  # driver-loop: component count, feature count and covariance spelling
@@ -1205,7 +1270,8 @@ def _gmm_public_admit(model: PythonObject, context: PythonObject, fitting: Bool,
     flag checks and the callback refusal run on every call."""
     var b = native_loaded_module("builtins")
     var fields = py_fields(model)
-    var parameters = context["gmm_public_parameters"]
+    var nk = svm_keys()
+    var parameters = py_item(context, nk[].k_gmm_public_parameters)
     var key = PythonObject(None)
     var recorded = False
     if query and not fitting:
@@ -1230,27 +1296,28 @@ def _gmm_public_admit(model: PythonObject, context: PythonObject, fitting: Bool,
                 classical_admit_value(fields[arrays[i]], context)
                 if fitting:
                     native_release_admit(fields[arrays[i]], context)
-    var fitted = py_get(fields, "_mojolearn_fitted", PythonObject(False))
+    var fitted = py_get(fields, nk[].k__mojolearn_fitted, PythonObject(False))
     if py_type(fitted) is not b.bool and py_type(fitted) is not b.int:
         raise Error("TypeError: native fitted flags cannot invoke Python boolean hooks")
-    var depth = py_get(fields, "_mojolearn_fitting", PythonObject(0))
+    var depth = py_get(fields, nk[].k__mojolearn_fitting, PythonObject(0))
     if py_type(depth) is not b.int:
         raise Error("TypeError: native fitting depth requires an exact integer")
-    if fitting and py_contains(fields, "feature_names_in_"):
-        native_release_admit(fields["feature_names_in_"], context)
+    if fitting and py_contains(fields, nk[].k_feature_names_in_):
+        native_release_admit(py_item(fields, nk[].k_feature_names_in_), context)
     # The ancestry walk once per class state (bindings/cluster_side_records.mojo).
     cluster_refuse_fit_callbacks(py_type(model), "TypeError: GaussianMixture cannot invoke Python fit callbacks")
-    if not recorded and py_contains(fields, "_ext"):
-        _gmm_public_ext(fields["_ext"], context, fitting)
-    if py_contains(fields, "_mojolearn_after_fit"):
+    if not recorded and py_contains(fields, nk[].k__ext):
+        _gmm_public_ext(py_item(fields, nk[].k__ext), context, fitting)
+    if py_contains(fields, nk[].k__mojolearn_after_fit):
         raise Error("TypeError: GaussianMixture cannot invoke Python fit callbacks")
     return Python.tuple(fields, key, PythonObject(recorded))
 
 
 def _gmm_public_output(value: PythonObject, context: PythonObject) raises -> PythonObject:
-    if py_get(context, "ndarray") is None:
+    var nk = svm_keys()
+    if py_get(context, nk[].k_ndarray) is None:
         return value
-    if py_type(value) is context["array_class"]:
+    if py_type(value) is py_item(context, nk[].k_array_class):
         return native_array_ndarray_view(value, context)
     if py_type(value) is py_type(Python.tuple()):
         var out = Python.list()
@@ -1260,20 +1327,49 @@ def _gmm_public_output(value: PythonObject, context: PythonObject) raises -> Pyt
     return value
 
 
-def _gmm_public_operation(model: PythonObject, operation: String, args: PythonObject,
+def _gmm_public_method(operation: Int) -> String:
+    """The public method of a query, for the not-fitted text (a static
+    literal; the door sliced it from the name per call)."""
+    if operation == MIX_OPN_FAMILY_MIX_GMM_PUBLIC_PREDICT_PROBA:
+        return "predict_proba"
+    if operation == MIX_OPN_FAMILY_MIX_GMM_PUBLIC_SCORE_SAMPLES:
+        return "score_samples"
+    if operation == MIX_OPN_FAMILY_MIX_GMM_PUBLIC_SCORE:
+        return "score"
+    return "predict"
+
+
+def _gmm_public_plain(operation: Int) -> Int:
+    """The plain operation a public fit, fit_predict, bic or aic runs (it
+    was a String concat of the method name per call)."""
+    if operation == MIX_OPN_FAMILY_MIX_GMM_PUBLIC_FIT:
+        return MIX_OPN_FAMILY_MIX_GMM_FIT
+    if operation == MIX_OPN_FAMILY_MIX_GMM_PUBLIC_FIT_PREDICT:
+        return MIX_OPN_FAMILY_MIX_GMM_FIT_PREDICT
+    if operation == MIX_OPN_FAMILY_MIX_GMM_PUBLIC_BIC:
+        return MIX_OPN_FAMILY_MIX_GMM_BIC
+    if operation == MIX_OPN_FAMILY_MIX_GMM_PUBLIC_AIC:
+        return MIX_OPN_FAMILY_MIX_GMM_AIC
+    return -1
+
+
+def _gmm_public_operation(model: PythonObject, operation: Int, args: PythonObject,
                           context: PythonObject) raises -> PythonObject:
     if py_type(args) is not py_type(Python.tuple()):
         raise Error("TypeError: GaussianMixture public arguments require a native tuple")
     # Passive subclasses of the connected owner are accepted: CPython's MRO
     # test (bindings/cluster_side_records.mojo), not a Python-level walk.
-    if not cluster_is_subclass(py_type(model), context["gmm_public_class"]):
+    var nk = svm_keys()
+    if not cluster_is_subclass(py_type(model), py_item(context, nk[].k_gmm_public_class)):
         raise Error("TypeError: GaussianMixture requires its connected native class")
-    var method = String(operation[byte=String("family_mix_gmm_public_").byte_length():])
-    if method == "initialize":
+    if operation == MIX_OPN_FAMILY_MIX_GMM_PUBLIC_INITIALIZE:
         return _gmm_public_initialize(model, args, context)
-    var fitting = method == "fit" or method == "fit_predict"
+    var fitting = operation == MIX_OPN_FAMILY_MIX_GMM_PUBLIC_FIT or operation == MIX_OPN_FAMILY_MIX_GMM_PUBLIC_FIT_PREDICT
     # The queries that read the fitted model and an admitted X.
-    var query = method == "predict" or method == "predict_proba" or method == "score_samples" or method == "score"
+    var query = (operation == MIX_OPN_FAMILY_MIX_GMM_PUBLIC_PREDICT
+                 or operation == MIX_OPN_FAMILY_MIX_GMM_PUBLIC_PREDICT_PROBA
+                 or operation == MIX_OPN_FAMILY_MIX_GMM_PUBLIC_SCORE_SAMPLES
+                 or operation == MIX_OPN_FAMILY_MIX_GMM_PUBLIC_SCORE)
     var admitted = _gmm_public_admit(model, context, fitting, query)
     var fields = admitted[0]
     var key = admitted[1]
@@ -1283,17 +1379,17 @@ def _gmm_public_operation(model: PythonObject, operation: String, args: PythonOb
         cluster_record_drop(_GMM_ADMIT_SLOT, model)
         cluster_record_drop(_GMM_OPERANDS_SLOT, model)
     var binding = estimator_binding(model, "_mojolearn_mixture", context, False)
-    if method == "binding":
+    if operation == MIX_OPN_FAMILY_MIX_GMM_PUBLIC_BINDING:
         _check_mode(binding, model, context)
         return binding
     var outside = estimator_outside()
-    if method == "sample":
+    if operation == MIX_OPN_FAMILY_MIX_GMM_PUBLIC_SAMPLE:
         host_inference_scalar(args[0], context)
-        var result = svm_mixture_operation(model, "family_svm_gmm_sample", Python.tuple(binding, args[0]), context)
+        var result = svm_mixture_operation(model, SVM_OPN_FAMILY_SVM_GMM_SAMPLE, Python.tuple(binding, args[0]), context)
         return _gmm_public_output(result, context) if outside else result
-    var guarded = fitting or method == "predict" or method == "predict_proba" or method == "score_samples" or method == "score"
+    var guarded = fitting or query
     if guarded and not fitting:
-        classical_require_fitted(model, False, method, context)
+        classical_require_fitted(model, False, _gmm_public_method(operation), context)
     var source = args[0]
     var name = classical_estimator_name(model)
     var x = classical_check_x(source, name, context) if guarded else source
@@ -1302,7 +1398,7 @@ def _gmm_public_operation(model: PythonObject, operation: String, args: PythonOb
     if fitting:
         _target(args[1], rows, name, context)
     elif guarded:
-        var fitted_width = py_get(fields, "n_features_in_")
+        var fitted_width = py_get(fields, nk[].k_n_features_in_)
         if fitted_width is not None:
             classical_check_width(columns, Int(py=fitted_width), name)
         estimator_feature_check(model, fields, source, context)
@@ -1312,7 +1408,7 @@ def _gmm_public_operation(model: PythonObject, operation: String, args: PythonOb
         # The admission probe names the entry the fit calls (the typed BGMM
         # transport; the door no longer calls x_cluster_call).
         _ = neural_descriptor_entry(cluster_binding, "bgmm_native_api_v1")
-        var retained = context["gmm_retained_cluster_bindings"]
+        var retained = py_item(context, nk[].k_gmm_retained_cluster_bindings)
         if py_type(retained) is not py_type(Python.list()):
             raise Error("TypeError: GaussianMixture requires its native retained-provider list")
         var held = False
@@ -1330,9 +1426,9 @@ def _gmm_public_operation(model: PythonObject, operation: String, args: PythonOb
     var result = PythonObject(None)
     try:
         if query:
-            result = _gmm_public_query(model, method, binding, x, context, key)
+            result = _gmm_public_query(model, operation, binding, x, context, key)
         else:
-            result = mixture_operation(model, "family_mix_gmm_" + method, prepared, context)
+            result = mixture_operation(model, _gmm_public_plain(operation), prepared, context)
     except problem:
         if guarded:
             var refused = _refusal(problem, fitting, depth > 0, rows, columns, name)
@@ -1349,13 +1445,14 @@ def _gmm_public_operation(model: PythonObject, operation: String, args: PythonOb
     return _gmm_public_output(result, context) if outside else result
 
 
-def _gmm_public_query(model: PythonObject, method: String, binding: PythonObject, x: PythonObject,
+def _gmm_public_query(model: PythonObject, operation: Int, binding: PythonObject, x: PythonObject,
                       context: PythonObject, key: PythonObject) raises -> PythonObject:
     """predict, predict_proba, score_samples and score on the X the public
     door admitted (classical_check_x: 2-D, non-empty, finite, float32 in C
     order): `mixture_operation`'s routes for those operations, without
     admitting X a second time (lane perf2-cluster)."""
-    if method == "score":
+    if operation == MIX_OPN_FAMILY_MIX_GMM_PUBLIC_SCORE:
         return PythonObject(_gmm_bic_aic(model, binding, x, context, True, key)[0])
-    var which = 0 if method == "score_samples" else (1 if method == "predict_proba" else 2)
+    var which = (0 if operation == MIX_OPN_FAMILY_MIX_GMM_PUBLIC_SCORE_SAMPLES
+                 else (1 if operation == MIX_OPN_FAMILY_MIX_GMM_PUBLIC_PREDICT_PROBA else 2))
     return _gmm_infer(model, binding, x, which, context, True, key)
