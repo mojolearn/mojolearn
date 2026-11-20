@@ -1730,6 +1730,9 @@ pip = "*"
 # (nvc2-0035), so the suite had never run whole in this environment.
 scipy = "*"
 scikit-learn = "*"
+# 2026-11-19: tools/test_lgbm_lossguide_mapping.py checks the gbdt-lossguide race mapping on a real LightGBM
+# read-back; without lightgbm here it skipped at import in every tool-tests run (pytest rc 5, run 44631147232).
+lightgbm = "*"
 
 [feature.test.pypi-dependencies]
 # 2026-10-20: the torch-reference tests skipped on the Mac

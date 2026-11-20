@@ -13,62 +13,67 @@ from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.host_archive_native_door import host_archive_neighbor_metric
 from bindings.host_array_native_pack import host_archive_typed
 from core.hotpath_impl import cast_elements, HP_I32, HP_I64
+from bindings.host_rest_keys_unpack import host_rest_keys
+from bindings.py_balanced import py_item
 
 
 def _knn_entry(context: PythonObject, name: String) raises -> PythonObject:
-    var binding = context["host_archive_predict_knn_binding"]
+    var nk = host_rest_keys()
+    var binding = py_item(context, nk[].k_host_archive_predict_knn_binding)
     if py_type(binding) is py_type(PythonObject("")):
         raise Error(String(binding))
     var entry = py_get(_loaded_fields(binding), name)
     if entry is None:
         raise Error("ImportError: CPU neighbor binding does not export " + name)
-    if py_type(entry) is not context["host_archive_predict_entry_type"]:
+    if py_type(entry) is not py_item(context, nk[].k_host_archive_predict_entry_type):
         raise Error("TypeError: CPU neighbor inference requires its compiled native entry")
     return entry
 
 
 def _knn_numpy_context(archive: PythonObject) raises -> PythonObject:
+    var nk = host_rest_keys()
     # The query admission needs NumPy's connected types, but `archive` is
     # the shared archive-reader context: connecting NumPy there makes every
     # later archive read decode ndarrays, which the host archive builders
     # (Array `order`/`_mv`/`_store` layouts) refuse. Connect a private copy
     # once NumPy is loaded and keep the reader context NumPy-free.
-    var cached = py_get(archive, "host_archive_predict_knn_numpy")
+    var cached = py_get(archive, nk[].k_host_archive_predict_knn_numpy)
     if cached is not None:
         return cached
     var own = py_call(py_type(Python.dict()), archive)
     classical_connect_numpy(own)
-    if py_get(own, "ndarray") is not None:
-        py_setitem(archive, "host_archive_predict_knn_numpy", own)
+    if py_get(own, nk[].k_ndarray) is not None:
+        py_setitem(archive, nk[].k_host_archive_predict_knn_numpy, own)
     return own
 
 
 def host_knn_predict(model: PythonObject, source: PythonObject, classifier: Bool,
                      probability: Bool, archive: PythonObject) raises -> PythonObject:
+    var nk = host_rest_keys()
     var context = _knn_numpy_context(archive)
     var fields = py_fields(model)
-    var index = py_get(fields, "_index")
-    var targets = py_get(fields, "_y_cols")
+    var index = py_get(fields, nk[].k__index)
+    var targets = py_get(fields, nk[].k__y_cols)
     if index is None or targets is None:
         raise Error("mojolearn: call fit before predict")
     var query = admit_family(source, 2, "X", context, dense=True).array
-    var metric = host_archive_neighbor_metric(fields["metric"], Float64(py=fields["p"]), False, context)
-    if String(fields["metric"]).lower() == "jensenshannon" and Int(py=query.size) > 0 and family_min(query) < 0:
+    var metric = host_archive_neighbor_metric(py_item(fields, nk[].k_metric), Float64(py=py_item(fields, nk[].k_p)), False, context)
+    if String(py_item(fields, nk[].k_metric)).lower() == "jensenshannon" and Int(py=query.size) > 0 and family_min(query) < 0:
         var name = "HostKNeighborsClassifier" if classifier else "HostKNeighborsRegressor"
         raise Error("mojolearn " + name + ": metric='jensenshannon' needs X >= 0 (it takes logarithms of the coordinates)")
     var rows = Int(py=query.shape[0])
     var features = Int(py=query.shape[1])
-    var fitted_features = Int(py=fields["n_features_in_"])
+    var fitted_features = Int(py=py_item(fields, nk[].k_n_features_in_))
     if features != fitted_features:
         raise Error("mojolearn: X has " + String(features) + " features, index has " + String(fitted_features))
-    var count = Int(py=fields["n_samples_fit_"])
-    var k = Int(py=fields["n_neighbors"])
+    var count = Int(py=py_item(fields, nk[].k_n_samples_fit_))
+    var k = Int(py=py_item(fields, nk[].k_n_neighbors))
     if k < 1 or k > count:
         raise Error("mojolearn: n_neighbors must be in [1, " + String(count) + "], got " + String(k))
     var outputs = Int(py=targets.shape[0])
-    var multi = Bool(py=fields["outputs_2d_"])
-    var options = Python.list(metric[0], metric[1], PythonObject(1 if String(fields["weights"]) == "distance" else 0))
-    var params = Python.list(index.shape[0], PythonObject(rows), index.shape[1], PythonObject(k), fields["query_tile"], PythonObject(outputs))
+    var multi = Bool(py=py_item(fields, nk[].k_outputs_2d_))
+    var options = Python.list(metric[0], metric[1], PythonObject(1 if String(py_item(fields, nk[].k_weights)) == "distance" else 0))
+    var params = Python.list(index.shape[0], PythonObject(rows), index.shape[1], PythonObject(k), py_item(fields, nk[].k_query_tile), PythonObject(outputs))
     if not classifier:
         var output = host_archive_typed(Python.tuple(rows, outputs), "<f4", context)
         var tile = family_call(_knn_entry(context, "knn_regress"), classical_address(index), classical_address(query),
@@ -76,12 +81,12 @@ def host_knn_predict(model: PythonObject, source: PythonObject, classifier: Bool
         _ = index^
         _ = query^
         _ = targets^
-        py_setitem(fields, "used_query_tile_", tile)
+        py_setitem(fields, nk[].k_used_query_tile_, tile)
         if multi:
             return output
         return classical_wrap_array(output._store, Python.tuple(rows), "<f4", "C", context)
 
-    var classes = fields["_classes_list"]
+    var classes = py_item(fields, nk[].k__classes_list)
     var total = 0
     var counts = List[Int]()
     _ = py_call(params.append, PythonObject(1 if probability else 0))
@@ -98,7 +103,7 @@ def host_knn_predict(model: PythonObject, source: PythonObject, classifier: Bool
     _ = index^
     _ = query^
     _ = targets^
-    py_setitem(fields, "used_query_tile_", tile)
+    py_setitem(fields, nk[].k_used_query_tile_, tile)
     var actual = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(unique)))
     var offset = 0
     for output in range(outputs):  # driver-loop: cross-check the completed distinct class metadata

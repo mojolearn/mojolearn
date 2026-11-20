@@ -9,11 +9,14 @@ from bindings.sequential_admission_door import sequential_admit_value
 from bindings.native_loaded_module_door import native_loaded_module, NativeModules
 from providers.python.pca_fit_scalar_pyapi_unpack import PCAFitScalar, pca_fit_scalar_admit
 from bindings.pca_descriptor_boundary_door import pca_connection, pca_mode_name
+from bindings.pca_keys_unpack import pca_keys
+from bindings.py_balanced import py_item
 
 
 def pca_fit_preflight(fields: PythonObject, operation: String, context: PythonObject) raises -> Tuple[String, Bool]:
+    var nk = pca_keys()
     var b = native_loaded_module("builtins")
-    var solver = fields["svd_solver"]
+    var solver = py_item(fields, nk[].k_svd_solver)
     var text = String(solver) if py_type(solver) is b.str else String("")
     if text != "auto" and text != "covariance_eigh" and text != "jacobi" and text != "full" and text != "randomized":
         # Invalid scalar spellings keep the established solver refusal. Do
@@ -26,24 +29,26 @@ def pca_fit_preflight(fields: PythonObject, operation: String, context: PythonOb
                     + "'randomized'). 'arpack' is scikit-learn's implicitly restarted Lanczos, a third "
                     + "algorithm; accepting the name and running an exact arm would be a silent substitution, "
                     + "which is why this raises (decomposition/NOT_IMPLEMENTED.tsv)")
-    var tol = PCAFitScalar(fields["tol"], context)
+    var tol = PCAFitScalar(py_item(fields, nk[].k_tol), context)
     var tolerance = tol.convert(operation, context, False)
     if Float64(py=tolerance) != 0:
         raise Error("NotImplementedError: mojolearn PCA: tol is ARPACK's convergence tolerance and "
                     + "svd_solver='arpack' is not implemented; leave tol=0.0")
-    var whiten = PCAFitScalar(fields["whiten"], context, True, operation)
+    var whiten = PCAFitScalar(py_item(fields, nk[].k_whiten), context, True, operation)
     return (text, whiten.truth(operation, context))
 
 
 def pca_fit_entries(fields: PythonObject, context: PythonObject) raises -> Int:
-    return pca_connection(pca_mode_name(fields["numeric_mode"]), context)
+    var nk = pca_keys()
+    return pca_connection(pca_mode_name(py_item(fields, nk[].k_numeric_mode)), context)
 
 
 def pca_fit_host_only(model: PythonObject) raises -> Bool:
+    var nk = pca_keys()
     var b = native_loaded_module("builtins")
-    var mro = py_call(b.type.__dict__["__mro__"].__get__, py_type(model))
+    var mro = py_call(py_item(b.type.__dict__, nk[].k___mro__).__get__, py_type(model))
     for index in range(len(mro)):  # driver-loop: admitted native class metadata only
-        var fields = py_call(b.type.__dict__["__dict__"].__get__, mro[index])
-        if py_get(fields, "_HOST_INFERENCE_ONLY") is not None:
+        var fields = py_call(py_item(b.type.__dict__, nk[].k___dict__).__get__, mro[index])
+        if py_get(fields, nk[].k__HOST_INFERENCE_ONLY) is not None:
             return True
     return False

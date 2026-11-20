@@ -27,10 +27,13 @@ from bindings.trees_side_records_unpack import trees_side_put
 from bindings.optimizer_public_words_unpack import stash_python_error
 from bindings.sequential_admission_door import _one_of
 from core.host_inference_impl import host_inference_finite
+from bindings.host_tree_archive_keys_unpack import host_tree_archive_keys
+from bindings.py_balanced import py_item
 
 
 def _if_fit_alias(value: PythonObject, context: PythonObject, integer_only: Bool = False) raises -> Bool:
-    if py_get(context, "ndarray") is None:
+    var nk = host_tree_archive_keys()
+    if py_get(context, nk[].k_ndarray) is None:
         return False
     # The alias types come from the once-built record (p3-trees: 3 np.dtype()
     # calls per option probe, ~15 probes per fit); its slots 1..3 are the
@@ -44,25 +47,26 @@ def _if_fit_alias(value: PythonObject, context: PythonObject, integer_only: Bool
 
 
 def _if_fit_repr(value: PythonObject, context: PythonObject) raises -> String:
+    var nk = host_tree_archive_keys()
     # Numeric ndarray repr enters NumPy's Python array-printing module. Its
     # scalar contents and native dtype metadata suffice for these scalar knobs.
     var native_str = py_type(PythonObject(""))
-    if py_type(value) is py_get(context, "ndarray"):
+    if py_type(value) is py_get(context, nk[].k_ndarray):
         host_inference_scalar(value, context)
         return host_iforest_scalar_repr(value, context)
     var admitted = value if _if_fit_alias(value, context) else _kde_option_value(value, context, True)
     var original = value
     if py_type(admitted) is native_str and py_type(value) is not native_str:
         var numpy_str = PythonObject(None)
-        if py_get(context, "ndarray") is not None:
+        if py_get(context, nk[].k_ndarray) is not None:
             numpy_str = py_call(native_numpy_dtype(context), "U").type
         if py_type(value) is not numpy_str:
-            var mro = py_call(py_type(native_str).__dict__["__mro__"].__get__, py_type(value))
+            var mro = py_call(py_item(py_type(native_str).__dict__, nk[].k___mro__).__get__, py_type(value))
             for i in range(len(mro)):  # driver-loop: benign string subclass repr admission
                 if mro[i] is native_str:
                     break
-                var slot = py_get(_pd_type_fields(mro[i]), "__repr__")
-                if slot is not None and slot is not native_str.__dict__["__repr__"]:
+                var slot = py_get(_pd_type_fields(mro[i]), nk[].k___repr__)
+                if slot is not None and slot is not py_item(native_str.__dict__, nk[].k___repr__):
                     raise Error("TypeError: IsolationForest parameter errors cannot invoke Python repr hooks")
             original = admitted
     ref cpy = Python().cpython()
@@ -73,9 +77,10 @@ def _if_fit_repr(value: PythonObject, context: PythonObject) raises -> String:
 
 
 def _if_fit_number(value: PythonObject, context: PythonObject, integer: Bool = False) raises -> PythonObject:
+    var nk = host_tree_archive_keys()
     var admitted = value if _if_fit_alias(value, context) else _kde_option_value(value, context, True)
     var cls = py_type(admitted)
-    if cls is py_get(context, "ndarray") or _one_of(cls, context["scalar_types"]) or _if_fit_alias(admitted, context):
+    if cls is py_get(context, nk[].k_ndarray) or _one_of(cls, py_item(context, nk[].k_scalar_types)) or _if_fit_alias(admitted, context):
         # Admission above establishes exact primitive scalar/buffer storage.
         # Numeric conversion belongs in Mojo, even when NumPy's C number
         # slot would execute without a Python frame.
@@ -89,16 +94,17 @@ def _if_fit_number(value: PythonObject, context: PythonObject, integer: Bool = F
 
 
 def _if_fit_truth(value: PythonObject, context: PythonObject) raises -> Bool:
+    var nk = host_tree_archive_keys()
     var cls = py_type(value)
     if classical_is_array(value, context):
         native_release_admit(value, context)
-        var slots = context["owner_array_slots"]
-        var size = py_call(slots["size"].__get__, value, cls)
+        var slots = py_item(context, nk[].k_owner_array_slots)
+        var size = py_call(py_item(slots, nk[].k_size).__get__, value, cls)
         if Int(py=size) != 1:
             raise Error("mojolearn: the truth value of an Array with more than one element is ambiguous")
-        var view = py_call(slots["_mv"].__get__, value, cls)
-        var dtype = py_call(slots["dtype"].__get__, value, cls)
-        if py_type(view) is not context["host_iforest_memoryview_type"] or len(view) != 1:
+        var view = py_call(py_item(slots, nk[].k__mv).__get__, value, cls)
+        var dtype = py_call(py_item(slots, nk[].k_dtype).__get__, value, cls)
+        if py_type(view) is not py_item(context, nk[].k_host_iforest_memoryview_type) or len(view) != 1:
             raise Error("TypeError: IsolationForest Array controls require one native buffer element")
         if py_type(dtype) is not py_type(PythonObject("")):
             raise Error("TypeError: IsolationForest Array controls require native dtype metadata")
@@ -107,107 +113,109 @@ def _if_fit_truth(value: PythonObject, context: PythonObject) raises -> Bool:
         var result = (Int(py=view[0]) & 32767) != 0 if String(dtype) == "<f2" else Bool(py=view[0])
         _ = view^
         return result
-    if py_type(value) is py_get(context, "ndarray"):
+    if py_type(value) is py_get(context, nk[].k_ndarray):
         host_inference_scalar(value, context, True)
         return native_scalar_buffer(value).truth()
-    if cls is py_type(Python.list()) or cls is py_type(Python.tuple()) or _one_of(cls, context["mapping_types"]):
+    if cls is py_type(Python.list()) or cls is py_type(Python.tuple()) or _one_of(cls, py_item(context, nk[].k_mapping_types)):
         classical_admit_value(value, context)
         return Bool(py=value)
     var admitted = value if _if_fit_alias(value, context) else _kde_option_value(value, context, True)
-    if _one_of(py_type(admitted), context["scalar_types"]) or _if_fit_alias(admitted, context):
+    if _one_of(py_type(admitted), py_item(context, nk[].k_scalar_types)) or _if_fit_alias(admitted, context):
         return native_scalar_buffer(admitted).truth()
     _ = admitted^
     return Bool(py=value)
 
 
 def _if_fit_options(model: PythonObject, fields: PythonObject, context: PythonObject) raises:
+    var nk = host_tree_archive_keys()
     var options = Python.dict()
     var names = Python.tuple("n_estimators", "max_samples", "max_depth", "max_features", "bootstrap", "contamination", "random_state", "warm_start", "n_jobs", "verbose", "output_type")
     for i in range(len(names)):  # driver-loop: native attribute precedence for fixed constructor options
         options[names[i]] = classical_getattribute(model, names[i], context)
-    var trees = _if_fit_number(options["n_estimators"], context, True)
+    var trees = _if_fit_number(py_item(options, nk[].k_n_estimators), context, True)
     if Bool(py=trees < 1):
         raise Error("mojolearn IsolationForest: n_estimators must be at least 1, got " + _if_fit_repr(trees, context))
     var native_str = py_type(PythonObject(""))
     var native_bool = py_type(PythonObject(True))
-    var samples = options["max_samples"]
+    var samples = py_item(options, nk[].k_max_samples)
     var admitted = samples if _if_fit_alias(samples, context) else _kde_option_value(samples, context, True)
     if py_type(admitted) is native_str:
         if String(py_call(admitted.lower)) != "auto":
             raise Error("mojolearn IsolationForest: max_samples=" + _if_fit_repr(samples, context) + " is not a name; it is 'auto', a positive int, or a float in (0.0, 1.0]")
-        py_setitem(fields, "_max_samples_mode", 0)
-        py_setitem(fields, "_max_samples_int", 256)
-        py_setitem(fields, "_max_samples_frac", 1.0)
-    elif _one_of(py_type(samples), py_get(context, "bool_types", Python.tuple(native_bool))):
+        py_setitem(fields, nk[].k__max_samples_mode, 0)
+        py_setitem(fields, nk[].k__max_samples_int, 256)
+        py_setitem(fields, nk[].k__max_samples_frac, 1.0)
+    elif _one_of(py_type(samples), py_get(context, nk[].k_bool_types, Python.tuple(native_bool))):
         raise Error("mojolearn IsolationForest: max_samples must be 'auto', an int, or a float, not a bool")
-    elif _one_of(py_type(samples), context["integer_types"]) or _if_fit_alias(samples, context, True):
+    elif _one_of(py_type(samples), py_item(context, nk[].k_integer_types)) or _if_fit_alias(samples, context, True):
         var count = _if_fit_number(samples, context, True)
         if Bool(py=count <= 0):
             raise Error("mojolearn IsolationForest: max_samples must be a positive integer, got " + _if_fit_repr(samples, context))
-        py_setitem(fields, "_max_samples_mode", 1)
-        fields["_max_samples_int"] = count
-        py_setitem(fields, "_max_samples_frac", 1.0)
+        py_setitem(fields, nk[].k__max_samples_mode, 1)
+        py_setitem(fields, nk[].k__max_samples_int, count)
+        py_setitem(fields, nk[].k__max_samples_frac, 1.0)
     else:
         var fraction = _if_fit_number(samples, context)
         if not (Float64(py=fraction) > 0.0 and Float64(py=fraction) <= 1.0):
             raise Error("mojolearn IsolationForest: float max_samples must be in (0.0, 1.0], got " + _if_fit_repr(samples, context))
-        py_setitem(fields, "_max_samples_mode", 2)
-        py_setitem(fields, "_max_samples_int", 256)
-        fields["_max_samples_frac"] = fraction
-    var depth = options["max_depth"]
-    fields["_max_depth"] = PythonObject(-1) if depth is None else _if_fit_number(depth, context, True)
-    if depth is not None and Bool(py=fields["_max_depth"] < 1):
+        py_setitem(fields, nk[].k__max_samples_mode, 2)
+        py_setitem(fields, nk[].k__max_samples_int, 256)
+        py_setitem(fields, nk[].k__max_samples_frac, fraction)
+    var depth = py_item(options, nk[].k_max_depth)
+    py_setitem(fields, nk[].k__max_depth, PythonObject(-1) if depth is None else _if_fit_number(depth, context, True))
+    if depth is not None and Bool(py=py_item(fields, nk[].k__max_depth) < 1):
         raise Error("mojolearn IsolationForest: max_depth is None (their auto) or a positive int, got " + _if_fit_repr(depth, context))
-    var features = options["max_features"]
-    if _one_of(py_type(features), py_get(context, "bool_types", Python.tuple(native_bool))):
+    var features = py_item(options, nk[].k_max_features)
+    if _one_of(py_type(features), py_get(context, nk[].k_bool_types, Python.tuple(native_bool))):
         raise Error("mojolearn IsolationForest: max_features must be an int or a float, not a bool")
     var features_error = String("mojolearn IsolationForest: max_features must be an int in [1, n_features] or a float in (0.0, 1.0], got ")
-    if _one_of(py_type(features), context["integer_types"]) or _if_fit_alias(features, context, True):
+    if _one_of(py_type(features), py_item(context, nk[].k_integer_types)) or _if_fit_alias(features, context, True):
         var count = _if_fit_number(features, context, True)
         if Bool(py=count < 1):
             raise Error(features_error + _if_fit_repr(features, context))
-        py_setitem(fields, "_max_features_mode", 1)
-        fields["_max_features_int"] = count
-        py_setitem(fields, "_max_features_frac", 1.0)
+        py_setitem(fields, nk[].k__max_features_mode, 1)
+        py_setitem(fields, nk[].k__max_features_int, count)
+        py_setitem(fields, nk[].k__max_features_frac, 1.0)
     else:
         var fraction = _if_fit_number(features, context)
         if not (Float64(py=fraction) > 0.0 and Float64(py=fraction) <= 1.0):
             raise Error(features_error + _if_fit_repr(features, context))
-        py_setitem(fields, "_max_features_mode", 0)
-        py_setitem(fields, "_max_features_int", 0)
-        fields["_max_features_frac"] = fraction
-    var contamination = options["contamination"]
+        py_setitem(fields, nk[].k__max_features_mode, 0)
+        py_setitem(fields, nk[].k__max_features_int, 0)
+        py_setitem(fields, nk[].k__max_features_frac, fraction)
+    var contamination = py_item(options, nk[].k_contamination)
     admitted = contamination if _if_fit_alias(contamination, context) else _kde_option_value(contamination, context, True)
     var contamination_error = String("mojolearn IsolationForest: contamination must be 'auto' or a float in the range (0.0, 0.5], got ")
     if py_type(admitted) is native_str:
         if String(py_call(admitted.lower)) != "auto":
             raise Error(contamination_error + _if_fit_repr(contamination, context))
-        py_setitem(fields, "_contamination_auto", True)
-        py_setitem(fields, "_contamination", 0.0)
+        py_setitem(fields, nk[].k__contamination_auto, True)
+        py_setitem(fields, nk[].k__contamination, 0.0)
     else:
         var fraction = _if_fit_number(contamination, context)
         if not (Float64(py=fraction) > 0.0 and Float64(py=fraction) <= 0.5):
             raise Error(contamination_error + _if_fit_repr(contamination, context))
-        py_setitem(fields, "_contamination_auto", False)
-        fields["_contamination"] = fraction
-    var random_state = options["random_state"]
+        py_setitem(fields, nk[].k__contamination_auto, False)
+        py_setitem(fields, nk[].k__contamination, fraction)
+    var random_state = py_item(options, nk[].k_random_state)
     var seed = PythonObject(0) if random_state is None else _if_fit_number(random_state, context, True)
     if Bool(py=seed < 0) or Bool(py=seed > PythonObject(Int64(4294967295))):
         raise Error("mojolearn IsolationForest: expected 0 <= random_state <= 2**32 - 1, got " + _if_fit_repr(random_state, context))
-    if _if_fit_truth(options["warm_start"], context):
+    if _if_fit_truth(py_item(options, nk[].k_warm_start), context):
         raise Error("NotImplementedError: mojolearn IsolationForest: warm_start=True is not supported (cuML raises UnsupportedOnGPU for it too)")
-    if options["n_jobs"] is not None:
+    if py_item(options, nk[].k_n_jobs) is not None:
         raise Error("NotImplementedError: mojolearn IsolationForest: n_jobs is refused; it is scikit-learn's CPU thread count and there is no CPU path in this library to spread")
-    if _if_fit_truth(options["verbose"], context):
+    if _if_fit_truth(py_item(options, nk[].k_verbose), context):
         raise Error("NotImplementedError: mojolearn IsolationForest: verbose is refused; this implementation prints no log lines, so accepting it would be accepting-and-ignoring")
-    if options["output_type"] is not None:
+    if py_item(options, nk[].k_output_type) is not None:
         raise Error("NotImplementedError: mojolearn IsolationForest: output_type is a cuML-internal array-type selector; this package returns mojolearn Arrays")
-    fields["_n_estimators"] = trees
-    py_setitem(fields, "_bootstrap", _if_fit_truth(options["bootstrap"], context))
-    fields["_seed"] = seed
+    py_setitem(fields, nk[].k__n_estimators, trees)
+    py_setitem(fields, nk[].k__bootstrap, _if_fit_truth(py_item(options, nk[].k_bootstrap), context))
+    py_setitem(fields, nk[].k__seed, seed)
 
 
 def _if_fit_body(model: PythonObject, fields: PythonObject, raw: PythonObject, copied: Bool, est: String, context: PythonObject) raises:
+    var nk = host_tree_archive_keys()
     _if_fit_options(model, fields, context)
     if Int(py=raw.ndim) != 2:
         raise Error("mojolearn: X must be 2-D, got " + String(Int(py=raw.ndim)) + "-D shape " + _kde_shape(raw.shape))
@@ -221,7 +229,7 @@ def _if_fit_body(model: PythonObject, fields: PythonObject, raw: PythonObject, c
             if py_type(item) is py_type(PythonObject("")):
                 raise Error("TypeError: mojolearn: X holds a str, not a number")
     var x = _kde_cast(raw, context, "X")
-    py_setitem(fields, "input_copied_", copied)
+    py_setitem(fields, nk[].k_input_copied_, copied)
     var mode = _kde_fit_mode(model, fields, context)
     if mode is not None and py_type(mode) is not py_type(PythonObject("")):
         raise Error("TypeError: IsolationForest numeric mode requires an exact native string")
@@ -233,20 +241,20 @@ def _if_fit_body(model: PythonObject, fields: PythonObject, raw: PythonObject, c
         raise Error("mojolearn IsolationForest: X contains NaN or infinity")
     # Explicit CPU kernels have no resident registry. Old CPU release simply
     # removed the optional bookkeeping; callback-bearing finalizers are refused.
-    if py_get(fields, "_if_finalizer") is not None:
+    if py_get(fields, nk[].k__if_finalizer) is not None:
         raise Error("TypeError: IsolationForest CPU fit cannot invoke a Python resident finalizer")
     _ = py_call(fields.pop, "_if_token", PythonObject(None))
     _ = py_call(fields.pop, "_if_finalizer", PythonObject(None))
-    fields["_x"] = x
+    py_setitem(fields, nk[].k__x, x)
     if copied:
         # N390 (ne1-a-trees): the fit's own float32 copy is the fitted
         # training set a resident forest mirrors; it is read-only from here
         # on (p3nc_fitted_freeze), so an in-place write raises instead of
         # silently diverging from the kept forest.
         _ = fitted_freeze_any(x)
-    fields["n_features_in_"] = x.shape[1]
-    var output = host_archive_typed(Python.tuple(1), "<f4", context["output_context"])
-    var params = Python.list(x.shape[0], x.shape[1], 1, fields["_n_estimators"], fields["_max_samples_mode"], fields["_max_samples_int"], fields["_max_samples_frac"], fields["_max_depth"], fields["_max_features_mode"], fields["_max_features_int"], fields["_max_features_frac"], Int(Bool(py=fields["_bootstrap"])), fields["_seed"], Int(Bool(py=fields["_contamination_auto"])), fields["_contamination"], 0)
+    py_setitem(fields, nk[].k_n_features_in_, x.shape[1])
+    var output = host_archive_typed(Python.tuple(1), "<f4", py_item(context, nk[].k_output_context))
+    var params = Python.list(x.shape[0], x.shape[1], 1, py_item(fields, nk[].k__n_estimators), py_item(fields, nk[].k__max_samples_mode), py_item(fields, nk[].k__max_samples_int), py_item(fields, nk[].k__max_samples_frac), py_item(fields, nk[].k__max_depth), py_item(fields, nk[].k__max_features_mode), py_item(fields, nk[].k__max_features_int), py_item(fields, nk[].k__max_features_frac), Int(Bool(py=py_item(fields, nk[].k__bootstrap))), py_item(fields, nk[].k__seed), Int(Bool(py=py_item(fields, nk[].k__contamination_auto))), py_item(fields, nk[].k__contamination), 0)
     var entry = _kernel_entry("iforest_run", context)
     # N411 (ne1-a-trees, 2026-11-06): on a binary that keeps the fitted
     # forest resident (`iforest_resident()` == 1), the fit's run passes the
@@ -263,7 +271,7 @@ def _if_fit_body(model: PythonObject, fields: PythonObject, raw: PythonObject, c
         resident = PythonObject(None)
     if resident is not None:
         _ = py_call(params.append, PythonObject(0))
-    var info = host_archive_typed(Python.tuple(3 if resident is None else 4), "<f8", context["output_context"])
+    var info = host_archive_typed(Python.tuple(3 if resident is None else 4), "<f8", py_item(context, nk[].k_output_context))
     try:
         # One query row is the same first row previously copied by x[:1].
         _ = py_call(entry, classical_address(x), classical_address(x), classical_address(output), 0, classical_address(info), params)
@@ -271,35 +279,36 @@ def _if_fit_body(model: PythonObject, fields: PythonObject, raw: PythonObject, c
         raise Error("HostIForestKernelError: " + String(error))
     _ = x^
     _ = output^
-    py_setitem(fields, "offset_", Float64(Float32(classical_f64(info, 0))))
-    py_setitem(fields, "max_samples_", Int(classical_f64(info, 1)))
+    py_setitem(fields, nk[].k_offset_, Float64(Float32(classical_f64(info, 0))))
+    py_setitem(fields, nk[].k_max_samples_, Int(classical_f64(info, 1)))
     if resident is not None:
         var token = Int(classical_f64(info, 3))
         if token > 0:
             # Replacing the record drops the previous fit's lifetime, which
             # releases its token; a model without weak references keeps no
             # record and this lifetime releases the token at once.
-            _ = trees_side_put(_HOST_TOKEN_SLOT, model, Python.list(PythonObject(token), fields["_x"],
+            _ = trees_side_put(_HOST_TOKEN_SLOT, model, Python.list(PythonObject(token), py_item(fields, nk[].k__x),
                                                                     trees_resident_new(resident[0], token)))
     _ = info^
 
 
 def host_iforest_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = host_tree_archive_keys()
     classical_connect_numpy(context)
     classical_check_layout(model, context)
     var fields = host_tree_constructor_fields(model, context)
     var native_type = py_type(py_type(PythonObject(0)))
-    var mro = py_call(native_type.__dict__["__mro__"].__get__, py_type(model))
+    var mro = py_call(py_item(native_type.__dict__, nk[].k___mro__).__get__, py_type(model))
     var known = False
     var setter_found = False
     for i in range(len(mro)):  # driver-loop: fixed native estimator ancestry
-        var family = py_get(context["host_inference_kinds"], mro[i])
+        var family = py_get(py_item(context, nk[].k_host_inference_kinds), mro[i])
         known = known or (family is not None and String(family) == "iforest")
-        if py_get(_pd_type_fields(mro[i]), "_mojolearn_after_fit") is not None:
+        if py_get(_pd_type_fields(mro[i]), nk[].k__mojolearn_after_fit) is not None:
             raise Error("TypeError: IsolationForest fit does not invoke Python after-fit hooks")
-        var setter = py_get(_pd_type_fields(mro[i]), "__setattr__")
+        var setter = py_get(_pd_type_fields(mro[i]), nk[].k___setattr__)
         if not setter_found and setter is not None:
-            if setter is not context["host_density_object_setattr"]:
+            if setter is not py_item(context, nk[].k_host_density_object_setattr):
                 raise Error("TypeError: IsolationForest fit does not invoke Python attribute assignment hooks")
             setter_found = True
     if not known:
@@ -308,10 +317,10 @@ def host_iforest_fit(model: PythonObject, args: PythonObject, context: PythonObj
     for i in range(len(replacements)):  # driver-loop: old state lifetime admission before any replacement
         if py_contains(fields, replacements[i]):
             native_release_admit(fields[replacements[i]], context)
-    var marker = py_get(fields, "_mojolearn_fitting", 0)
+    var marker = py_get(fields, nk[].k__mojolearn_fitting, 0)
     host_iforest_depth_admit(marker, context)
     var nested = host_iforest_depth_truth(marker, context)
-    var est = String(py_call(native_type.__dict__["__name__"].__get__, py_type(model)))
+    var est = String(py_call(py_item(native_type.__dict__, nk[].k___name__).__get__, py_type(model)))
     if host_sparse_format(args[0]).byte_length() > 0:
         raise Error("TypeError: Sparse data was passed for X, but dense data is required. Use '.toarray()' to convert to a dense numpy array. (" + est + " takes dense X only.)")
     var pair = _kde_prepare(args[0], context, "X")
@@ -331,16 +340,16 @@ def host_iforest_fit(model: PythonObject, args: PythonObject, context: PythonObj
         _kde_y(args[1], Int(py=raw.shape[0]) if described and rank > 0 else -1, est, context)
     var copied = Bool(py=pair[1]) or not classical_is_f32(raw, context) or not classical_c_order(raw, context) or (not classical_is_array(raw, context) and not Bool(py=raw.dtype.isnative))
     var active_depth = host_iforest_depth_step(marker, False, context)
-    py_setitem(fields, "_mojolearn_fitting", active_depth)
+    py_setitem(fields, nk[].k__mojolearn_fitting, active_depth)
     try:
         _if_fit_body(model, fields, raw, copied, est, context)
     finally:
-        var remaining_depth = host_iforest_depth_step(py_get(fields, "_mojolearn_fitting", 1), True, context)
+        var remaining_depth = host_iforest_depth_step(py_get(fields, nk[].k__mojolearn_fitting, 1), True, context)
         if host_iforest_depth_positive(remaining_depth, context):
-            py_setitem(fields, "_mojolearn_fitting", remaining_depth)
+            py_setitem(fields, nk[].k__mojolearn_fitting, remaining_depth)
         else:
             _ = py_call(fields.pop, "_mojolearn_fitting", PythonObject(None))
-    py_setitem(fields, "_mojolearn_fitted", True)
+    py_setitem(fields, nk[].k__mojolearn_fitted, True)
     if not nested:
         _ = py_call(fields.pop, "feature_names_in_", PythonObject(None))
     _ = raw^

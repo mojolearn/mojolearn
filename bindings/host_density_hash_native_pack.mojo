@@ -13,6 +13,8 @@ from bindings.native_numpy_metadata_unpack import native_numpy_dtype
 from bindings.sequential_admission_door import _one_of
 from bindings.optimizer_public_words_unpack import stash_python_error
 from core.sha256 import Sha256
+from bindings.host_rest_keys_unpack import host_rest_keys
+from bindings.py_balanced import py_item
 
 
 def _density_hash_call(entry: PythonObject, *args: PythonObject) raises -> PythonObject:
@@ -32,30 +34,31 @@ def _density_hash_call(entry: PythonObject, *args: PythonObject) raises -> Pytho
 
 
 def _density_hash_buffer(value: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = host_rest_keys()
     var cls = py_type(value)
     var view = PythonObject(None)
-    if cls is context["array_class"]:
+    if cls is py_item(context, nk[].k_array_class):
         # Read the retained native slot rather than Array.tobytes or a
         # subsequently replaced Python property. Hash its physical bytes.
         var type_class = py_type(cls)
-        var fields = py_call(type_class.__dict__["__dict__"].__get__, cls)
-        var slot = context["owner_array_slots"]["_mv"]
-        if py_get(fields, "_mv") is not slot:
+        var fields = py_call(py_item(type_class.__dict__, nk[].k___dict__).__get__, cls)
+        var slot = py_item(py_item(context, nk[].k_owner_array_slots), nk[].k__mv)
+        if py_get(fields, nk[].k__mv) is not slot:
             raise Error("TypeError: density hashes require the connected native Array buffer slot")
         view = py_call(slot.__get__, value, cls)
-        if py_type(view) is not context["host_iforest_memoryview_type"]:
+        if py_type(view) is not py_item(context, nk[].k_host_iforest_memoryview_type):
             raise Error("TypeError: density hash Array storage requires a native memoryview")
     else:
-        var admitted = cls is context["host_iforest_memoryview_type"] or cls is context["array_type"] or cls is py_get(context, "ndarray")
-        if not admitted and py_get(context, "ndarray") is not None:
-            admitted = _one_of(cls, context["scalar_types"])
+        var admitted = cls is py_item(context, nk[].k_host_iforest_memoryview_type) or cls is py_item(context, nk[].k_array_type) or cls is py_get(context, nk[].k_ndarray)
+        if not admitted and py_get(context, nk[].k_ndarray) is not None:
+            admitted = _one_of(cls, py_item(context, nk[].k_scalar_types))
             if not admitted:
                 var constructor = native_numpy_dtype(context)
                 var codes = Python.tuple("q", "Q", "g", "F", "D", "G", "S", "U", "V", "M8", "m8")
                 for i in range(len(codes)):  # driver-loop: native buffer scalar aliases
                     admitted = admitted or cls is py_call(constructor, codes[i]).type
         if not admitted:
-            if _one_of(cls, context["host_hash_missing_tobytes_types"]):
+            if _one_of(cls, py_item(context, nk[].k_host_hash_missing_tobytes_types)):
                 var name = py_call(py_type(cls).__getattribute__, cls, "__name__")
                 raise Error("AttributeError: '" + String(name) + "' object has no attribute 'tobytes'")
             raise Error("TypeError: density hashes require native buffers; Python tobytes protocols cannot execute")
@@ -103,17 +106,18 @@ def _density_hash_update(mut hash: Sha256, value: PythonObject) raises:
 def _host_fields_hash(model: PythonObject, context: PythonObject) raises -> PythonObject:
     """The digest of the model's declared host fields (shared by the density
     and the generic host digests)."""
+    var nk = host_rest_keys()
     var declared = classical_getattribute(model, PythonObject("_HOST_ARRAYS"), context)
-    if not _one_of(py_type(declared), context["host_hash_field_collection_types"]):
-        if _one_of(py_type(declared), context["host_hash_noniterable_types"]):
+    if not _one_of(py_type(declared), py_item(context, nk[].k_host_hash_field_collection_types)):
+        if _one_of(py_type(declared), py_item(context, nk[].k_host_hash_noniterable_types)):
             var name = py_call(py_type(py_type(declared)).__getattribute__, py_type(declared), "__name__")
             raise Error("TypeError: '" + String(name) + "' object is not iterable")
         raise Error("TypeError: density hash field names require native containers without Python iteration")
     var names = _density_hash_call(py_type(Python.list()), declared)
     for i in range(len(names)):  # driver-loop: admit names before native lexical comparison
-        if not _one_of(py_type(names[i]), context["host_hash_name_sort_types"]):
+        if not _one_of(py_type(names[i]), py_item(context, nk[].k_host_hash_name_sort_types)):
             raise Error("TypeError: density hash field names must be native strings")
-    _ = _density_hash_call(context["host_hash_list_sort"], names)
+    _ = _density_hash_call(py_item(context, nk[].k_host_hash_list_sort), names)
     var hash = Sha256()
     for i in range(len(names)):  # driver-loop: sorted saved-state fields, including duplicate names
         if py_type(names[i]) is not py_type(PythonObject("")):

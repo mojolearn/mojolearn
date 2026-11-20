@@ -34,22 +34,26 @@ from providers.python.estimator_binding_pyapi_door import estimator_binding
 from providers.python.estimator_lifecycle_pyapi_unpack import estimator_fit_begin, estimator_fit_end
 from providers.python.neural_descriptor_pyapi_door import neural_descriptor_entry
 from bindings.native_owner_lifetime_door import native_release_admit
+from bindings.linalg_keys_unpack import linalg_keys
+from bindings.py_balanced import py_item
 
 
 def _chol_binding(model: PythonObject, context: PythonObject) raises -> PythonObject:
-    var name = "_mojolearn_gp" if context["backend_fields"]["_CPU_ONLY"] is None else "_mojolearn_linalg"
+    var nk = linalg_keys()
+    var name = "_mojolearn_gp" if py_item(py_item(context, nk[].k_backend_fields), nk[].k__CPU_ONLY) is None else "_mojolearn_linalg"
     return estimator_binding(model, name, context, False)
 
 
 def _chol_admit_state(fields: PythonObject, context: PythonObject) raises:
+    var nk = linalg_keys()
     # Exact owner storage is admitted by the shared family frontdoor. Its
     # scalar fields still require admission before any native conversion slot.
     for name in ["jitter", "numeric_mode", "n_", "info_", "nb_", "_logdet", "jitter_"]:  # driver-loop: fixed Cholesky metadata fields
         if py_contains(fields, name):
             host_inference_scalar(fields[name], context)
-    if py_contains(fields, "L_"):
-        classical_admit_value(fields["L_"], context)
-    if py_contains(fields, "_mojolearn_after_fit"):
+    if py_contains(fields, nk[].k_L_):
+        classical_admit_value(py_item(fields, nk[].k_L_), context)
+    if py_contains(fields, nk[].k__mojolearn_after_fit):
         raise Error("TypeError: Cholesky cannot invoke Python fit callbacks")
 
 
@@ -63,10 +67,11 @@ def _chol_admit_state_once(model: PythonObject, fields: PythonObject, context: P
     values are the same objects, and exact builtin scalars admit the same
     way again. `L_` is admitted on every call (an ndarray can be reshaped or
     retyped in place)."""
+    var nk = linalg_keys()
     var stamped = records_stamped_get(RECORDS_PREPARED, model, _CHOL_STAMP)
     if stamped is not None and stamped[0] is fields:
-        if py_contains(fields, "L_"):
-            classical_admit_value(fields["L_"], context)
+        if py_contains(fields, nk[].k_L_):
+            classical_admit_value(py_item(fields, nk[].k_L_), context)
         return
     _chol_admit_state(fields, context)
     if not (py_fields(model) is fields) or not records_stampable(model):
@@ -81,6 +86,7 @@ def _chol_admit_state_once(model: PythonObject, fields: PythonObject, context: P
 
 
 def _chol_initialize(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = linalg_keys()
     var b = native_loaded_module("builtins")
     var jitter = args[0]
     classical_admit_value(jitter, context)
@@ -93,8 +99,8 @@ def _chol_initialize(model: PythonObject, args: PythonObject, context: PythonObj
     var mode = args[1]
     # NumericModeMixin's former constructor kept an existing instance mode
     # when numeric_mode=None was supplied during reinitialization.
-    if mode is None and py_contains(fields, "numeric_mode"):
-        mode = fields["numeric_mode"]
+    if mode is None and py_contains(fields, nk[].k_numeric_mode):
+        mode = py_item(fields, nk[].k_numeric_mode)
     if mode is not None and py_type(mode) is not b.str:
         raise Error("ValueError: numeric_mode must be fast, identical or None")
     # Reinitialization must admit every released owner before publishing any
@@ -106,27 +112,28 @@ def _chol_initialize(model: PythonObject, args: PythonObject, context: PythonObj
     for i in range(len(names)):  # driver-loop: two constructor-owned fields, admitted before any replacement
         if py_contains(fields, names[i]) and fields[names[i]] is not replacements[i]:
             native_release_admit(fields[names[i]], context)
-    py_setitem(fields, "jitter", jitter)
-    py_setitem(fields, "numeric_mode", mode)
+    py_setitem(fields, nk[].k_jitter, jitter)
+    py_setitem(fields, nk[].k_numeric_mode, mode)
     return PythonObject(None)
 
 
 def _chol_extension(model: PythonObject, binding: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = linalg_keys()
     # The public route is resolved from the connected registry. Legacy internal
     # callers may still provide the exact module; read its dictionary directly,
     # never an optional Python module __getattr__ hook.
     var b = native_loaded_module("builtins")
     var fields = py_fields(model)
-    var want = py_get(fields, "numeric_mode")
+    var want = py_get(fields, nk[].k_numeric_mode)
     if want is None:
-        want = context["backend_fields"]["_DEFAULT_MODE"]
+        want = py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)
     if py_type(want) is not b.str:
         raise Error("ValueError: numeric_mode must be fast, identical or None")
-    var reader = "gp_numeric_mode" if context["backend_fields"]["_CPU_ONLY"] is None else "linalg_numeric_mode"
+    var reader = "gp_numeric_mode" if py_item(py_item(context, nk[].k_backend_fields), nk[].k__CPU_ONLY) is None else "linalg_numeric_mode"
     var getter = neural_descriptor_entry(binding, reader, False)
     if getter is not None:
         var got = Int(py=family_call(getter))
-        var wanted = py_get(context["family_chol_mode_codes"], want, PythonObject(None))
+        var wanted = py_get(py_item(context, nk[].k_family_chol_mode_codes), want, PythonObject(None))
         if wanted is None or Int(py=wanted) != got:
             raise Error("RuntimeError: mojolearn Cholesky: requested numeric mode differs from the compiled binding")
     return binding
@@ -134,6 +141,7 @@ def _chol_extension(model: PythonObject, binding: PythonObject, context: PythonO
 
 def _chol_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises:
     """`Cholesky.fit(A)`: factor A + jitter * I."""
+    var nk = linalg_keys()
     classical_connect_numpy(context)
     var b = native_loaded_module("builtins")
     var fields = py_fields(model)
@@ -166,16 +174,16 @@ def _chol_fit(model: PythonObject, args: PythonObject, context: PythonObject) ra
     _ = a^
     var words = FAMILY_F64P(unsafe_from_address=Int(py=classical_address(scalars)))
     _ = scalars  # keep the Python object alive through the native call above
-    py_setitem(fields, "n_", PythonObject(n))
-    py_setitem(fields, "L_", l_out)
-    py_setitem(fields, "info_", family_call(b.int, info))
+    py_setitem(fields, nk[].k_n_, PythonObject(n))
+    py_setitem(fields, nk[].k_L_, l_out)
+    py_setitem(fields, nk[].k_info_, family_call(b.int, info))
     _ = scalars  # keep the Python object alive through the native call above
     _ = l_out  # keep the Python object alive through the native call above
-    py_setitem(fields, "nb_", PythonObject(Int(words[1])))
+    py_setitem(fields, nk[].k_nb_, PythonObject(Int(words[1])))
     _ = scalars  # keep the Python object alive through the native call above
-    py_setitem(fields, "_logdet", PythonObject(words[2]))
+    py_setitem(fields, nk[].k__logdet, PythonObject(words[2]))
     _ = scalars  # keep the Python object alive through the native call above
-    py_setitem(fields, "jitter_", PythonObject(words[3]))
+    py_setitem(fields, nk[].k_jitter_, PythonObject(words[3]))
     _ = scalars  # keep the Python object alive through the native call above
     _ = scalars^
 
@@ -234,7 +242,8 @@ comptime _CHOL_REBUILD = "rebuild GP binding for operation-level multi-GPU Chole
 
 def _chol_par_admit(model: PythonObject, context: PythonObject) raises:
     """`parallel_classical._admit_cholesky`."""
-    if py_type(model) is not context["family_chol_par_class"]:
+    var nk = linalg_keys()
+    if py_type(model) is not py_item(context, nk[].k_family_chol_par_class):
         raise Error("TypeError: requires mojolearn.Cholesky")
     plan_require_identical(model, "parallel Cholesky requires IDENTICAL numeric mode")
 
@@ -262,15 +271,16 @@ def _chol_par(model: PythonObject, args: PythonObject, solve: Bool, context: Pyt
 
 def linalg_operation(model: PythonObject, operation: String, var args: PythonObject,
                      context: PythonObject) raises -> PythonObject:
+    var nk = linalg_keys()
     classical_connect_numpy(context)
     if operation == "family_chol_initialize":
         return _chol_initialize(model, args, context)
     var fields = py_fields(model)
     _chol_admit_state_once(model, fields, context)
     if operation == "family_chol_logdet":
-        if not py_contains(fields, "info_"):
+        if not py_contains(fields, nk[].k_info_):
             raise Error("AttributeError: mojolearn Cholesky: logdet_ is set by fit")
-        var info = Int(py=fields["info_"])
+        var info = Int(py=py_item(fields, nk[].k_info_))
         if info != 0:
             raise Error("ValueError: mojolearn Cholesky: the factorization failed (info=" + String(info)
                         + "), so there is no determinant to report (DEVIATION 1634)")
@@ -280,9 +290,9 @@ def linalg_operation(model: PythonObject, operation: String, var args: PythonObj
         if operation == "family_chol_binding":
             return binding
         if operation == "family_chol_door":
-            return Python.tuple(binding, PythonObject("gp_numeric_mode" if context["backend_fields"]["_CPU_ONLY"] is None else "linalg_numeric_mode"))
+            return Python.tuple(binding, PythonObject("gp_numeric_mode" if py_item(py_item(context, nk[].k_backend_fields), nk[].k__CPU_ONLY) is None else "linalg_numeric_mode"))
         if operation == "family_chol_vendor":
-            var name = "gp_vendor" if context["backend_fields"]["_CPU_ONLY"] is None else "linalg_host_vendor"
+            var name = "gp_vendor" if py_item(py_item(context, nk[].k_backend_fields), nk[].k__CPU_ONLY) is None else "linalg_host_vendor"
             var getter = neural_descriptor_entry(binding, name, False)
             return PythonObject(None) if getter is None else family_call(getter)
         return PythonObject(Float64(py=family_call(neural_descriptor_entry(binding, "cholesky_profile_jitter"))))
@@ -297,7 +307,7 @@ def linalg_operation(model: PythonObject, operation: String, var args: PythonObj
             _chol_fit(model, args, context)
         finally:
             estimator_fit_end(model, depth)
-        py_setitem(fields, "_mojolearn_fitted", PythonObject(True))
+        py_setitem(fields, nk[].k__mojolearn_fitted, PythonObject(True))
         return model
     if operation == "family_chol_solve":
         return _chol_solve(model, args, context)

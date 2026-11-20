@@ -415,7 +415,7 @@ def _connect_device_rows(registry):
     # (bindings/device_rows_door.mojo). MaxAbsScaler / RobustScaler: fit and
     # transform through x_prep_native_owner.xprep_values, which keeps the
     # rows on the device. The same rows in the same order reach the same
-    # kernels: no bit changes (tools/test_device_rows_door_cv.py).
+    # kernels: no bit changes (python/mojolearn/tests/test_device_rows_door_cv.py).
     # Lane a6: every family and classical estimator whose CV methods admit X
     # through the one path (admit_x / admit_family_meta / family_lifecycle_begin
     # / classical_view, each of which resolves a DeviceRows) opts in, so its

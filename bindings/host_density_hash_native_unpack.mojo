@@ -16,17 +16,20 @@ from core.sha256 import Sha256
 from bindings.host_density_hash_native_pack import (
     _host_fields_hash,
 )
+from bindings.host_rest_keys_unpack import host_rest_keys
+from bindings.py_balanced import py_item
 
 
 def host_density_hash(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = host_rest_keys()
     classical_connect_numpy(context)
     _ = host_tree_constructor_fields(model, context)
     var family = String(args[0])
-    var plan = context["classical_public_layouts"][py_type(model)]
-    var mro = plan["mro"]
+    var plan = py_item(context, nk[].k_classical_public_layouts)[py_type(model)]
+    var mro = py_item(plan, nk[].k_mro)
     var known = False
     for i in range(len(mro)):  # driver-loop: registered density class ancestry
-        var kind = py_get(context["host_inference_kinds"], mro[i])
+        var kind = py_get(py_item(context, nk[].k_host_inference_kinds), mro[i])
         known = known or (kind is not None and String(kind) == family)
     if not known or (family != "kde" and family != "iforest"):
         raise Error("TypeError: density hash requires its connected native host class")

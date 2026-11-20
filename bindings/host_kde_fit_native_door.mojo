@@ -22,6 +22,8 @@ from core.scaler_fit_impl import scaler_cast
 from core.host_inference_impl import host_inference_finite, host_inference_raw_finite
 from core.admitted_input import admitted_check_weights_f32
 from core.host_sparse_impl import host_sparse_uint64_bound
+from bindings.host_rest_keys_unpack import host_rest_keys
+from bindings.py_balanced import py_item, py_setitem
 
 
 def _kde_shape(shape: PythonObject) raises -> String:
@@ -36,6 +38,7 @@ def _kde_shape(shape: PythonObject) raises -> String:
 
 
 def _kde_array_view(value: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = host_rest_keys()
     if classical_is_array(value, context):
         return value
     # Exact native ndarray admission precedes this function. Hold a native
@@ -43,7 +46,7 @@ def _kde_array_view(value: PythonObject, context: PythonObject) raises -> Python
     var b = native_loaded_module("builtins")
     var pin = native_buffer_view(value)
     var flat = py_call(py_call(pin.cast, "B").cast, "f")
-    var out = native_storage_allocate(context["array_class"])
+    var out = native_storage_allocate(py_item(context, nk[].k_array_class))
     py_setattr(out, "_store", value)
     py_setattr(out, "_base", PythonObject(None))
     py_setattr(out, "_pin", pin)
@@ -62,21 +65,22 @@ def _kde_array_view(value: PythonObject, context: PythonObject) raises -> Python
 
 
 def _kde_pandas(source: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = host_rest_keys()
     # The ordinary pandas __array__ path borrowed a homogeneous float32
     # block. Preserve that alias when its transposed storage is C-contiguous;
     # multiple/mixed blocks already needed a new float32 allocation.
     var result = native_pandas_f32(source, context, False, True)
-    var manager = _pd_fields(source)["_mgr"]
+    var manager = py_item(_pd_fields(source), nk[].k__mgr)
     var series = py_type(source) is _pd_class("pandas.core.series", "Series")
-    var blocks = _pd_fields(manager)["blocks"] if series else _pd_get("pandas._libs.internals", "BlockManager", "blocks", manager)
+    var blocks = py_item(_pd_fields(manager), nk[].k_blocks) if series else _pd_get("pandas._libs.internals", "BlockManager", "blocks", manager)
     if len(blocks) == 1:
         var data = _pd_get("pandas._libs.internals", "Block", "values", blocks[0])
-        if py_type(data) is context["ndarray"] and classical_is_f32(data, context) and Bool(py=data.dtype.isnative):
+        if py_type(data) is py_item(context, nk[].k_ndarray) and classical_is_f32(data, context) and Bool(py=data.dtype.isnative):
             if series and Bool(py=data.flags.c_contiguous):
                 return Python.tuple(data, False)
             if not series and Bool(py=data.flags.f_contiguous):
                 var pin = native_buffer_view(data)
-                var view = py_call(context["ndarray"], result.shape, dtype=context["float32"], buffer=pin,
+                var view = py_call(py_item(context, nk[].k_ndarray), result.shape, dtype=py_item(context, nk[].k_float32), buffer=pin,
                     strides=Python.tuple(data.strides[1], data.strides[0]))
                 return Python.tuple(view, False)
     return Python.tuple(result, True)
@@ -96,11 +100,12 @@ def _kde_prepare(source: PythonObject, context: PythonObject, name: String) rais
 
 
 def _kde_object_storage(value: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = host_rest_keys()
     # Ordinary object buffers containing native real scalars were supported
     # by _buffer._materialize. Read native object slots, admit every element,
     # then preserve its int64/float64 intermediate before the float32 cast.
     var b = native_loaded_module("builtins")
-    if py_type(value) is not context["ndarray"]:
+    if py_type(value) is not py_item(context, nk[].k_ndarray):
         raise Error("TypeError: object storage requires an exact native ndarray")
     var flat = value.flat
     var integral = True
@@ -110,15 +115,15 @@ def _kde_object_storage(value: PythonObject, context: PythonObject) raises -> Py
         if cls is b.int or cls is b.bool:
             continue
         integral = False
-        if cls is not b.float and not _one_of(cls, context["scalar_types"]):
+        if cls is not b.float and not _one_of(cls, py_item(context, nk[].k_scalar_types)):
             raise Error("TypeError: KDE object buffers require native real scalar values without Python hooks")
         host_inference_scalar(item, context)
-    var out = host_archive_typed(value.shape, "<i8" if integral else "<f8", context["output_context"])
+    var out = host_archive_typed(value.shape, "<i8" if integral else "<f8", py_item(context, nk[].k_output_context))
     var address = Int(py=classical_address(out))
     for i in range(Int(py=value.size)):  # driver-loop: marshal admitted object scalars into native numeric storage
         var item = flat[i]
         if integral:
-            if Bool(py=item < context["int64_min"]) or Bool(py=item > context["int64_max"]):
+            if Bool(py=item < py_item(context, nk[].k_int64_min)) or Bool(py=item > py_item(context, nk[].k_int64_max)):
                 raise Error("OverflowError: int too big to convert")
             MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=address)[i] = Int64(Int(py=item))
         else:
@@ -128,6 +133,7 @@ def _kde_object_storage(value: PythonObject, context: PythonObject) raises -> Py
 
 
 def _kde_cast(value: PythonObject, context: PythonObject, name: String) raises -> PythonObject:
+    var nk = host_rest_keys()
     if classical_kind(value, context) == "O":
         var numeric = _kde_object_storage(value, context)
         var result = _kde_cast(numeric, context, name)
@@ -144,7 +150,7 @@ def _kde_cast(value: PythonObject, context: PythonObject, name: String) raises -
     if rank > 0 and classical_kind(value, context) == "u" and Int(py=value.itemsize) == 8:
         host_sparse_uint64_bound(Int(py=classical_address(value)), rows, cols,
             Int(py=value.strides[0]) if rank else 0, Int(py=value.strides[1]) if rank == 2 else 0, native)
-    var result = host_archive_typed(value.shape, "<f4", context["output_context"])
+    var result = host_archive_typed(value.shape, "<f4", py_item(context, nk[].k_output_context))
     var kind = classical_cast_kind(value, Int(py=value.itemsize), name, context)
     var owner = value
     scaler_cast(Int(py=classical_address(value)), Int(py=value.strides[0]) if rank else 0,
@@ -155,6 +161,7 @@ def _kde_cast(value: PythonObject, context: PythonObject, name: String) raises -
 
 
 def _kde_y(source: PythonObject, rows: Int, est: String, context: PythonObject) raises:
+    var nk = host_rest_keys()
     if source is None:
         return
     var b = native_loaded_module("builtins")
@@ -162,7 +169,7 @@ def _kde_y(source: PythonObject, rows: Int, est: String, context: PythonObject) 
     if sparse.byte_length() > 0:
         # y is ignored by this estimator. Read only admitted sparse shape;
         # never call a sparse method or inspect unused element protocols.
-        var shape = _sparse_fields(source)["_shape"]
+        var shape = py_item(_sparse_fields(source), nk[].k__shape)
         if py_type(shape) is not b.tuple or len(shape) != 2 or py_type(shape[0]) is not b.int or py_type(shape[1]) is not b.int:
             raise Error("TypeError: sparse target shape requires native integers")
         if rows >= 0 and Int(py=shape[0]) != rows:
@@ -203,10 +210,10 @@ def _kde_y(source: PythonObject, rows: Int, est: String, context: PythonObject) 
             if rank > 2:
                 if classical_is_array(value, context):
                     classical_admit_value(value._mv, context)
-                    value = classical_input(value._mv, context["output_context"], "y")
+                    value = classical_input(value._mv, py_item(context, nk[].k_output_context), "y")
                 else:
                     var packed = py_call(native_buffer_view(value).tobytes, "C")
-                    value = py_call(context["ndarray"], Python.tuple(Int(py=value.size)), dtype=value.dtype, buffer=packed)
+                    value = py_call(py_item(context, nk[].k_ndarray), Python.tuple(Int(py=value.size)), dtype=value.dtype, buffer=packed)
                 nrows = Int(py=value.size)
                 columns = 1
             host_inference_raw_finite(Int(py=classical_address(value)), Int(py=value.strides[0]) if rank else 0,
@@ -221,13 +228,14 @@ def _kde_y(source: PythonObject, rows: Int, est: String, context: PythonObject) 
 
 
 def _kde_weights(source: PythonObject, rows: Int, context: PythonObject) raises -> PythonObject:
+    var nk = host_rest_keys()
     if source is None:
         return PythonObject(None)
     var b = native_loaded_module("builtins")
     # Empty native sequences have a valid one-dimensional weight shape.
     # Check that shape before the general nonempty sequence materializer.
     var source_type = py_type(source)
-    if _one_of(source_type, context["host_kde_sequence_types"]) and len(source) == 0:
+    if _one_of(source_type, py_item(context, nk[].k_host_kde_sequence_types)) and len(source) == 0:
         raise Error("sample_weight.shape == (0,), expected (" + String(rows) + ",)!")
     var pair = _kde_prepare(source, context, "sample_weight")
     var raw = pair[0]
@@ -241,7 +249,7 @@ def _kde_weights(source: PythonObject, rows: Int, context: PythonObject) raises 
         raise Error("sample_weight.shape == (" + String(Int(py=raw.shape[0])) + ",), expected (" + String(rows) + ",)!")
     var converted = _kde_cast(raw, context, "sample_weight")
     var scalar = rank == 0
-    var out = host_archive_typed(Python.tuple(rows), "<f4", context["output_context"]) if scalar else converted
+    var out = host_archive_typed(Python.tuple(rows), "<f4", py_item(context, nk[].k_output_context)) if scalar else converted
     try:
         host_inference_finite(Int(py=classical_address(converted)), 1 if scalar else rows)
     except:
@@ -258,16 +266,17 @@ def _kde_weights(source: PythonObject, rows: Int, context: PythonObject) raises 
 
 
 def host_kde_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = host_rest_keys()
     classical_connect_numpy(context)
     classical_check_layout(model, context)
     var fields = host_tree_constructor_fields(model, context)
     var b = native_loaded_module("builtins")
-    var mro = py_call(b.type.__dict__["__mro__"].__get__, py_type(model))
+    var mro = py_call(py_item(b.type.__dict__, nk[].k___mro__).__get__, py_type(model))
     var known = False
     for i in range(len(mro)):  # driver-loop: fixed KDE class ancestry and hook refusal
-        var family = py_get(context["host_inference_kinds"], mro[i])
+        var family = py_get(py_item(context, nk[].k_host_inference_kinds), mro[i])
         known = known or (family is not None and String(family) == "kde")
-        if py_get(_pd_type_fields(mro[i]), "_mojolearn_after_fit") is not None:
+        if py_get(_pd_type_fields(mro[i]), nk[].k__mojolearn_after_fit) is not None:
             raise Error("TypeError: KDE fit does not invoke Python after-fit hooks")
     if not known:
         raise Error("TypeError: native KDE fit requires a connected host KDE class")
@@ -278,19 +287,19 @@ def host_kde_fit(model: PythonObject, args: PythonObject, context: PythonObject)
     var buffers = Python.tuple("_x", "_w")
     for i in range(len(buffers)):  # driver-loop: replaced KDE buffer lifetime admission
         var prior = py_get(fields, buffers[i])
-        if py_type(prior) is py_get(context, "ndarray") and classical_kind(prior, context) == "O":
+        if py_type(prior) is py_get(context, nk[].k_ndarray) and classical_kind(prior, context) == "O":
             raise Error("TypeError: KDE stored buffers cannot contain Python objects")
-    var names = py_get(fields, "feature_names_in_")
-    if py_type(names) is py_get(context, "ndarray") and classical_kind(names, context) == "O":
+    var names = py_get(fields, nk[].k_feature_names_in_)
+    if py_type(names) is py_get(context, nk[].k_ndarray) and classical_kind(names, context) == "O":
         _ = host_logistic_classes(names, context)
     var overwritten = Python.tuple("_mojolearn_fitted", "input_copied_", "n_features_in_", "n_samples_fit_")
     for i in range(len(overwritten)):  # driver-loop: overwritten scalar lifetime admission
         var prior = py_get(fields, overwritten[i])
-        if py_type(prior) is py_get(context, "ndarray") and classical_kind(prior, context) == "O":
+        if py_type(prior) is py_get(context, nk[].k_ndarray) and classical_kind(prior, context) == "O":
             raise Error("TypeError: KDE scalar state cannot contain Python objects")
-    host_inference_scalar(py_get(fields, "_mojolearn_fitting", 0), context)
-    var depth = Int(py=py_get(fields, "_mojolearn_fitting", 0))
-    var est = String(py_call(b.type.__dict__["__name__"].__get__, py_type(model)))
+    host_inference_scalar(py_get(fields, nk[].k__mojolearn_fitting, 0), context)
+    var depth = Int(py=py_get(fields, nk[].k__mojolearn_fitting, 0))
+    var est = String(py_call(py_item(b.type.__dict__, nk[].k___name__).__get__, py_type(model)))
     var source = args[0]
     var sparse = host_sparse_format(source)
     var pair = PythonObject(None)
@@ -300,8 +309,8 @@ def host_kde_fit(model: PythonObject, args: PythonObject, context: PythonObject)
     if sparse.byte_length() > 0:
         raw = host_sparse_dense(source, sparse, context)
         var stored = _sparse_fields(source)
-        var dtype = stored["dtype"] if sparse == "lil" or sparse == "dok" else stored["data"].dtype
-        copied = dtype is not context["float32"] or (sparse == "csc" and Int(py=raw.shape[0]) > 1 and Int(py=raw.shape[1]) > 1)
+        var dtype = py_item(stored, nk[].k_dtype) if sparse == "lil" or sparse == "dok" else py_item(stored, nk[].k_data).dtype
+        copied = dtype is not py_item(context, nk[].k_float32) or (sparse == "csc" and Int(py=raw.shape[0]) > 1 and Int(py=raw.shape[1]) > 1)
     else:
         pair = _kde_prepare(source, context, "X")
         raw = pair[0]
@@ -327,7 +336,7 @@ def host_kde_fit(model: PythonObject, args: PythonObject, context: PythonObject)
     finally:
         if depth <= 0:
             _ = py_call(fields.pop, "_mojolearn_fitting", PythonObject(None))
-    fields["_mojolearn_fitted"] = PythonObject(True)
+    py_setitem(fields, nk[].k__mojolearn_fitted, PythonObject(True))
     if depth == 0:
         # The outer validator converted DataFrames before reading names.
         _ = py_call(fields.pop, "feature_names_in_", PythonObject(None))
@@ -337,26 +346,28 @@ def host_kde_fit(model: PythonObject, args: PythonObject, context: PythonObject)
 
 
 def _kde_fit_mode(model: PythonObject, fields: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = host_rest_keys()
     # ModeMixin preserves an inherited numeric_mode without creating an
     # instance field. Match native attribute precedence, including a missing
     # attribute's None default, without invoking Python descriptor hooks.
-    var present = py_contains(fields, "numeric_mode")
-    var mro = context["classical_public_layouts"][py_type(model)]["mro"]
+    var present = py_contains(fields, nk[].k_numeric_mode)
+    var mro = py_item(py_item(context, nk[].k_classical_public_layouts)[py_type(model)], nk[].k_mro)
     for i in range(len(mro)):  # driver-loop: connected native class metadata
-        present = present or py_contains(_pd_type_fields(mro[i]), "numeric_mode")
+        present = present or py_contains(_pd_type_fields(mro[i]), nk[].k_numeric_mode)
     if present:
         return classical_getattribute(model, PythonObject("numeric_mode"), context)
     return PythonObject(None)
 
 
 def _kde_fit_store(model: PythonObject, fields: PythonObject, raw: PythonObject, weight: PythonObject, copied: Bool, est: String, context: PythonObject) raises:
+    var nk = host_rest_keys()
     # The CPU owner has no resident registry or immutable-fit experiment.
     # Refit clears an existing cache before preparation, like the old method.
     var b = native_loaded_module("builtins")
-    if py_get(fields, "_resident") is not None:
-        fields["_resident"] = PythonObject(None)
+    if py_get(fields, nk[].k__resident) is not None:
+        py_setitem(fields, nk[].k__resident, PythonObject(None))
     var x = _kde_cast(raw, context, "X")
-    fields["input_copied_"] = PythonObject(copied)
+    py_setitem(fields, nk[].k_input_copied_, PythonObject(copied))
     try:
         host_inference_finite(Int(py=classical_address(x)), Int(py=x.size))
     except:
@@ -366,8 +377,8 @@ def _kde_fit_store(model: PythonObject, fields: PythonObject, raw: PythonObject,
         raise Error("TypeError: KDE numeric mode requires an exact native string")
     if mode is not None and String(mode) != "identical":
         raise Error("mojolearn: " + est + " runs IDENTICAL only on the host; this model was saved '" + String(mode) + "'")
-    fields["_x"] = x
-    fields["n_features_in_"] = x.shape[1]
-    fields["n_samples_fit_"] = x.shape[0]
-    fields["_w"] = _kde_weights(weight, Int(py=x.shape[0]), context)
+    py_setitem(fields, nk[].k__x, x)
+    py_setitem(fields, nk[].k_n_features_in_, x.shape[1])
+    py_setitem(fields, nk[].k_n_samples_fit_, x.shape[0])
+    py_setitem(fields, nk[].k__w, _kde_weights(weight, Int(py=x.shape[0]), context))
     _ = x^

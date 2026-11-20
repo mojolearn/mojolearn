@@ -9,6 +9,8 @@ from bindings.mode_metadata_native_door import _class_fields
 from bindings.native_loaded_module_door import NativeModules
 from bindings.native_class_admission_door import class_record, class_admit
 from bindings.py_cpython_table import cpython_table
+from bindings.linalg_keys_unpack import linalg_keys
+from bindings.py_balanced import py_item
 
 # Per class state: the MRO row of the connected result owner (an int, so the
 # record never retains the class). A type watcher drops it when the class or
@@ -18,10 +20,11 @@ comptime _RESULT_SLOT = "linalg_result_owner_v1"
 
 
 def _result_owner(cls: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = linalg_keys()
     var b = native_loaded_module("builtins")
     if py_type(cls) is not b.type:
         raise Error("TypeError: linalg results require native class metadata")
-    var schemas = context["family_lin_result_schemas"]
+    var schemas = py_item(context, nk[].k_family_lin_result_schemas)
     var mods = NativeModules()
     var known = class_record(mods, _RESULT_SLOT, cls)
     var ancestry = _type_mro(cls)

@@ -16,28 +16,31 @@ from bindings.host_iforest_fit_native_door import _if_fit_options, _if_fit_numbe
 from bindings.native_owner_lifetime_door import native_release_admit
 from bindings.optimizer_public_words_unpack import stash_python_error
 from bindings.py_optional import py_or_none, py_present
+from bindings.host_tree_archive_keys_unpack import host_tree_archive_keys
+from bindings.py_balanced import py_item
 
 
 def _density_save_plain(value: PythonObject, context: PythonObject, depth: Int = 0) raises -> Bool:
+    var nk = host_tree_archive_keys()
     # str/repr of exact builtin scalar/container storage stays in CPython C
     # slots. Admit every nested element before allowing that recursive slot.
     if depth > 64:
         return False
     var cls = py_type(value)
-    var native = context["owner_native_types"]
+    var native = py_item(context, nk[].k_owner_native_types)
     var scalar_names = Python.tuple("str", "bytes", "bytearray", "bool", "int", "float", "complex")
     if value is None:
         return True
     for i in range(len(scalar_names)):  # driver-loop: fixed native scalar formatting types
         if cls is native[scalar_names[i]]:
             return True
-    if cls is native["list"] or cls is native["tuple"]:
+    if cls is py_item(native, nk[].k_list) or cls is py_item(native, nk[].k_tuple):
         for i in range(len(value)):  # driver-loop: all native formatted sequence elements
             if not _density_save_plain(value[i], context, depth + 1):
                 return False
         return True
-    if cls is native["dict"]:
-        var pairs = py_call(native["list"], value.items())
+    if cls is py_item(native, nk[].k_dict):
+        var pairs = py_call(py_item(native, nk[].k_list), value.items())
         for i in range(len(pairs)):  # driver-loop: all native formatted mapping keys and values
             if not _density_save_plain(pairs[i][0], context, depth + 1) or not _density_save_plain(pairs[i][1], context, depth + 1):
                 return False
@@ -57,31 +60,32 @@ def _density_save_repr(value: PythonObject, context: PythonObject) raises -> Str
 
 
 def _density_save_array_layout(context: PythonObject) raises:
+    var nk = host_tree_archive_keys()
     # Metadata vectors use the connected Array allocation and slots. Inspect
     # every assignment target before creating a result whose initialization or
     # destruction could enter a subsequently replaced Python class hook.
-    var cls = context["array_class"]
+    var cls = py_item(context, nk[].k_array_class)
     var native_type = py_type(py_type(PythonObject(0)))
     if py_type(cls) is not native_type:
         raise Error("TypeError: density checkpoint storage requires its native Array class")
-    var ancestry = py_call(native_type.__dict__["__mro__"].__get__, cls)
+    var ancestry = py_call(py_item(native_type.__dict__, nk[].k___mro__).__get__, cls)
     # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
     var found_setter = Optional[PythonObject]()
     for i in range(len(ancestry)):  # driver-loop: fixed native Array class ancestry
         var fields = _pd_type_fields(ancestry[i])
-        if py_contains(fields, "__del__"):
+        if py_contains(fields, nk[].k___del__):
             raise Error("TypeError: density checkpoint storage cannot invoke Python finalizers")
         if not found_setter:
-            var candidate = py_get(fields, "__setattr__")
+            var candidate = py_get(fields, nk[].k___setattr__)
             if candidate is not None:
                 found_setter = candidate
     var setter = PythonObject(None)
     if found_setter:
         setter = found_setter.value()
-    if setter is not context["host_density_object_setattr"]:
+    if setter is not py_item(context, nk[].k_host_density_object_setattr):
         raise Error("TypeError: density checkpoint storage cannot invoke Python assignment hooks")
     var fields = _pd_type_fields(cls)
-    var slots = context["owner_array_slots"]
+    var slots = py_item(context, nk[].k_owner_array_slots)
     var names = py_call(py_type(Python.list()), slots)
     for i in range(len(names)):  # driver-loop: retained native storage descriptors
         if py_get(fields, names[i]) is not slots[names[i]]:
@@ -117,9 +121,10 @@ def _density_save_text(value: PythonObject, context: PythonObject) raises -> Pyt
 
 
 def _density_save_mode(model: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = host_tree_archive_keys()
     var mode = _density_save_attribute(model, "numeric_mode", context, True)
     if not _if_fit_truth(mode, context):
-        mode = context["backend_fields"]["_DEFAULT_MODE"]
+        mode = py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)
     # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
     var text = Optional[PythonObject]()
     try:
@@ -127,7 +132,7 @@ def _density_save_mode(model: PythonObject, context: PythonObject) raises -> Pyt
     except error:
         if not String(error).startswith("TypeError:"):
             raise error^
-    if Bool(text) and py_type(mode) is not context["archive_bytes_type"] and py_type(mode) is not context["archive_bytearray_type"]:
+    if Bool(text) and py_type(mode) is not py_item(context, nk[].k_archive_bytes_type) and py_type(mode) is not py_item(context, nk[].k_archive_bytearray_type):
         text = py_present(py_call(py_call(text.value().strip).lower))
         if String(text.value()) == "identical" or String(text.value()) == "fast":
             return py_or_none(text)
@@ -135,17 +140,18 @@ def _density_save_mode(model: PythonObject, context: PythonObject) raises -> Pyt
 
 
 def _density_save_vector(values: PythonObject, integer: Bool, context: PythonObject) raises -> PythonObject:
+    var nk = host_tree_archive_keys()
     # array.array is the incumbent Array.from_list storage constructor. Its
     # native overflow/index behavior is retained after admitting every item.
     _density_save_array_layout(context)
     for i in range(len(values)):  # driver-loop: fixed checkpoint metadata vector
         _density_option(values[i], context)
-        if py_type(values[i]) is py_get(context, "ndarray"):
+        if py_type(values[i]) is py_get(context, nk[].k_ndarray):
             host_inference_scalar(values[i], context)
-        if py_type(values[i]) is context["array_class"]:
+        if py_type(values[i]) is py_item(context, nk[].k_array_class):
             raise Error("TypeError: checkpoint scalar metadata requires native scalar values")
     var envelope = Python.tuple("q" if integer else "d", values)
-    var constructor = context["array_type"]
+    var constructor = py_item(context, nk[].k_array_type)
     ref cpy = Python().cpython()
     var pointer = cpy.PyObject_Call(constructor._obj_ptr, envelope._obj_ptr, PyObjectPtr())
     if not pointer:
@@ -157,14 +163,15 @@ def _density_save_vector(values: PythonObject, integer: Bool, context: PythonObj
 
 def _density_save_resolve_iforest(model: PythonObject, fields: PythonObject,
                                  plan: PythonObject, context: PythonObject) raises:
+    var nk = host_tree_archive_keys()
     var names = Python.tuple("_max_samples_mode", "_max_samples_int", "_max_samples_frac", "_max_depth",
         "_max_features_mode", "_max_features_int", "_max_features_frac", "_contamination_auto",
         "_contamination", "_n_estimators", "_bootstrap", "_seed")
-    var ancestry = plan["mro"]
+    var ancestry = py_item(plan, nk[].k_mro)
     for i in range(len(ancestry)):  # driver-loop: parameter resolution uses the native assignment contract
-        var setter = py_get(_pd_type_fields(ancestry[i]), "__setattr__")
+        var setter = py_get(_pd_type_fields(ancestry[i]), nk[].k___setattr__)
         if setter is not None:
-            if setter is not context["host_density_object_setattr"]:
+            if setter is not py_item(context, nk[].k_host_density_object_setattr):
                 raise Error("TypeError: density parameter resolution cannot invoke Python assignment hooks")
             break
     for i in range(len(names)):  # driver-loop: admit every resolved owner before any replacement
@@ -189,14 +196,15 @@ def _density_save_resolve_iforest(model: PythonObject, fields: PythonObject,
 
 
 def host_density_save(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = host_tree_archive_keys()
     classical_connect_numpy(context)
     var fields = host_tree_constructor_fields(model, context)
     var family = String(args[0])
-    var plan = context["classical_public_layouts"][py_type(model)]
+    var plan = py_item(context, nk[].k_classical_public_layouts)[py_type(model)]
     var known = False
-    var mro = plan["mro"]
+    var mro = py_item(plan, nk[].k_mro)
     for i in range(len(mro)):  # driver-loop: connected explicit CPU estimator ancestry
-        var kind = py_get(context["host_inference_kinds"], mro[i])
+        var kind = py_get(py_item(context, nk[].k_host_inference_kinds), mro[i])
         known = known or (kind is not None and String(kind) == family)
     if not known or (family != "kde" and family != "iforest"):
         raise Error("TypeError: density checkpoint requires its connected native host class")
@@ -204,7 +212,7 @@ def host_density_save(model: PythonObject, args: PythonObject, context: PythonOb
     # Lane fix-iforest-save-device-forest: a HostIsolationForest loaded from
     # a mojolearn-iforest-2 file holds its saved forest (`_if_forest`) and no
     # training matrix; it saves that forest again in the same format.
-    var forest = family == "iforest" and not py_contains(fields, "_x") and py_contains(fields, "_if_forest")
+    var forest = family == "iforest" and not py_contains(fields, nk[].k__x) and py_contains(fields, nk[].k__if_forest)
     if not forest:
         try:
             x = _density_save_attribute(model, "_x", context)
@@ -212,34 +220,34 @@ def host_density_save(model: PythonObject, args: PythonObject, context: PythonOb
             if String(error).startswith("AttributeError:"):
                 raise Error("RuntimeError: this estimator is not fitted yet")
             raise error^
-    if family == "iforest" and not py_contains(fields, "_seed"):
+    if family == "iforest" and not py_contains(fields, nk[].k__seed):
         _density_save_resolve_iforest(model, fields, plan, context)
     var values = Python.dict()
-    py_setitem(values, "format", "mojolearn-kde-1" if family == "kde" else ("mojolearn-iforest-2" if forest else "mojolearn-iforest-1"))
+    py_setitem(values, nk[].k_format, "mojolearn-kde-1" if family == "kde" else ("mojolearn-iforest-2" if forest else "mojolearn-iforest-1"))
     # Canonical family names let both host_model and class.load consume files
     # saved from explicit CPU classes or their ordinary registered subclasses.
-    py_setitem(values, "estimator", "KernelDensity" if family == "kde" else "IsolationForest")
-    py_setitem(values, "numeric_mode", _density_save_mode(model, context))
+    py_setitem(values, nk[].k_estimator, "KernelDensity" if family == "kde" else "IsolationForest")
+    py_setitem(values, nk[].k_numeric_mode, _density_save_mode(model, context))
     if forest:
-        var held = fields["_if_forest"]
+        var held = py_item(fields, nk[].k__if_forest)
         var members = Python.tuple("tree_offsets", "node_feature", "node_threshold", "node_left", "node_right")
         if py_type(held) is not py_type(Python.tuple()) or len(held) != 5:
             raise Error("TypeError: IsolationForest saved forest must be a tuple of five arrays")
         for i in range(5):  # driver-loop: the five fixed forest members
             py_setitem(values, members[i], held[i])
     else:
-        py_setitem(values, "x", x)
+        py_setitem(values, nk[].k_x, x)
     if family == "kde":
-        py_setitem(values, "kernel", _density_save_text(_density_save_attribute(model, "kernel", context), context))
-        py_setitem(values, "metric", _density_save_text(_density_save_attribute(model, "metric", context), context))
+        py_setitem(values, nk[].k_kernel, _density_save_text(_density_save_attribute(model, "kernel", context), context))
+        py_setitem(values, nk[].k_metric, _density_save_text(_density_save_attribute(model, "metric", context), context))
         var bandwidth = _if_fit_number(_density_save_attribute(model, "bandwidth", context), context)
-        py_setitem(values, "bandwidth", _density_save_vector(Python.list(bandwidth), False, context))
+        py_setitem(values, nk[].k_bandwidth, _density_save_vector(Python.list(bandwidth), False, context))
         var features = _if_fit_number(_density_save_attribute(model, "n_features_in_", context), context, True)
         var rows = _if_fit_number(_density_save_attribute(model, "n_samples_fit_", context), context, True)
         var weights = _density_save_attribute(model, "_w", context)
-        py_setitem(values, "meta", _density_save_vector(Python.list(features, rows, 0 if weights is None else 1), True, context))
+        py_setitem(values, nk[].k_meta, _density_save_vector(Python.list(features, rows, 0 if weights is None else 1), True, context))
         if weights is not None:
-            py_setitem(values, "weights", weights)
+            py_setitem(values, nk[].k_weights, weights)
     else:
         var integers = Python.list()
         var names = Python.tuple("_n_estimators", "_max_samples_mode", "_max_samples_int", "_max_depth",
@@ -252,12 +260,12 @@ def host_density_save(model: PythonObject, args: PythonObject, context: PythonOb
             elif i == 6 or i == 8:
                 value = PythonObject(1 if _if_fit_truth(value, context) else 0)
             _ = py_call(integers.append, value)
-        py_setitem(values, "ints", _density_save_vector(integers, True, context))
+        py_setitem(values, nk[].k_ints, _density_save_vector(integers, True, context))
         var reals = Python.list()
         var real_names = Python.tuple("_max_samples_frac", "_max_features_frac", "_contamination", "offset_")
         for i in range(len(real_names)):  # driver-loop: the four incumbent real archive members
             _ = py_call(reals.append, _if_fit_number(_density_save_attribute(model, String(real_names[i]), context), context))
-        py_setitem(values, "reals", _density_save_vector(reals, False, context))
+        py_setitem(values, nk[].k_reals, _density_save_vector(reals, False, context))
     var result = classical_archive_write(args[1], values, context)
     _ = x^
     _ = values^

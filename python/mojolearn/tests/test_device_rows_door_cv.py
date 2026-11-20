@@ -11,15 +11,18 @@ on the host-array path and once with the plan's `device_rows` switched on,
 and compares the score digests. The same rows reach the same kernels in the
 same order, so the bytes must be equal in `identical` mode on every vendor.
 
-Runs on a box with a built wheel (never on the laptop):
-    python -m pytest -q tools/test_device_rows_door_cv.py
+Runs with the built package (the python/mojolearn/tests suite on a box, never on the laptop):
+    python -m pytest -q python/mojolearn/tests/test_device_rows_door_cv.py
+It lived in tools/ until 2026-11-19, where the tool-test environment has no
+built mojolearn, so it only ever skipped there (pytest rc 5).
 """
 import hashlib
 
 import pytest
 
-np = pytest.importorskip("numpy")
-mojolearn = pytest.importorskip("mojolearn")
+import numpy as np
+
+import mojolearn
 
 from mojolearn import model_selection  # noqa: E402
 

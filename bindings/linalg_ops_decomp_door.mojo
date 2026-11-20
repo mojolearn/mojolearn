@@ -37,6 +37,8 @@ from x_decomp.descriptor_schema import (
 from core.entry_table import EntryRef, entry_ref_call
 from bindings.linalg_ops_kit_run import LinKit, KIT_F32P, lin_svd_tall_run, lin_svd_hermitian_run
 from bindings.linalg_ops_decomp_run import _lin_tsqr_on
+from bindings.linalg_keys_unpack import linalg_keys
+from bindings.py_balanced import py_item
 
 
 def _lin_door(context: PythonObject) raises -> PythonObject:
@@ -96,7 +98,8 @@ def _lin_copy_out(mut kit: LinKit, a: Int, result: PythonObject, count: Int) rai
 
 def _lin_rtol(context: PythonObject) raises -> Float64:
     """UNPACK: `_SVD_NULL_RTOL_MODULE`, the rank cut `_svd_tall` reads."""
-    return Float64(py=lin_state(context)["_SVD_NULL_RTOL_MODULE"])
+    var nk = linalg_keys()
+    return Float64(py=py_item(lin_state(context), nk[].k__SVD_NULL_RTOL_MODULE))
 
 
 def _lin_eq(a: PythonObject, b: String) raises -> Bool:

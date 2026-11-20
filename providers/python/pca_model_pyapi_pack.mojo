@@ -18,21 +18,24 @@ from bindings.pca_descriptor_boundary_door import pca_connection, pca_connection
 from core.pca_query_state import PCAQueryState
 from x_decomp.pca_model_run import _pca_query_decoded
 from providers.python.pca_query_cache_pyapi_unpack import PCAQueryPins, PCAQueryAdmission, PCAQueryCache
+from bindings.pca_keys_unpack import pca_keys
+from bindings.py_balanced import py_item
 
 
 def _native_number(value: PythonObject, context: PythonObject, truth: Bool,
                    operation: String = "transform") raises -> PythonObject:
+    var nk = pca_keys()
     if truth:
         var captured = PCAFitScalar(value, context, True, operation)
         return PythonObject(captured.truth(operation, context))
     var cls = py_type(value)
     # Exact builtin values have no application conversion hooks. Retain
     # their established Int/Bool behavior, including primitive error cases.
-    if value is None or cls is py_type(PythonObject(0)) or cls is py_type(PythonObject(0.0)) or cls is py_type(PythonObject(True)) or cls is py_type(PythonObject("")) or cls is context["native_bytes_type"] or cls is context["native_bytearray_type"]:
+    if value is None or cls is py_type(PythonObject(0)) or cls is py_type(PythonObject(0.0)) or cls is py_type(PythonObject(True)) or cls is py_type(PythonObject("")) or cls is py_item(context, nk[].k_native_bytes_type) or cls is py_item(context, nk[].k_native_bytearray_type):
         return value
-    var array = cls is py_get(context, "ndarray")
-    var scalar = _one_of(cls, context["scalar_types"])
-    if not array and not scalar and py_get(context, "ndarray") is not None:
+    var array = cls is py_get(context, nk[].k_ndarray)
+    var scalar = _one_of(cls, py_item(context, nk[].k_scalar_types))
+    if not array and not scalar and py_get(context, nk[].k_ndarray) is not None:
         var constructor = native_numpy_dtype(context)
         for code in ["q", "Q", "g", "F", "D", "G"]:  # small-loop(native scalar ABI aliases)
             scalar = scalar or cls is py_call(constructor, code).type
@@ -57,11 +60,12 @@ def _native_number(value: PythonObject, context: PythonObject, truth: Bool,
 
 
 def _pca_query_fields_from(state: PythonObject, context: PythonObject, operation: String) raises -> PythonObject:
-    var fields = py_call(py_type(Python.dict()).__dict__["copy"], state)
+    var nk = pca_keys()
+    var fields = py_call(py_item(py_type(Python.dict()).__dict__, nk[].k_copy), state)
     var scalar_owners = Python.list()
     # Preserve the PCA owner's existing admission of all declared settings
     # and fitted fields, including fields this particular query will not use.
-    var names = context["pca_parameters"] + context["pca_state"]
+    var names = py_item(context, nk[].k_pca_parameters) + py_item(context, nk[].k_pca_state)
     # Row N262: one module view for the field admissions of this query, not
     # one NativeModules per value; a scalar admission (NumPy's scalar
     # protocol) is followed by released(), so the next value re-checks.
@@ -69,7 +73,7 @@ def _pca_query_fields_from(state: PythonObject, context: PythonObject, operation
     for index in range(len(names)):  # driver-loop: connected field inventory, private snapshot only
         if py_contains(fields, names[index]):
             var name = String(names[index])
-            if index < len(context["pca_parameters"]) or name == "_mojolearn_fitted" or name == "_mojolearn_fitting":
+            if index < len(py_item(context, nk[].k_pca_parameters)) or name == "_mojolearn_fitted" or name == "_mojolearn_fitting":
                 pca_fit_scalar_admit(fields[names[index]], context)
                 mods.released()
             else:
@@ -78,7 +82,7 @@ def _pca_query_fields_from(state: PythonObject, context: PythonObject, operation
         if py_contains(fields, name):
             _ = py_call(scalar_owners.append, fields[name])
             py_setitem(fields, name, _native_number(fields[name], context, True, operation))
-    var fitted = Bool(py=py_get(fields, "_mojolearn_fitted", False)) or Bool(py=py_get(fields, "_mojolearn_fitting", False))
+    var fitted = Bool(py=py_get(fields, nk[].k__mojolearn_fitted, False)) or Bool(py=py_get(fields, nk[].k__mojolearn_fitting, False))
     if not fitted:
         var keys = py_call(py_type(Python.list()), fields)
         for index in range(len(keys)):  # driver-loop: existing public fitted-attribute compatibility rule
@@ -95,11 +99,11 @@ def _pca_query_fields_from(state: PythonObject, context: PythonObject, operation
             py_setitem(fields, name, _native_number(fields[name], context, name == "whiten", operation))
     # PCA queries historically select the current numeric_mode, rather than
     # numeric_mode_. Capture the process default now when it is requested.
-    var mode = py_get(fields, "numeric_mode")
+    var mode = py_get(fields, nk[].k_numeric_mode)
     if mode is None:
-        mode = context["backend_fields"]["_DEFAULT_MODE"]
+        mode = py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)
     if py_type(mode) is not py_type(PythonObject("")):
         raise Error("TypeError: numeric_mode must be identical, fast or None")
-    py_setitem(fields, "numeric_mode", mode)
-    py_setitem(fields, "_pca_query_scalar_owners", scalar_owners)
+    py_setitem(fields, nk[].k_numeric_mode, mode)
+    py_setitem(fields, nk[].k__pca_query_scalar_owners, scalar_owners)
     return fields

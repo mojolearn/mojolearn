@@ -21,6 +21,8 @@ from providers.python.pca_query_cache_pyapi_unpack import PCAQueryPins, PCAQuery
 from providers.python.pca_model_pyapi_pack import (
     _pca_query_fields_from,
 )
+from bindings.pca_keys_unpack import pca_keys
+from bindings.py_balanced import py_item
 
 
 # The native record retains the original generation/identity admission fast
@@ -43,12 +45,13 @@ def _pca_query_plain(value: PythonObject, ndarray: PythonObject, decoded: Bool) 
 
 
 def _pca_query_key(state: PythonObject, context: PythonObject) raises -> PCAQueryPins:
-    var ndarray = py_get(context, "ndarray")
+    var nk = pca_keys()
+    var ndarray = py_get(context, nk[].k_ndarray)
     if ndarray is None or py_type(state) is not py_type(Python.dict()):
         return PCAQueryPins(False)
     var key = _pca_context_key(state, context)
-    var parameters = context["pca_parameters"]
-    var stored = context["pca_state"]
+    var parameters = py_item(context, nk[].k_pca_parameters)
+    var stored = py_item(context, nk[].k_pca_state)
     for group in range(2):  # driver-loop: connected settings, then fitted state
         var names = parameters if group == 0 else stored
         for index in range(len(names)):  # driver-loop: admitted field identities, never array values
@@ -64,17 +67,18 @@ def _pca_query_key(state: PythonObject, context: PythonObject) raises -> PCAQuer
 
 
 def _pca_context_key(state: PythonObject, context: PythonObject) raises -> PCAQueryPins:
+    var nk = pca_keys()
     var key = PCAQueryPins()
     key.append(context)
-    key.append(py_get(context, "ndarray"))
-    key.append(context["pca_parameters"])
-    key.append(context["pca_state"])
-    key.append(py_get(context, "vendor"))
-    key.append(context["pca_bindings"])
-    if py_get(state, "numeric_mode") is None:
-        var backend = context["backend_fields"]
+    key.append(py_get(context, nk[].k_ndarray))
+    key.append(py_item(context, nk[].k_pca_parameters))
+    key.append(py_item(context, nk[].k_pca_state))
+    key.append(py_get(context, nk[].k_vendor))
+    key.append(py_item(context, nk[].k_pca_bindings))
+    if py_get(state, nk[].k_numeric_mode) is None:
+        var backend = py_item(context, nk[].k_backend_fields)
         key.append(backend)
-        key.append(backend["_DEFAULT_MODE"])
+        key.append(py_item(backend, nk[].k__DEFAULT_MODE))
     return key^
 
 
@@ -84,19 +88,21 @@ def _pca_generation(model: PythonObject) raises -> Int:
 
 
 def _pca_query_state(fields: PythonObject, connection: Int) raises -> PCAQueryState:
+    var nk = pca_keys()
     # Preserve the original post-provider order: fitted-array presence, three
     # integer conversions, dimension refusal, then whitening truth.
-    if not py_contains(fields, "components_"):
+    if not py_contains(fields, nk[].k_components_):
         raise Error("RuntimeError: this estimator is not fitted yet")
-    var fit_rows = Int(py=fields["n_samples_"])
-    var features = Int(py=fields["n_features_in_"])
-    var count = Int(py=fields["n_components_"])
+    var fit_rows = Int(py=py_item(fields, nk[].k_n_samples_))
+    var features = Int(py=py_item(fields, nk[].k_n_features_in_))
+    var count = Int(py=py_item(fields, nk[].k_n_components_))
     if features < 1 or count < 0:
         raise Error("PCA fitted dimensions are invalid")
-    return PCAQueryState(fit_rows, features, count, Bool(py=fields["whiten"]), connection)
+    return PCAQueryState(fit_rows, features, count, Bool(py=py_item(fields, nk[].k_whiten)), connection)
 
 
 def pca_query_admitted(model: PythonObject, context: PythonObject, operation: String) raises -> PCAQueryAdmission:
+    var nk = pca_keys()
     var state = classical_family_admit(model)
     var mods = NativeModules()
     var generation = _pca_generation(model)
@@ -106,7 +112,7 @@ def pca_query_admitted(model: PythonObject, context: PythonObject, operation: St
         var context_key = _pca_context_key(state, context)
         if (cache[].generation == generation and cache[].context_key.identity.same(context_key.identity)
                 and pca_connection_matches(cache[].state.connection, cache[].mode, context)):
-            var fields = py_call(py_type(Python.dict()).__dict__["copy"], state)
+            var fields = py_call(py_item(py_type(Python.dict()).__dict__, nk[].k_copy), state)
             var decoded = cache[].state.copy()
             _ = held  # the downcast owner remains alive through its final native read
             return PCAQueryAdmission(fields, decoded^)
@@ -117,21 +123,21 @@ def pca_query_admitted(model: PythonObject, context: PythonObject, operation: St
             if generation != 0 and cache[].generation != generation:
                 cache[].generation = generation
                 cache[].context_key = _pca_context_key(state, context)
-            var fields = py_call(py_type(Python.dict()).__dict__["copy"], state)
+            var fields = py_call(py_item(py_type(Python.dict()).__dict__, nk[].k_copy), state)
             var decoded = cache[].state.copy()
             _ = held
             return PCAQueryAdmission(fields, decoded^)
     var fields = _pca_query_fields_from(state, context, operation)
-    if py_get(context, "ndarray") is None:
+    if py_get(context, nk[].k_ndarray) is None:
         raise Error("ImportError: mojolearn: PCA requires optional NumPy support. Install it with: "
                     + 'python -m pip install "mojolearn[numpy]" ("mojolearn[verify]" also includes NumPy).')
-    var mode = pca_mode_name(fields["numeric_mode"])
+    var mode = pca_mode_name(py_item(fields, nk[].k_numeric_mode))
     var connection = pca_connection(mode, context)
     var decoded = _pca_query_state(fields, connection)
     if key.identity.valid:
         # Only the lifecycle-flagged models were cached before. The attribute
         # fallback reads additional names outside the identity inventory.
-        var flagged = Bool(py=py_get(fields, "_mojolearn_fitted", False)) or Bool(py=py_get(fields, "_mojolearn_fitting", False))
+        var flagged = Bool(py=py_get(fields, nk[].k__mojolearn_fitted, False)) or Bool(py=py_get(fields, nk[].k__mojolearn_fitting, False))
         if flagged:
             var owner = PCAQueryCache(decoded.copy(), key^, _pca_context_key(state, context), generation, mode^)
             prepared_put(mods, _PCA_QUERY_SLOT, model, PythonObject(alloc=owner^))

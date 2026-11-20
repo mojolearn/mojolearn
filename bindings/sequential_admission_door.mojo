@@ -12,6 +12,18 @@ from bindings.native_identity_key_door import NativeIdentityKey
 from bindings.native_owner_registry_unpack import registered_native_owner_pins
 from core.shared_slot import SharedSlot
 from bindings.py_optional import py_present
+from bindings.sequential_keys_unpack import (
+    sequential_keys,
+    SEQUENTIAL_OPN_FORWARD,
+    SEQUENTIAL_OPN_INITIALIZE,
+    SEQUENTIAL_OPN_LAYERS,
+    SEQUENTIAL_OPN_LOAD_CHECKPOINT,
+    SEQUENTIAL_OPN_PREDICT,
+    SEQUENTIAL_OPN_PREDICT_PROBA,
+    SEQUENTIAL_OPN_PROGRAM,
+    SEQUENTIAL_OPN_TABLE,
+)
+from bindings.py_balanced import py_item
 
 
 def _one_of(cls: PythonObject, types: PythonObject) raises -> Bool:
@@ -29,15 +41,16 @@ def _ctypes_array_owner(mut mods: NativeModules, owner_type: PythonObject, conte
     one: Arrays from `astype`, the label encoders and the float64 to float32
     converters own one, and an estimator that kept such an Array as a fitted
     field could not be saved (ARIMA `llf_`, AMD verify of 7c6e0dade)."""
-    var base = py_get(context, "ctypes_array_base")
+    var nk = sequential_keys()
+    var base = py_get(context, nk[].k_ctypes_array_base)
     if base is None:
         return False
     var b = mods.module("builtins")
-    var bases = py_call(b.type.__dict__["__bases__"].__get__, owner_type)
+    var bases = py_call(py_item(b.type.__dict__, nk[].k___bases__).__get__, owner_type)
     if len(bases) != 1 or bases[0] is not base:
         return False
-    var own = py_call(b.type.__dict__["__dict__"].__get__, owner_type)
-    return not py_contains(own, "__buffer__") and not py_contains(own, "__release_buffer__")
+    var own = py_call(py_item(b.type.__dict__, nk[].k___dict__).__get__, owner_type)
+    return not py_contains(own, nk[].k___buffer__) and not py_contains(own, nk[].k___release_buffer__)
 
 
 def _ctypes_array_owner(owner_type: PythonObject, context: PythonObject) raises -> Bool:
@@ -47,7 +60,8 @@ def _ctypes_array_owner(owner_type: PythonObject, context: PythonObject) raises 
 
 
 def sequential_integer(value: PythonObject, context: PythonObject) raises -> Bool:
-    return _one_of(py_type(value), context["integer_types"])
+    var nk = sequential_keys()
+    return _one_of(py_type(value), py_item(context, nk[].k_integer_types))
 
 
 def _ordinary_torch(cls: PythonObject, context: PythonObject) raises -> Bool:
@@ -70,16 +84,17 @@ struct _SequentialValueTypes(Copyable, Movable):
     var buffer_types: List[PythonObject]
 
     def __init__(out self, mut mods: NativeModules, context: PythonObject) raises:
+        var nk = sequential_keys()
         var b = mods.module("builtins")
         self.list_type = b.list
         self.tuple_type = b.tuple
         self.memoryview_type = b.memoryview
-        self.defaultdict_type = py_get(context, "defaultdict_class")
-        self.native_types = _value_types(py_get(context, "native_value_types"))
-        self.scalar_types = _value_types(py_get(context, "scalar_types"))
-        self.mapping_types = _value_types(py_get(context, "mapping_types"))
-        self.factory_types = _value_types(py_get(context, "native_default_factories"))
-        self.buffer_types = _value_types(py_get(context, "buffer_owner_types"))
+        self.defaultdict_type = py_get(context, nk[].k_defaultdict_class)
+        self.native_types = _value_types(py_get(context, nk[].k_native_value_types))
+        self.scalar_types = _value_types(py_get(context, nk[].k_scalar_types))
+        self.mapping_types = _value_types(py_get(context, nk[].k_mapping_types))
+        self.factory_types = _value_types(py_get(context, nk[].k_native_default_factories))
+        self.buffer_types = _value_types(py_get(context, nk[].k_buffer_owner_types))
 
 
 struct _SequentialValueTypesCache(Defaultable, Movable):
@@ -252,13 +267,13 @@ struct _SequentialFieldNames(Defaultable, Movable):
 comptime _SEQUENTIAL_FIELD_NAMES = SharedSlot[_SequentialFieldNames, "MojolearnSequentialFieldNamesV3"]
 
 
-def _read_fields(operation: String) raises -> PythonObject:
+def _read_fields(operation: Int) raises -> PythonObject:
     var slot = -1
-    if operation == "layers" or operation == "table" or operation == "program":
+    if operation == SEQUENTIAL_OPN_LAYERS or operation == SEQUENTIAL_OPN_TABLE or operation == SEQUENTIAL_OPN_PROGRAM:
         slot = 0
-    elif operation == "forward":
+    elif operation == SEQUENTIAL_OPN_FORWARD:
         slot = 1
-    elif operation == "predict" or operation == "predict_proba":
+    elif operation == SEQUENTIAL_OPN_PREDICT or operation == SEQUENTIAL_OPN_PREDICT_PROBA:
         slot = 2
     if slot < 0:
         return PythonObject(None)
@@ -266,14 +281,14 @@ def _read_fields(operation: String) raises -> PythonObject:
     if len(saved[].names) == 0:
         # Publish only a complete inventory if initialization raises.
         var names = List[PythonObject]()
-        names.append(_read_fields_full("layers"))
-        names.append(_read_fields_full("forward"))
-        names.append(_read_fields_full("predict"))
+        names.append(_read_fields_full(SEQUENTIAL_OPN_LAYERS))
+        names.append(_read_fields_full(SEQUENTIAL_OPN_FORWARD))
+        names.append(_read_fields_full(SEQUENTIAL_OPN_PREDICT))
         saved[].names = names^
     return saved[].names[slot]
 
 
-def _read_fields_full(operation: String) raises -> PythonObject:
+def _read_fields_full(operation: Int) raises -> PythonObject:
     """The model fields a read-only operation reads, in inventory order, or
     None for an operation that gets the full inventory walk.
 
@@ -287,21 +302,22 @@ def _read_fields_full(operation: String) raises -> PythonObject:
     description edits (construct/add/append/compile) mutate or serialize
     the whole model and keep the full walk.
     """
-    if operation == "layers" or operation == "table" or operation == "program":
+    if operation == SEQUENTIAL_OPN_LAYERS or operation == SEQUENTIAL_OPN_TABLE or operation == SEQUENTIAL_OPN_PROGRAM:
         return Python.tuple("_layers")
-    if operation == "forward":
+    if operation == SEQUENTIAL_OPN_FORWARD:
         return Python.tuple("numeric_mode", "_layers", "params_", "n_features_in_", "n_outputs_", "_sample_shape")
-    if operation == "predict" or operation == "predict_proba":
+    if operation == SEQUENTIAL_OPN_PREDICT or operation == SEQUENTIAL_OPN_PREDICT_PROBA:
         return Python.tuple("numeric_mode", "_layers", "params_", "n_features_in_", "n_outputs_", "_sample_shape",
                             "_fit_loss", "_y_1d", "classes_")
     return PythonObject(None)
 
 
 struct SequentialAdmissions(Movable, Writable):
-    var operations: Dict[String, PythonObject]
+    # Keyed by the operation code (bindings/sequential_keys_unpack.mojo).
+    var operations: Dict[Int, PythonObject]
 
     def __init__(out self):
-        self.operations = Dict[String, PythonObject]()
+        self.operations = Dict[Int, PythonObject]()
 
     def write_to(self, mut writer: Some[Writer]):
         writer.write("SequentialAdmissions(native)")
@@ -310,23 +326,25 @@ struct SequentialAdmissions(Movable, Writable):
         self.write_to(writer)
 
 
-comptime _SEQUENTIAL_ADMIT_SLOT = "sequential_admit_v3"
+# v4: SequentialAdmissions is keyed by the operation code (was the name).
+comptime _SEQUENTIAL_ADMIT_SLOT = "sequential_admit_v4"
 
 
-def sequential_admit(mut mods: NativeModules, model: PythonObject, operation: String, args: PythonObject, context: PythonObject) raises:
+def sequential_admit(mut mods: NativeModules, model: PythonObject, operation: Int, args: PythonObject, context: PythonObject) raises:
+    var nk = sequential_keys()
     var types = _cached_value_types(mods, context)
-    if operation == "load_checkpoint":
-        if model is not context["sequential_class"]:
+    if operation == SEQUENTIAL_OPN_LOAD_CHECKPOINT:
+        if model is not py_item(context, nk[].k_sequential_class):
             raise Error("TypeError: Sequential checkpoint loading requires the native Sequential class")
-    elif operation != "initialize":
-        if py_type(model) is not context["sequential_class"]:
+    elif operation != SEQUENTIAL_OPN_INITIALIZE:
+        if py_type(model) is not py_item(context, nk[].k_sequential_class):
             raise Error("TypeError: Sequential requires its native public class, without Python subclass hooks")
         var fields = py_fields(model)
         # One admission per public call, before any native read and before the
         # provider call releases the GIL; nothing re-reads a field after it.
         var names = _read_fields(operation)
         if names is None:
-            names = context["model_fields"]
+            names = py_item(context, nk[].k_model_fields)
         # Prepared admission: the model's fields are admitted once and again
         # only when one of them, or any container item within the admitted
         # depth, changed identity (fit, set_params, load). Arguments are
@@ -371,7 +389,7 @@ def sequential_admit(mut mods: NativeModules, model: PythonObject, operation: St
             for k in range(len(names)):  # driver-loop: over model metadata and native buffer owners used by execution
                 if py_contains(fields, names[k]):
                     _sequential_admit_value(mods, fields[names[k]], context, types, 0)
-            var factory_class = py_get(context, "defaultdict_class")
+            var factory_class = py_get(context, nk[].k_defaultdict_class)
             for k in range(len(key.objects)):  # driver-loop: over captured field ownership references
                 if factory_class is not None and py_type(key.objects[k]) is factory_class:
                     stable = False

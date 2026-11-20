@@ -23,6 +23,8 @@ from bindings.linalg_ops_buffers_unpack import lin_truth, lin_dtype_name
 from bindings.linalg_ops_buffers_run import lin_is_f32
 from bindings.linalg_ops_lowbit_run import lin_op_code
 from bindings.admitted_input_unpack import AdmittedBuf, AdmittedTypedPin, admitted_typed_once, admitted_typed_c, admitted_typed_output, admitted_unfilled, admit_typed, admitted_shape_tuple
+from bindings.linalg_keys_unpack import linalg_keys
+from bindings.py_balanced import py_item
 
 comptime OP_NN = 0
 comptime OP_NT = 1
@@ -31,7 +33,8 @@ comptime OP_TN = 2
 
 def lin_state(context: PythonObject) raises -> PythonObject:
     """python/mojolearn/_linalg_impl.py's module dictionary (its constants and caches)."""
-    return context["family_lin_state"]
+    var nk = linalg_keys()
+    return py_item(context, nk[].k_family_lin_state)
 
 
 def lin_text(context: PythonObject, name: String) raises -> String:
@@ -48,10 +51,11 @@ def lin_attr(binding: PythonObject, name: String) raises -> PythonObject:
 
 def lin_call(binding: PythonObject, context: PythonObject, name: String, *args: PythonObject) raises -> PythonObject:
     """`binding.name(*args)`; the binding's own exception propagates unchanged."""
+    var nk = linalg_keys()
     var op = lin_op_code(name)
     var state = lin_state(context)
-    var provider = py_get(state, "_native_provider")
-    if op >= 0 and provider is not None and py_get(state, "_native_provider_binding") is binding:
+    var provider = py_get(state, nk[].k__native_provider)
+    if op >= 0 and provider is not None and py_get(state, nk[].k__native_provider_binding) is binding:
         var addresses = List[Int]()
         var parameters = List[Int]()
         if op < 11:
@@ -92,13 +96,15 @@ def _lin_apply(entry: PythonObject, arguments: PythonObject) raises -> PythonObj
 
 
 def lin_backend_mode(context: PythonObject) raises -> String:
-    var mode = context["backend_fields"]["_DEFAULT_MODE"]
+    var nk = linalg_keys()
+    var mode = py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)
     if mode is None:
         raise Error("RuntimeError: linalg numeric mode must be selected before operation admission")
     return String(py=mode)
 
 
 def lin_connected_binding(context: PythonObject) raises -> PythonObject:
+    var nk = linalg_keys()
     var state = lin_state(context)
     # Resolve the live import-connected module once per operation. Linalg's
     # own provider supplies its compile-mode/profile metadata immediately below.
@@ -107,20 +113,20 @@ def lin_connected_binding(context: PythonObject) raises -> PythonObject:
     # changes (an unchanged binding and provider cost four identity reads,
     # not five dict writes per call). The binding and the provider factory
     # are still read live on every call.
-    if py_get(state, "_binding_cache") is not binding:
-        py_setitem(state, "_binding_cache", binding)
-    if py_get(state, "_mode_binding") is not binding:
-        py_setitem(state, "_mode_binding", binding)
-        py_setitem(state, "_mode_cache", PythonObject(None))
-        py_setitem(state, "_profile_cache", PythonObject(None))
+    if py_get(state, nk[].k__binding_cache) is not binding:
+        py_setitem(state, nk[].k__binding_cache, binding)
+    if py_get(state, nk[].k__mode_binding) is not binding:
+        py_setitem(state, nk[].k__mode_binding, binding)
+        py_setitem(state, nk[].k__mode_cache, PythonObject(None))
+        py_setitem(state, nk[].k__profile_cache, PythonObject(None))
     var factory = lin_attr(binding, "linalg_native_api_v1")
     var provider = PythonObject(None)
     if factory is not None:
-        provider = neural_descriptor_reuse(py_get(state, "_native_provider"), factory, "mojolearn.linalg.v1", 15)
-    if py_get(state, "_native_provider") is not provider:
-        py_setitem(state, "_native_provider", provider)
-    if py_get(state, "_native_provider_binding") is not binding:
-        py_setitem(state, "_native_provider_binding", binding)
+        provider = neural_descriptor_reuse(py_get(state, nk[].k__native_provider), factory, "mojolearn.linalg.v1", 15)
+    if py_get(state, nk[].k__native_provider) is not provider:
+        py_setitem(state, nk[].k__native_provider, provider)
+    if py_get(state, nk[].k__native_provider_binding) is not binding:
+        py_setitem(state, nk[].k__native_provider_binding, binding)
     return binding
 
 
@@ -128,13 +134,14 @@ def lin_mode(binding: PythonObject, context: PythonObject) raises -> String:
     """`numeric_mode()`: the loaded linalg binary's compiled mode, checked
     against the selected set and its profile version; cached in the
     module's `_mode_cache` / `_profile_cache` exactly as the Python did."""
+    var nk = linalg_keys()
     var b = native_loaded_module("builtins")
     var state = lin_state(context)
-    var cached = state["_mode_cache"]
+    var cached = py_item(state, nk[].k__mode_cache)
     if cached is not None:
         return String(py=cached)
     var raw = family_call(b.int, lin_call(binding, context, "linalg_numeric_mode"))
-    var compiled = String(py=py_get(context["backend_fields"]["_CODE_MODE"], raw, PythonObject("unknown")))
+    var compiled = String(py=py_get(py_item(py_item(context, nk[].k_backend_fields), nk[].k__CODE_MODE), raw, PythonObject("unknown")))
     var selected = lin_backend_mode(context)
     var build = lin_text(context, "_BUILD_SCRIPT")
     if compiled != selected:
@@ -142,16 +149,16 @@ def lin_mode(binding: PythonObject, context: PythonObject) raises -> String:
                     + " but this process selected the " + selected + " set -- a .so is in the wrong directory ("
                     + String(_lin_binary_path(binding)) + "); rebuild both sets with " + build)
     var version = Int(py=family_call(b.int, lin_call(binding, context, "linalg_profile_version")))
-    var profile = state["PROFILE"]
-    var profile_version = Int(py=state["PROFILE_VERSION"])
+    var profile = py_item(state, nk[].k_PROFILE)
+    var profile_version = Int(py=py_item(state, nk[].k_PROFILE_VERSION))
     var getter = lin_attr(binding, "linalg_numerical_profile")
     var actual = PythonObject(None)
     if getter is not None:
         actual = family_call(b.str, family_call(getter))
     elif version == profile_version:
         actual = profile
-    var known = profile if version == profile_version else py_get(state["_EXPERIMENT_PROFILES"], PythonObject(version), PythonObject(None))
-    var env_name = state["_EXPECTED_PROFILE_ENV"]
+    var known = profile if version == profile_version else py_get(py_item(state, nk[].k__EXPERIMENT_PROFILES), PythonObject(version), PythonObject(None))
+    var env_name = py_item(state, nk[].k__EXPECTED_PROFILE_ENV)
     var configured = String(getenv(String(py=env_name)))
     var expected = profile if configured == "" else PythonObject(configured)
     var ne = native_loaded_module("operator").ne
@@ -186,9 +193,10 @@ def lin_require_identical(binding: PythonObject, context: PythonObject) raises:
 
 def lin_lowbit(binding: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_lowbit_binding()`: the identical build with the low-bit profile version this owner expects."""
+    var nk = linalg_keys()
     lin_require_identical(binding, context)
     var v = 0
-    if py_get(lin_state(context), "_native_provider") is not None:
+    if py_get(lin_state(context), nk[].k__native_provider) is not None:
         v = Int(py=lin_call(binding, context, "lowbit_profile_version"))
     else:
         var got = lin_attr(binding, "lowbit_profile_version")
@@ -196,7 +204,7 @@ def lin_lowbit(binding: PythonObject, context: PythonObject) raises -> PythonObj
             raise Error("RuntimeError: mojolearn.linalg: the loaded linalg extension predates the "
                         + "low-bit profiles; rebuild it with bindings/build_linalg.sh")
         v = Int(py=family_call(native_loaded_module("builtins").int, family_call(got)))
-    var want = Int(py=lin_state(context)["LOWBIT_PROFILE_VERSION"])
+    var want = Int(py=py_item(lin_state(context), nk[].k_LOWBIT_PROFILE_VERSION))
     if v != want:
         raise Error("RuntimeError: mojolearn.linalg: the loaded extension implements low-bit "
                     + "profile version " + String(v) + ", this wrapper expects " + String(want))
@@ -205,9 +213,10 @@ def lin_lowbit(binding: PythonObject, context: PythonObject) raises -> PythonObj
 
 def lin_int15(binding: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_int15_binding()`."""
+    var nk = linalg_keys()
     lin_require_identical(binding, context)
     var v = 0
-    if py_get(lin_state(context), "_native_provider") is not None:
+    if py_get(lin_state(context), nk[].k__native_provider) is not None:
         v = Int(py=lin_call(binding, context, "int15_profile_version"))
     else:
         var got = lin_attr(binding, "int15_profile_version")
@@ -215,7 +224,7 @@ def lin_int15(binding: PythonObject, context: PythonObject) raises -> PythonObje
             raise Error("RuntimeError: mojolearn.linalg: the loaded linalg extension predates the "
                         + "fifteen-bit profile; rebuild it with bindings/build_linalg.sh")
         v = Int(py=family_call(native_loaded_module("builtins").int, family_call(got)))
-    var want = Int(py=lin_state(context)["INT15_PROFILE_VERSION"])
+    var want = Int(py=py_item(lin_state(context), nk[].k_INT15_PROFILE_VERSION))
     if v != want:
         raise Error("RuntimeError: mojolearn.linalg: the loaded extension implements fifteen-bit "
                     + "profile version " + String(v) + ", this wrapper expects " + String(want))
@@ -764,6 +773,7 @@ def _lin_int15_operand(binding: PythonObject, x: PythonObject, name: String, con
 
 
 def _lin_matmul_int15(args: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = linalg_keys()
     var binding = args[0]
     var ah = AdmittedBuf(PythonObject(None), 0, List[Int]())
     var al = AdmittedBuf(PythonObject(None), 0, List[Int]())
@@ -780,7 +790,7 @@ def _lin_matmul_int15(args: PythonObject, context: PythonObject) raises -> Pytho
     if k != kb:
         raise Error("mojolearn.linalg.matmul_int15: contracted extents differ, a "
                     + "gives k=" + String(k) + " and b gives k=" + String(kb))
-    var bound = lin_state(context)["INT15_MAX_K"]
+    var bound = py_item(lin_state(context), nk[].k_INT15_MAX_K)
     if py_type(bound) is not py_type(PythonObject(0)):
         raise Error("TypeError: linalg int15 extent metadata requires an exact integer")
     var max_k = Int(py=bound)
@@ -874,41 +884,43 @@ def lin_lowbit_operation(operation: String, var args: PythonObject, context: Pyt
 
 
 def _lin_binary_path(binding: PythonObject) raises -> PythonObject:
-    var path = py_get(py_fields(binding), "__file__")
+    var nk = linalg_keys()
+    var path = py_get(py_fields(binding), nk[].k___file__)
     if py_type(path) is not py_type(PythonObject("")):
         raise Error("TypeError: linalg binary path requires an exact string")
     return path
 
 
 def _lin_profile(binding: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = linalg_keys()
     # The same profile receipt previously assembled by the Python public method.
     # Reading mode first checks the current native provider/profile exactly once.
     var mode = lin_mode(binding, context)
     var state = lin_state(context)
-    var profile = state["_profile_cache"]
-    var actual = state["PROFILE"] if profile is None else profile[0]
-    var version = Int(py=state["PROFILE_VERSION"] if profile is None else profile[1])
+    var profile = py_item(state, nk[].k__profile_cache)
+    var actual = py_item(state, nk[].k_PROFILE) if profile is None else profile[0]
+    var version = Int(py=py_item(state, nk[].k_PROFILE_VERSION) if profile is None else profile[1])
     var result = Python.dict()
-    py_setitem(result, "profile", actual)
-    py_setitem(result, "profile_version", version)
-    py_setitem(result, "numeric_mode", mode)
-    py_setitem(result, "identity_claimed", mode == "identical")
-    py_setitem(result, "dtype", "float32")
-    py_setitem(result, "ops", Python.tuple("OP_NN", "OP_NT", "OP_TN"))
-    py_setitem(result, "contract", "gemm/IDENTICAL_FP32_CONTRACT.md")
-    py_setitem(result, "kernel", "gemm/checks/gemm_identical.mojo")
-    py_setitem(result, "oracle", "gemm/host/gemm_oracle.mojo::gemm_oracle")
-    py_setitem(result, "certified_shapes", 62)
-    py_setitem(result, "certified_vendors", Python.tuple("Apple M4", "NVIDIA H100", "AMD MI325X"))
-    py_setitem(result, "certification_source", "gemm/README.md")
-    py_setitem(result, "binary", _lin_binary_path(binding))
-    if version != Int(py=state["PROFILE_VERSION"]):
-        py_setitem(result, "contract", "gemm/contract.mojo")
-        py_setitem(result, "identity_claimed", False)
-        py_setitem(result, "identity_required", True)
-        py_setitem(result, "certified_shapes", 0)
-        py_setitem(result, "certified_vendors", Python.tuple())
-        py_setitem(result, "certification_source", PythonObject(None))
-        py_setitem(result, "qualification", "UNVERIFIED_EXPERIMENT")
-        py_setitem(result, "experiment_source", "experiments/neural_identical_20261006/gemm_cnn.json")
+    py_setitem(result, nk[].k_profile, actual)
+    py_setitem(result, nk[].k_profile_version, version)
+    py_setitem(result, nk[].k_numeric_mode, mode)
+    py_setitem(result, nk[].k_identity_claimed, mode == "identical")
+    py_setitem(result, nk[].k_dtype, "float32")
+    py_setitem(result, nk[].k_ops, Python.tuple("OP_NN", "OP_NT", "OP_TN"))
+    py_setitem(result, nk[].k_contract, "gemm/IDENTICAL_FP32_CONTRACT.md")
+    py_setitem(result, nk[].k_kernel, "gemm/checks/gemm_identical.mojo")
+    py_setitem(result, nk[].k_oracle, "gemm/host/gemm_oracle.mojo::gemm_oracle")
+    py_setitem(result, nk[].k_certified_shapes, 62)
+    py_setitem(result, nk[].k_certified_vendors, Python.tuple("Apple M4", "NVIDIA H100", "AMD MI325X"))
+    py_setitem(result, nk[].k_certification_source, "gemm/README.md")
+    py_setitem(result, nk[].k_binary, _lin_binary_path(binding))
+    if version != Int(py=py_item(state, nk[].k_PROFILE_VERSION)):
+        py_setitem(result, nk[].k_contract, "gemm/contract.mojo")
+        py_setitem(result, nk[].k_identity_claimed, False)
+        py_setitem(result, nk[].k_identity_required, True)
+        py_setitem(result, nk[].k_certified_shapes, 0)
+        py_setitem(result, nk[].k_certified_vendors, Python.tuple())
+        py_setitem(result, nk[].k_certification_source, PythonObject(None))
+        py_setitem(result, nk[].k_qualification, "UNVERIFIED_EXPERIMENT")
+        py_setitem(result, nk[].k_experiment_source, "experiments/neural_identical_20261006/gemm_cnn.json")
     return result

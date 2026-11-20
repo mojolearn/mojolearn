@@ -17,15 +17,18 @@ from bindings.host_kernel_inference_native_unpack import _kernel_entry
 from core.host_inference_impl import host_inference_raw_finite
 from core.host_sparse_impl import host_sparse_uint64_bound
 from bindings.py_optional import py_present
+from bindings.host_rest_keys_unpack import host_rest_keys
+from bindings.py_balanced import py_item
 
 
 def host_projection_admit_state(fields: PythonObject, pca: Bool, context: PythonObject) raises:
+    var nk = host_rest_keys()
     var names = Python.tuple("n_components_", "n_samples_") if pca else Python.tuple("n_components_")
     for i in range(len(names)):  # driver-loop: declared native projection scalar fields
         if py_contains(fields, names[i]):
             host_inference_scalar(fields[names[i]], context)
-    if pca and py_contains(fields, "whiten"):
-        host_inference_scalar(fields["whiten"], context, True)
+    if pca and py_contains(fields, nk[].k_whiten):
+        host_inference_scalar(py_item(fields, nk[].k_whiten), context, True)
 
 
 def _projection_buffer(value: PythonObject, rows: Int, columns: Int, matrix: Bool, c_required: Bool, context: PythonObject) raises -> PythonObject:
@@ -47,7 +50,8 @@ def _projection_buffer(value: PythonObject, rows: Int, columns: Int, matrix: Boo
 
 
 def host_projection_inference(model: PythonObject, fields: PythonObject, pca: Bool, inverse: Bool, source: PythonObject, context: PythonObject, public: Bool) raises -> PythonObject:
-    var fitting = Bool(py=py_get(fields, "_mojolearn_fitting", False))
+    var nk = host_rest_keys()
+    var fitting = Bool(py=py_get(fields, nk[].k__mojolearn_fitting, False))
     var format = host_sparse_format(source)
     # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
     var x = Optional[PythonObject]()
@@ -81,30 +85,30 @@ def host_projection_inference(model: PythonObject, fields: PythonObject, pca: Bo
             x = py_present(host_tree_input(prepared, context))
         _ = prepared^
     var rows = Int(py=x.value().shape[0])
-    var features = Int(py=fields["n_features_in_"])
-    var components = Int(py=fields["n_components_"])
+    var features = Int(py=py_item(fields, nk[].k_n_features_in_))
+    var components = Int(py=py_item(fields, nk[].k_n_components_))
     if features < 1 or components < 1 or components > 2147483647 // features or rows > 2147483647 // max(features, components):
         raise Error("projection dimensions must be positive and fit native indexing")
     if Int(py=x.value().shape[1]) != (components if inverse else features):
         raise Error("projection input width differs from fitted dimensions")
     if not fitting and not inverse:
         host_inference_feature_names(model, fields, context)
-    var whiten = pca and Bool(py=fields["whiten"])
-    var basis = _projection_buffer(fields["components_"], components, features, True, whiten, context)
-    var mean = _projection_buffer(fields["mean_"], features, 1, False, whiten, context) if pca else basis
+    var whiten = pca and Bool(py=py_item(fields, nk[].k_whiten))
+    var basis = _projection_buffer(py_item(fields, nk[].k_components_), components, features, True, whiten, context)
+    var mean = _projection_buffer(py_item(fields, nk[].k_mean_), features, 1, False, whiten, context) if pca else basis
     var singular = PythonObject(None)
     var variance = PythonObject(None)
     var samples = 0
     if whiten:
-        singular = _projection_buffer(fields["singular_values_"], components, 1, False, True, context)
+        singular = _projection_buffer(py_item(fields, nk[].k_singular_values_), components, 1, False, True, context)
         # The established public check inspects variance metadata only. The
         # whitening ABI consumes singular values, not explained variance;
         # retain that distinction for caller-assigned native model state.
-        variance = _projection_buffer(fields["explained_variance_"], components, 1, False, True, context)
-        samples = Int(py=fields["n_samples_"])
+        variance = _projection_buffer(py_item(fields, nk[].k_explained_variance_), components, 1, False, True, context)
+        samples = Int(py=py_item(fields, nk[].k_n_samples_))
         if samples < 2:
             raise Error("PCA whitening requires fit rows >=2 and nonnegative singular values/variance")
-    var out = host_archive_typed(Python.tuple(rows, features if inverse else components), "<f4", context["output_context"])
+    var out = host_archive_typed(Python.tuple(rows, features if inverse else components), "<f4", py_item(context, nk[].k_output_context))
     if whiten and inverse:
         _ = py_call(_kernel_entry("pca_whiten_inverse_transform", context), classical_address(x.value()), classical_address(basis),
             classical_address(singular), classical_address(mean), classical_address(out), Python.list(rows, features, components, samples))
@@ -125,4 +129,4 @@ def host_projection_inference(model: PythonObject, fields: PythonObject, pca: Bo
     _ = mean^
     _ = singular^
     _ = variance^
-    return classical_input(out, context, "projection") if public and py_get(context, "ndarray") is not None else out
+    return classical_input(out, context, "projection") if public and py_get(context, nk[].k_ndarray) is not None else out

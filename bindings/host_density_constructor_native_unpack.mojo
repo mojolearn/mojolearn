@@ -9,6 +9,8 @@ from bindings.classical_pandas_door import _pd_type_fields
 from bindings.host_logistic_native_door import _logistic_label_kind
 from bindings.native_owner_lifetime_door import native_release_admit
 from bindings.py_cpython_table import cpython_table
+from bindings.host_rest_keys_unpack import host_rest_keys
+from bindings.py_balanced import py_item
 
 
 def _density_option(value: PythonObject, context: PythonObject, depth: Int = 0) raises:
@@ -33,21 +35,22 @@ def _density_option(value: PythonObject, context: PythonObject, depth: Int = 0) 
 
 def _density_descriptor(name: PythonObject, member: PythonObject, present: Bool,
                         plan: PythonObject, context: PythonObject) raises -> Bool:
+    var nk = host_rest_keys()
     if not present:
         return False
     var cls = py_type(member)
     var data = _descriptor_slot(cls, "__set__") or _descriptor_slot(cls, "__delete__")
     var getter = _descriptor_slot(cls, "__get__")
     if data or (String(name) == "numeric_mode" and getter):
-        var binding = py_get(plan["bindings"], name)
+        var binding = py_get(py_item(plan, nk[].k_bindings), name)
         var known = binding is not None and binding[0] is member
         # Ordinary Python __slots__ uses CPython's fixed member descriptor;
         # arbitrary extension get/set descriptors have no audited callback
         # closure merely because their descriptor object is native.
-        var native = cls is context["host_density_member_type"]
+        var native = cls is py_item(context, nk[].k_host_density_member_type)
         # Plain functions bind through a native C descriptor; a mode method
         # counts as an existing attribute but is never called here.
-        if not data and cls is context["host_density_function_type"]:
+        if not data and cls is py_item(context, nk[].k_host_density_function_type):
             native = True
         if not known or not native:
             raise Error("TypeError: density constructors do not invoke Python property or descriptor hooks")

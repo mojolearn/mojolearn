@@ -25,18 +25,22 @@ from core.host_sparse_impl import host_sparse_uint64_bound
 from core.host_helpers_impl import argmax_rows_f64
 from core.host_archive_impl import host_archive_copy_f32
 from core.host_svr_impl import host_svr_indices, host_svr_bias
+from bindings.host_rest_keys_unpack import host_rest_keys
+from bindings.py_balanced import py_item
 
 
 def _svc_numeric_storage(value: PythonObject, context: PythonObject) raises:
-    if py_get(context, "ndarray") is not None and py_type(value) is context["ndarray"]:
+    var nk = host_rest_keys()
+    if py_get(context, nk[].k_ndarray) is not None and py_type(value) is py_item(context, nk[].k_ndarray):
         if classical_kind(value, context) == "O":
             raise Error("TypeError: SVC numeric state cannot contain Python object storage")
 
 
 def host_svc_admit_state(fields: PythonObject, context: PythonObject) raises:
+    var nk = host_rest_keys()
     var b = native_loaded_module("builtins")
-    _svc_numeric_storage(py_get(fields, "dual_coef_"), context)
-    _svc_numeric_storage(py_get(fields, "support_vectors_"), context)
+    _svc_numeric_storage(py_get(fields, nk[].k_dual_coef_), context)
+    _svc_numeric_storage(py_get(fields, nk[].k_support_vectors_), context)
     var names = Python.tuple("n_features_in_", "_gamma", "_hp_cache_size", "_hp_degree", "_hp_coef0", "_label0", "_label1")
     for i in range(len(names)):  # driver-loop: fixed native SVC scalar controls
         if py_contains(fields, names[i]):
@@ -49,10 +53,10 @@ def host_svc_admit_state(fields: PythonObject, context: PythonObject) raises:
     for i in range(len(strings)):  # driver-loop: fixed string controls
         if py_contains(fields, strings[i]) and py_type(fields[strings[i]]) is not b.str:
             raise Error("TypeError: saved SVC kernel and decision shape require exact native strings")
-    var pairs = py_get(fields, "_pairs")
+    var pairs = py_get(fields, nk[].k__pairs)
     if pairs is None:
-        if py_contains(fields, "n_support_"):
-            host_inference_scalar(fields["n_support_"], context)
+        if py_contains(fields, nk[].k_n_support_):
+            host_inference_scalar(py_item(fields, nk[].k_n_support_), context)
         return
     if py_type(pairs) is not b.list and py_type(pairs) is not b.tuple:
         raise Error("TypeError: SVC pair state requires native list or tuple storage")
@@ -60,19 +64,20 @@ def host_svc_admit_state(fields: PythonObject, context: PythonObject) raises:
         var pair = pairs[i]
         if py_type(pair) is not b.dict:
             raise Error("TypeError: SVC pair state requires native dictionaries")
-        _svc_numeric_storage(pair["dual"], context)
-        _svc_numeric_storage(pair["sv"], context)
-        host_inference_scalar(pair["i"], context)
-        host_inference_scalar(pair["j"], context)
-        host_inference_scalar(pair["b"], context)
+        _svc_numeric_storage(py_item(pair, nk[].k_dual), context)
+        _svc_numeric_storage(py_item(pair, nk[].k_sv), context)
+        host_inference_scalar(py_item(pair, nk[].k_i), context)
+        host_inference_scalar(py_item(pair, nk[].k_j), context)
+        host_inference_scalar(py_item(pair, nk[].k_b), context)
 
 
 def host_svc_probability(model: PythonObject, fields: PythonObject, name: PythonObject, context: PythonObject) raises:
-    var probability = py_get(fields, "probability", False)
+    var nk = host_rest_keys()
+    var probability = py_get(fields, nk[].k_probability, False)
     host_inference_scalar(probability, context, True)
     if not Bool(py=probability):
         var b = native_loaded_module("builtins")
-        var cls_name = String(py_call(b.type.__dict__["__name__"].__get__, py_type(model)))
+        var cls_name = String(py_call(py_item(b.type.__dict__, nk[].k___name__).__get__, py_type(model)))
         raise Error("AttributeError: This '" + cls_name + "' has no attribute '" + String(name) + "'")
 
 
@@ -100,6 +105,7 @@ def _svc_input(source: PythonObject, context: PythonObject) raises -> PythonObje
 
 
 def _svc_binary_support(value: PythonObject, count: Int, columns: Int, context: PythonObject) raises -> PythonObject:
+    var nk = host_rest_keys()
     # Binary SVC historically calls support_.tolist() before _i32; unlike
     # pair machines, even an Array's wider scalar storage is converted.
     var b = native_loaded_module("builtins")
@@ -109,7 +115,7 @@ def _svc_binary_support(value: PythonObject, count: Int, columns: Int, context: 
     if Int(py=array.ndim) != 1 or Int(py=array.size) != count:
         raise Error("SVC support index shape differs from n_support_")
     var width = Int(py=array.itemsize)
-    var out = host_archive_typed(Python.tuple(count), "<i4", context["output_context"])
+    var out = host_archive_typed(Python.tuple(count), "<i4", py_item(context, nk[].k_output_context))
     host_svr_indices(Int(py=classical_address(array)), Int(py=array.strides[0]), count, width,
         classical_cast_kind(array, width, "support_", context),
         classical_is_array(array, context) or Bool(py=array.dtype.isnative), columns, Int(py=classical_address(out)))
@@ -120,12 +126,13 @@ def _svc_binary_support(value: PythonObject, count: Int, columns: Int, context: 
 def _svc_machine(query: PythonObject, dual_value: PythonObject, support_value: PythonObject, columns_value: PythonObject,
                  count: Int, bias: Float64, label0: Float64, label1: Float64, classify: Bool, binary: Bool,
                  destination: Int, fields: PythonObject, context: PythonObject) raises:
+    var nk = host_rest_keys()
     var x = query
-    var features = Int(py=fields["n_features_in_"])
+    var features = Int(py=py_item(fields, nk[].k_n_features_in_))
     var rows = Int(py=x.shape[0])
     if features < 1 or count < 0 or count > 2147483647 // features or rows > 2147483647 // max(count, 1):
         raise Error("SVC support dimensions exceed native indexing")
-    var kernel = String(fields["_hp_kernel"])
+    var kernel = String(py_item(fields, nk[].k__hp_kernel))
     var code = 0 if kernel == "linear" else (1 if kernel == "poly" else (2 if kernel == "rbf" else (3 if kernel == "sigmoid" else (4 if kernel == "precomputed" else -1))))
     if code < 0:
         raise Error("SVC kernel name is not recognized")
@@ -136,7 +143,7 @@ def _svc_machine(query: PythonObject, dual_value: PythonObject, support_value: P
         dual = _kernel_buffer(dual_value, count, "<f4", context)
         if code == 4:
             columns = _svc_binary_support(columns_value, count, features, context) if binary else _svr_support(columns_value, count, features, context)
-            var gathered = host_archive_typed(Python.tuple(rows, count), "<f4", context["output_context"])
+            var gathered = host_archive_typed(Python.tuple(rows, count), "<f4", py_item(context, nk[].k_output_context))
             _ = py_call(_kernel_entry("svc_pair_epilogue", context), classical_address(x), 0,
                 classical_address(columns), classical_address(gathered), Python.list(6, rows, features, rows, count))
             _ = x^
@@ -145,8 +152,8 @@ def _svc_machine(query: PythonObject, dual_value: PythonObject, support_value: P
             support = dual
         else:
             support = _svr_matrix(support_value, count, features, context)
-    var params = Python.list(rows, features, count, bias, label0, label1, code, fields["_gamma"], Int(classify),
-        fields["_hp_cache_size"], py_call(native_loaded_module("builtins").int, fields["_hp_degree"]), Float64(py=fields["_hp_coef0"]))
+    var params = Python.list(rows, features, count, bias, label0, label1, code, py_item(fields, nk[].k__gamma), Int(classify),
+        py_item(fields, nk[].k__hp_cache_size), py_call(native_loaded_module("builtins").int, py_item(fields, nk[].k__hp_degree)), Float64(py=py_item(fields, nk[].k__hp_coef0)))
     _ = py_call(_kernel_entry("svc_predict", context), classical_address(x),
         classical_address(dual) if count > 0 else PythonObject(0),
         classical_address(support) if count > 0 else PythonObject(0), destination, params)
@@ -157,7 +164,8 @@ def _svc_machine(query: PythonObject, dual_value: PythonObject, support_value: P
 
 
 def _svc_pair_count(pair: PythonObject, context: PythonObject) raises -> Int:
-    var dual = classical_input(pair["dual"], context, "pair dual")
+    var nk = host_rest_keys()
+    var dual = classical_input(py_item(pair, nk[].k_dual), context, "pair dual")
     if Int(py=dual.ndim) != 2 or Int(py=dual.shape[0]) != 1:
         raise Error("SVC pair dual coefficients require shape (1, n_support)")
     return Int(py=dual.shape[1])
@@ -165,9 +173,10 @@ def _svc_pair_count(pair: PythonObject, context: PythonObject) raises -> Int:
 
 def _svc_epilogue(mode: Int, decisions: PythonObject, pair_codes: PythonObject, rows: Int, pairs: Int, classes: Int,
                   ab: PythonObject, label1: Float64, context: PythonObject) raises -> PythonObject:
+    var nk = host_rest_keys()
     var shape = Python.tuple(rows) if mode == 2 or mode == 5 else Python.tuple(rows, pairs if mode == 0 else classes)
     var dtype = "<i8" if mode == 2 or mode == 5 else ("<f4" if mode == 0 else "<f8")
-    var out = host_archive_typed(shape, dtype, context["output_context"])
+    var out = host_archive_typed(shape, dtype, py_item(context, nk[].k_output_context))
     var decision_owner = decisions
     var code_owner = pair_codes
     var calibration_owner = ab
@@ -180,6 +189,7 @@ def _svc_epilogue(mode: Int, decisions: PythonObject, pair_codes: PythonObject, 
 
 
 def _svc_calibration_array(value: PythonObject, count: Int, vector: Bool, context: PythonObject) raises -> PythonObject:
+    var nk = host_rest_keys()
     var array = classical_input(value, context, "SVC calibration")
     var width = Int(py=array.itemsize)
     var kind = classical_cast_kind(array, width, "SVC calibration", context)
@@ -187,7 +197,7 @@ def _svc_calibration_array(value: PythonObject, count: Int, vector: Bool, contex
         raise Error("SVC probability calibration requires native (A, B) pairs")
     if not vector and Int(py=array.shape[1]) != 2:
         raise Error("SVC probability calibration requires native (A, B) pairs")
-    var out = host_archive_typed(Python.tuple(count, 2), "<f8", context["output_context"])
+    var out = host_archive_typed(Python.tuple(count, 2), "<f8", py_item(context, nk[].k_output_context))
     var words = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(out)))
     var base = Int(py=classical_address(array))
     var stride = Int(py=array.strides[0])
@@ -201,12 +211,13 @@ def _svc_calibration_array(value: PythonObject, count: Int, vector: Bool, contex
 
 
 def _svc_calibration(value: PythonObject, count: Int, context: PythonObject) raises -> PythonObject:
+    var nk = host_rest_keys()
     var b = native_loaded_module("builtins")
     if py_type(value) is not b.list and py_type(value) is not b.tuple:
         return _svc_calibration_array(value, count, False, context)
     if len(value) != count:
         raise Error("SVC probability calibration requires one native pair per machine")
-    var out = host_archive_typed(Python.tuple(count, 2), "<f8", context["output_context"])
+    var out = host_archive_typed(Python.tuple(count, 2), "<f8", py_item(context, nk[].k_output_context))
     var words = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(out)))
     for i in range(count):  # driver-loop: admitted Platt calibration words
         var pair = value[i]
@@ -228,87 +239,89 @@ def _svc_calibration(value: PythonObject, count: Int, context: PythonObject) rai
 
 def host_svc_inference(model: PythonObject, fields: PythonObject, labels: PythonObject, operation: String,
                        source: PythonObject, context: PythonObject, public: Bool) raises -> PythonObject:
+    var nk = host_rest_keys()
     var probability = operation == "host_infer_predict_proba" or operation == "host_infer_predict_log_proba"
     if probability:
         # Availability is checked by attribute lookup. A previously bound
         # method (or class-level call) keeps the original fitted-calibration
         # contract after probability is changed on the instance.
-        if py_get(fields, "_prob_ab") is None:
+        if py_get(fields, nk[].k__prob_ab) is None:
             raise Error("AttributeError: SVC predict_proba requires fitted probability calibration; fit with probability=True")
     var x = _svc_input(source, context)
     var rows = Int(py=x.shape[0])
-    if Int(py=x.shape[1]) != Int(py=fields["n_features_in_"]):
+    if Int(py=x.shape[1]) != Int(py=py_item(fields, nk[].k_n_features_in_)):
         raise Error("SVC input width differs from fitted dimensions")
-    if not Bool(py=py_get(fields, "_mojolearn_fitting", False)):
+    if not Bool(py=py_get(fields, nk[].k__mojolearn_fitting, False)):
         host_inference_feature_names(model, fields, context)
     var classes = len(labels)
     if classes < 2:
         raise Error("SVC requires at least two fitted classes")
-    var pairs = py_get(fields, "_pairs")
+    var pairs = py_get(fields, nk[].k__pairs)
     var count = 1 if pairs is None else len(pairs)
     if count < 1 or rows > 2147483647 // count or rows > 2147483647 // classes:
         raise Error("SVC decision dimensions exceed native indexing")
-    var decisions = host_archive_typed(Python.tuple(count, rows), "<f4", context["output_context"])
-    var codes = host_archive_typed(Python.tuple(count, 2), "<i4", context["output_context"])
+    var decisions = host_archive_typed(Python.tuple(count, rows), "<f4", py_item(context, nk[].k_output_context))
+    var codes = host_archive_typed(Python.tuple(count, 2), "<i4", py_item(context, nk[].k_output_context))
     var code_words = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(codes)))
     var base = Int(py=classical_address(decisions))
     if pairs is None:
         code_words[0] = 0
         code_words[1] = 1
-        _svc_machine(x, fields["dual_coef_"], fields["support_vectors_"], fields["support_"],
-            Int(py=fields["n_support_"]), _svr_bias(fields["intercept_"], context), Float64(py=fields["_label0"]),
-            Float64(py=fields["_label1"]), operation == "host_infer_predict", True, base, fields, context)
+        _svc_machine(x, py_item(fields, nk[].k_dual_coef_), py_item(fields, nk[].k_support_vectors_), py_item(fields, nk[].k_support_),
+            Int(py=py_item(fields, nk[].k_n_support_)), _svr_bias(py_item(fields, nk[].k_intercept_), context), Float64(py=py_item(fields, nk[].k__label0)),
+            Float64(py=py_item(fields, nk[].k__label1)), operation == "host_infer_predict", True, base, fields, context)
     else:
         for i in range(count):  # driver-loop: existing one-vs-one machine order and pair-major writes
             var pair = pairs[i]
-            var low = Int(py=pair["i"])
-            var high = Int(py=pair["j"])
+            var low = Int(py=py_item(pair, nk[].k_i))
+            var high = Int(py=py_item(pair, nk[].k_j))
             if low < 0 or high < 0 or low >= classes or high >= classes:
                 raise Error("SVC pair class index exceeds fitted classes")
             code_words[2 * i] = Int32(low)
             code_words[2 * i + 1] = Int32(high)
-            _svc_machine(x, pair["dual"], pair["sv"], pair["support"], _svc_pair_count(pair, context),
-                Float64(py=pair["b"]), 0.0, 1.0, False, False, base + 4 * rows * i, fields, context)
+            _svc_machine(x, py_item(pair, nk[].k_dual), py_item(pair, nk[].k_sv), py_item(pair, nk[].k_support), _svc_pair_count(pair, context),
+                Float64(py=py_item(pair, nk[].k_b)), 0.0, 1.0, False, False, base + 4 * rows * i, fields, context)
     var out = PythonObject(None)
     var ab = PythonObject(None)
     if probability:
-        ab = _svc_calibration(fields["_prob_ab"], count, context)
+        ab = _svc_calibration(py_item(fields, nk[].k__prob_ab), count, context)
         out = _svc_epilogue(4 if operation == "host_infer_predict_log_proba" else 3, decisions, codes, rows, count, classes, ab, 0.0, context)
     elif operation == "host_infer_decision_function":
         if pairs is None:
             # Copy completed words without changing binary margin bits.
-            out = host_archive_typed(Python.tuple(rows), "<f4", context["output_context"])
+            out = host_archive_typed(Python.tuple(rows), "<f4", py_item(context, nk[].k_output_context))
             host_archive_copy_f32(base, 4, 4, rows, 1, Int(py=classical_address(out)))
         else:
-            out = _svc_epilogue(0 if String(fields["decision_function_shape"]) == "ovo" else 1,
+            out = _svc_epilogue(0 if String(py_item(fields, nk[].k_decision_function_shape)) == "ovo" else 1,
                 decisions, codes, rows, count, classes, ab, 0.0, context)
     else:
         var indices = List[Int]()
         var index_array = PythonObject(None)
-        if pairs is not None and Bool(py=fields["_hp_break_ties"]):
+        if pairs is not None and Bool(py=py_item(fields, nk[].k__hp_break_ties)):
             var scores = _svc_epilogue(1, decisions, codes, rows, count, classes, ab, 0.0, context)
-            index_array = host_archive_typed(Python.tuple(rows), "<i8", context["output_context"])
+            index_array = host_archive_typed(Python.tuple(rows), "<i8", py_item(context, nk[].k_output_context))
             argmax_rows_f64(MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(scores))), rows, classes,
                 MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(index_array))))
             _ = scores^
         else:
             index_array = _svc_epilogue(5 if pairs is None else 2, decisions, codes, rows, count, classes, ab,
-                Float64(py=fields["_label1"]) if pairs is None else 0.0, context)
+                Float64(py=py_item(fields, nk[].k__label1)) if pairs is None else 0.0, context)
         var values = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(index_array)))
         for i in range(rows):  # driver-loop: completed native class code publication
             indices.append(Int(values[i]))
         _ = index_array^
-        out = _host_logistic_decode(labels, indices, py_type(fields["classes_"]) is py_get(context, "ndarray"), context)
+        out = _host_logistic_decode(labels, indices, py_type(py_item(fields, nk[].k_classes_)) is py_get(context, nk[].k_ndarray), context)
     _ = x^
     _ = decisions^
     _ = codes^
     _ = ab^
-    return classical_input(out, context, "SVC result") if py_type(out) is not native_loaded_module("builtins").list and public and py_get(context, "ndarray") is not None else out
+    return classical_input(out, context, "SVC result") if py_type(out) is not native_loaded_module("builtins").list and public and py_get(context, nk[].k_ndarray) is not None else out
 
 
 def _svc_coefficients(model: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = host_rest_keys()
     var fields = host_tree_constructor_fields(model, context)
-    if not py_contains(fields, "dual_coef_"):
+    if not py_contains(fields, nk[].k_dual_coef_):
         raise Error("AttributeError: SVC coef_ requires a fitted model")
     var builtins = native_loaded_module("builtins")
     var string_type = builtins.str
@@ -319,16 +332,16 @@ def _svc_coefficients(model: PythonObject, context: PythonObject) raises -> Pyth
         else:
             classical_admit_value(fields[keys[i]], context)
     host_svc_admit_state(fields, context)
-    if String(fields["_hp_kernel"]) != "linear":
+    if String(py_item(fields, nk[].k__hp_kernel)) != "linear":
         raise Error("AttributeError: SVC coef_ is available only for kernel='linear'")
-    var features = Int(py=fields["n_features_in_"])
-    var pairs = py_get(fields, "_pairs")
+    var features = Int(py=py_item(fields, nk[].k_n_features_in_))
+    var pairs = py_get(fields, nk[].k__pairs)
     var rows = 1 if pairs is None else len(pairs)
     if features < 1 or rows < 1 or rows > 2147483647 // features:
         raise Error("SVC coefficient dimensions exceed native indexing")
-    var out = host_archive_typed(Python.tuple(rows, features), "<f4", context["output_context"])
+    var out = host_archive_typed(Python.tuple(rows, features), "<f4", py_item(context, nk[].k_output_context))
     for i in range(rows):  # driver-loop: pair coefficient orientation matches the existing public property
-        var count = Int(py=fields["n_support_"]) if pairs is None else _svc_pair_count(pairs[i], context)
+        var count = Int(py=py_item(fields, nk[].k_n_support_)) if pairs is None else _svc_pair_count(pairs[i], context)
         if count < 0 or count > 2147483647 // features:
             raise Error("SVC support dimensions exceed native indexing")
         if count == 0:
@@ -336,20 +349,21 @@ def _svc_coefficients(model: PythonObject, context: PythonObject) raises -> Pyth
         # svc_dual_gemv_host_binding releases the GIL between rows. Fields
         # ownership does not freeze their contents: recheck mutable mode at the
         # original position, while reusing the admitted immutable string type.
-        var mode = py_get(fields, "numeric_mode")
+        var mode = py_get(fields, nk[].k_numeric_mode)
         if mode is not None and (py_type(mode) is not string_type or String(mode) != "identical"):
             raise Error("explicit host models run identical mode only")
-        var dual = _kernel_buffer(fields["dual_coef_"] if pairs is None else pairs[i]["dual"], count, "<f4", context)
-        var support = _svr_matrix(fields["support_vectors_"] if pairs is None else pairs[i]["sv"], count, features, context)
+        var dual = _kernel_buffer(py_item(fields, nk[].k_dual_coef_) if pairs is None else py_item(pairs[i], nk[].k_dual), count, "<f4", context)
+        var support = _svr_matrix(py_item(fields, nk[].k_support_vectors_) if pairs is None else py_item(pairs[i], nk[].k_sv), count, features, context)
         _ = py_call(_kernel_entry("svc_dual_gemv", context), classical_address(dual), classical_address(support),
             Python.list(count, features, Int(pairs is not None)), Int(py=classical_address(out)) + 4 * features * i)
         _ = dual^
         _ = support^
-    return classical_input(out, context, "coef_") if _outside(context, 0) and py_get(context, "ndarray") is not None else out
+    return classical_input(out, context, "coef_") if _outside(context, 0) and py_get(context, nk[].k_ndarray) is not None else out
 
 
 def host_svc_attribute_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
     try:
+        var nk = host_rest_keys()
         var args = PythonObject(from_borrowed=args_ptr)
         var context = args[0]
         var model = args[1]
@@ -361,14 +375,14 @@ def host_svc_attribute_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -
             raise Error("TypeError: native SVC attribute names must be exact strings")
         var attr = String(name)
         if attr == "coef_" or attr == "predict_proba" or attr == "predict_log_proba":
-            var mro = py_call(b.type.__dict__["__mro__"].__get__, py_type(model))
+            var mro = py_call(py_item(b.type.__dict__, nk[].k___mro__).__get__, py_type(model))
             for i in range(len(mro)):  # driver-loop: preserve normal MRO overrides and exact connected identities
                 var fields = _pd_type_fields(mro[i])
                 if py_contains(fields, name):
-                    if attr == "coef_" and fields[name] is context["host_svc_coefficient_property"]:
+                    if attr == "coef_" and fields[name] is py_item(context, nk[].k_host_svc_coefficient_property):
                         var coefficients = _svc_coefficients(model, context)
                         return coefficients.steal_data()
-                    if attr != "coef_" and fields[name] is context["host_svc_probability_methods"][name]:
+                    if attr != "coef_" and fields[name] is py_item(context, nk[].k_host_svc_probability_methods)[name]:
                         host_svc_probability(model, host_tree_constructor_fields(model, context), name, context)
                     break
         var value = classical_getattribute(model, name, context)

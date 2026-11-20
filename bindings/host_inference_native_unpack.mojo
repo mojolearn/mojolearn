@@ -27,19 +27,23 @@ from bindings.host_tree_native_door import host_tree_input, host_tree_scalar, ho
 from core.host_tree_impl import host_tree_column_copy
 from core.host_inference_impl import host_inference_finite, host_inference_raw_finite
 from bindings.py_optional import py_present
+from bindings.host_rest_keys_unpack import host_rest_keys
+from bindings.py_balanced import py_item
 
 
 
 def host_inference_entry(name: String, context: PythonObject) raises -> PythonObject:
-    var entry = py_get(context["host_inference_entries"], name)
+    var nk = host_rest_keys()
+    var entry = py_get(py_item(context, nk[].k_host_inference_entries), name)
     if entry is None:
         raise Error("ImportError: explicit CPU inference entry " + name + " is unavailable")
-    if py_type(entry) is not context["host_tree_entry_type"]:
+    if py_type(entry) is not py_item(context, nk[].k_host_tree_entry_type):
         raise Error("TypeError: explicit CPU inference requires a fixed native entry")
     return entry
 
 
 def host_inference_operation(model: PythonObject, operation: String, args: PythonObject, context: PythonObject, error_context: PythonObject, public: Bool) raises -> PythonObject:
+    var nk = host_rest_keys()
     var state = host_inference_state(model, context)
     var fields = state[0]
     var kind = state[1].copy()
@@ -51,8 +55,8 @@ def host_inference_operation(model: PythonObject, operation: String, args: Pytho
     var iforest = String(kind) == "iforest"
     var iforest_options = Python.tuple("n_estimators", "max_samples", "max_depth", "max_features", "bootstrap", "contamination", "random_state", "warm_start", "n_jobs", "verbose", "output_type")
     var labels = PythonObject(None)
-    if svc and py_contains(fields, "classes_"):
-        labels = host_logistic_classes(fields["classes_"], context)
+    if svc and py_contains(fields, nk[].k_classes_):
+        labels = host_logistic_classes(py_item(fields, nk[].k_classes_), context)
     var keys = py_call(b.list, fields.keys())
     for i in range(len(keys)):  # driver-loop: admitted stored model values
         var name = String(keys[i])
@@ -63,10 +67,10 @@ def host_inference_operation(model: PythonObject, operation: String, args: Pytho
             host_iforest_admit_option(fields[keys[i]], context)
         elif not kde_option and (not svc or name != "classes_"):
             classical_admit_value(fields[keys[i]], context)
-    host_inference_scalar(py_get(fields, "_mojolearn_fitted", False), context, True)
-    host_inference_scalar(py_get(fields, "_mojolearn_fitting", False), context, True)
-    if py_contains(fields, "n_features_in_"):
-        host_inference_scalar(fields["n_features_in_"], context)
+    host_inference_scalar(py_get(fields, nk[].k__mojolearn_fitted, False), context, True)
+    host_inference_scalar(py_get(fields, nk[].k__mojolearn_fitting, False), context, True)
+    if py_contains(fields, nk[].k_n_features_in_):
+        host_inference_scalar(py_item(fields, nk[].k_n_features_in_), context)
     var kernel = String(kind) == "kernel_ridge" or String(kind) == "nystroem" or String(kind) == "rbf_sampler"
     if kernel:
         host_kernel_admit_state(fields, String(kind), context)
@@ -94,7 +98,7 @@ def host_inference_operation(model: PythonObject, operation: String, args: Pytho
     elif operation == "host_infer_score":
         method = "score"
     classical_require_fitted(model, False, method, error_context)
-    var mode = py_get(fields, "numeric_mode")
+    var mode = py_get(fields, nk[].k_numeric_mode)
     if mode is not None and (py_type(mode) is not b.str or String(mode) != "identical"):
         raise Error("explicit host models run identical mode only")
     if kernel:
@@ -111,11 +115,11 @@ def host_inference_operation(model: PythonObject, operation: String, args: Pytho
         return host_svr_predict(model, fields, args[0], context, public)
     classical_admit_value(args, context)
     var cd = String(kind) == "cd"
-    if cd and not py_contains(fields, "coef_"):
+    if cd and not py_contains(fields, nk[].k_coef_):
         raise Error("call fit before predict")
-    if not cd and py_get(fields, "cluster_centers_") is None:
+    if not cd and py_get(fields, nk[].k_cluster_centers_) is None:
         raise Error("RuntimeError: this estimator is not fitted yet")
-    var fitting = Bool(py=py_get(fields, "_mojolearn_fitting", False))
+    var fitting = Bool(py=py_get(fields, nk[].k__mojolearn_fitting, False))
     var prepared = native_torch_numpy(args[0]) if _ordinary_torch(py_type(args[0]), context) else args[0]
     if cd and not fitting and native_pandas_exact(prepared):
         host_inference_pandas_finite(prepared, context)
@@ -136,34 +140,34 @@ def host_inference_operation(model: PythonObject, operation: String, args: Pytho
     var rows = Int(py=x.shape[0])
     var features = Int(py=x.shape[1])
     if cd:
-        if features != Int(py=fields["n_features_in_"]):
+        if features != Int(py=py_item(fields, nk[].k_n_features_in_)):
             raise Error("feature count differs from fit")
         if not fitting:
             host_inference_feature_names(model, fields, context)
-        var coef = classical_input(fields["coef_"], context, "coef_")
+        var coef = classical_input(py_item(fields, nk[].k_coef_), context, "coef_")
         if Int(py=coef.ndim) != 1 or Int(py=coef.size) != features or not classical_is_f32(coef, context) or not classical_c_order(coef, context) or (not classical_is_array(coef, context) and not Bool(py=coef.dtype.isnative)):
             raise Error("stored coefficients must be a native float32 feature vector")
-        host_tree_scalar(fields["intercept_"], context)
-        var column = host_archive_typed(Python.tuple(rows, features), "<f4", context["output_context"])
+        host_tree_scalar(py_item(fields, nk[].k_intercept_), context)
+        var column = host_archive_typed(Python.tuple(rows, features), "<f4", py_item(context, nk[].k_output_context))
         host_tree_column_copy(Int(py=classical_address(x)), rows, features, Int(py=classical_address(column)))
-        var out = host_archive_typed(Python.tuple(rows), "<f4", context["output_context"])
+        var out = host_archive_typed(Python.tuple(rows), "<f4", py_item(context, nk[].k_output_context))
         _ = py_call(host_inference_entry("cd_predict", context), classical_address(column), classical_address(coef), classical_address(out),
-            Python.list(rows, features, py_call(b.float, fields["intercept_"])))
+            Python.list(rows, features, py_call(b.float, py_item(fields, nk[].k_intercept_))))
         _ = column^
         _ = coef^
         _ = x^
-        return classical_input(host_tree_wide(out, context), context, "prediction") if public and py_get(context, "ndarray") is not None else out
-    var centers = host_tree_input(fields["cluster_centers_"], context)
+        return classical_input(host_tree_wide(out, context), context, "prediction") if public and py_get(context, nk[].k_ndarray) is not None else out
+    var centers = host_tree_input(py_item(fields, nk[].k_cluster_centers_), context)
     if features != Int(py=centers.shape[1]):
         raise Error("X feature count differs from the fitted centers")
     if not fitting:
         host_inference_feature_names(model, fields, context)
     host_inference_finite(Int(py=classical_address(x)), rows * features)
-    var metric = fields["metric"]
+    var metric = py_item(fields, nk[].k_metric)
     # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
     var code = Optional[PythonObject]()
     if py_type(metric) is b.str:
-        code = py_present(py_get(context["host_archive_kmeans_metrics"], metric))
+        code = py_present(py_get(py_item(context, nk[].k_host_archive_kmeans_metrics), metric))
         if not code:
             raise Error("unknown KMeans metric")
     else:
@@ -171,9 +175,9 @@ def host_inference_operation(model: PythonObject, operation: String, args: Pytho
         code = py_present(py_call(b.int, metric))
     var clusters = Int(py=centers.shape[0])
     var transform = operation == "host_infer_transform"
-    var out = host_archive_typed(Python.tuple(rows, clusters) if transform else Python.tuple(rows), "<f4" if transform else "<i4", context["output_context"])
+    var out = host_archive_typed(Python.tuple(rows, clusters) if transform else Python.tuple(rows), "<f4" if transform else "<i4", py_item(context, nk[].k_output_context))
     _ = py_call(host_inference_entry("kmeans_transform" if transform else "kmeans_predict", context), classical_address(x), classical_address(centers), classical_address(out),
         Python.list(rows, features, clusters, code.value()))
     _ = centers^
     _ = x^
-    return classical_input(out, context, "prediction") if public and py_get(context, "ndarray") is not None else out
+    return classical_input(out, context, "prediction") if public and py_get(context, nk[].k_ndarray) is not None else out

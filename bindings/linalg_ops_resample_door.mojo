@@ -41,16 +41,18 @@ from bindings.family_common_pack import (
 from bindings.linalg_ops_buffers_unpack import lin_truth
 from bindings.admitted_input_unpack import AdmittedBuf, AdmittedTypedPin, admitted_typed_once, admitted_typed_c, admitted_zeros, admitted_shape_tuple
 from bindings.tensor_view import TensorView
+from bindings.linalg_keys_unpack import linalg_keys
 
 
 
 def rs_extension(binding: PythonObject, numeric_mode: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_extension(numeric_mode)`: the binary's own compile-time mode must be
     the one requested."""
+    var nk = linalg_keys()
     var b = native_loaded_module("builtins")
     var want = numeric_mode
     if want is None:
-        want = context["backend_fields"]["_DEFAULT_MODE"]
+        want = py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)
     if py_type(want) is not b.str:
         raise Error("ValueError: numeric_mode must be fast, identical or None")
     # p3-cnn-sequence-tsa: an exact "fast" / "identical" (every default and
@@ -81,8 +83,9 @@ def _rs_is_int(value: PythonObject) raises -> Bool:
 def rs_code(table_name: String, value: PythonObject, name: String, where: String,
             context: PythonObject) raises -> PythonObject:
     """`_code(table, value, name, where)`."""
+    var nk = linalg_keys()
     var b = native_loaded_module("builtins")
-    var table = context["family_rs_codes"][table_name]
+    var table = py_item(context, nk[].k_family_rs_codes)[table_name]
     if family_is_str(value):
         if not lin_truth(py_call(py_attr(table, "__contains__"), value)):
             raise Error("mojolearn " + where + ": " + name + " must be one of "
@@ -118,6 +121,7 @@ def _rs_nonneg(value: PythonObject) raises -> Int:
 
 def _rs_typed(source: PythonObject, typestr: String, ndim: Int, name: String,
               context: PythonObject) raises -> AdmittedBuf:
+    var nk = linalg_keys()
     # Capture ordinary input-buffer metadata once. Lists, pandas and Torch
     # use their existing native materialization before capturing the new owner.
     # perf2-msel: no second classical_admit_value here. Every caller passes a
@@ -125,7 +129,7 @@ def _rs_typed(source: PythonObject, typestr: String, ndim: Int, name: String,
     # rs_operation admitted with the same check at the start of this call, and
     # no Python code runs in between.
     var value = source
-    if not classical_is_array(value, context) and py_type(value) is not py_get(context, "ndarray"):
+    if not classical_is_array(value, context) and py_type(value) is not py_get(context, nk[].k_ndarray):
         value = classical_view(value, context, name)
     var admitted_pin = AdmittedTypedPin()
     var admitted = admitted_typed_once(value, context, admitted_pin)
@@ -159,27 +163,29 @@ def _rs_object(cls: PythonObject) raises -> PythonObject:
 
 
 def _rs_bootstrap_result(dist: AdmittedBuf, sdist: AdmittedBuf, scalars: AdmittedBuf, context: PythonObject) raises -> PythonObject:
+    var nk = linalg_keys()
     var b = native_loaded_module("builtins")
     var result = _rs_object(resample_result_layout(0, context))
-    py_setitem(_fields(result), "point_estimate", PythonObject(_rs_word(scalars, 0)))
-    py_setitem(_fields(result), "distribution", dist.keep)
-    py_setitem(_fields(result), "sorted_distribution", sdist.keep)
-    py_setitem(_fields(result), "standard_error", PythonObject(_rs_word(scalars, 1)))
+    py_setitem(_fields(result), nk[].k_point_estimate, PythonObject(_rs_word(scalars, 0)))
+    py_setitem(_fields(result), nk[].k_distribution, dist.keep)
+    py_setitem(_fields(result), nk[].k_sorted_distribution, sdist.keep)
+    py_setitem(_fields(result), nk[].k_standard_error, PythonObject(_rs_word(scalars, 1)))
     var interval = py_call(b.tuple.__new__, resample_result_layout(3, context),
                            Python.tuple(PythonObject(_rs_word(scalars, 2)), PythonObject(_rs_word(scalars, 3))))
-    py_setitem(_fields(result), "confidence_interval", interval)
-    py_setitem(_fields(result), "order_low", PythonObject(Int(_rs_word(scalars, 4))))
-    py_setitem(_fields(result), "order_high", PythonObject(Int(_rs_word(scalars, 5))))
+    py_setitem(_fields(result), nk[].k_confidence_interval, interval)
+    py_setitem(_fields(result), nk[].k_order_low, PythonObject(Int(_rs_word(scalars, 4))))
+    py_setitem(_fields(result), nk[].k_order_high, PythonObject(Int(_rs_word(scalars, 5))))
     return result
 
 
 def _rs_permutation_result(null: AdmittedBuf, scalars: AdmittedBuf, context: PythonObject) raises -> PythonObject:
+    var nk = linalg_keys()
     var result = _rs_object(resample_result_layout(1, context))
-    py_setitem(_fields(result), "statistic", PythonObject(_rs_word(scalars, 0)))
-    py_setitem(_fields(result), "null_distribution", null.keep)
-    py_setitem(_fields(result), "pvalue", PythonObject(_rs_word(scalars, 1)))
-    py_setitem(_fields(result), "count_less", PythonObject(Int(_rs_word(scalars, 2))))
-    py_setitem(_fields(result), "count_greater", PythonObject(Int(_rs_word(scalars, 3))))
+    py_setitem(_fields(result), nk[].k_statistic, PythonObject(_rs_word(scalars, 0)))
+    py_setitem(_fields(result), nk[].k_null_distribution, null.keep)
+    py_setitem(_fields(result), nk[].k_pvalue, PythonObject(_rs_word(scalars, 1)))
+    py_setitem(_fields(result), nk[].k_count_less, PythonObject(Int(_rs_word(scalars, 2))))
+    py_setitem(_fields(result), nk[].k_count_greater, PythonObject(Int(_rs_word(scalars, 3))))
     return result
 
 
@@ -390,6 +396,7 @@ def _rs_permutation_test(args: PythonObject, context: PythonObject) raises -> Py
 
 def _rs_corner(values: PythonObject, name: String, where: String, context: PythonObject) raises -> AdmittedBuf:
     """`Array.from_list([_real(v, name, where) for v in values], "<f4")`."""
+    var nk = linalg_keys()
     var b = native_loaded_module("builtins")
     var items = Python.list()
     if classical_is_array(values, context):
@@ -411,10 +418,10 @@ def _rs_corner(values: PythonObject, name: String, where: String, context: Pytho
         _ = admitted^
     else:
         var source = values
-        if py_type(values) is py_get(context, "ndarray"):
+        if py_type(values) is py_get(context, nk[].k_ndarray):
             # The exact native view snapshots ndarray metadata before the
             # shape check and native storage boxing consume that snapshot.
-            source = py_call(py_attr(context["ndarray"], "view"), values)
+            source = py_call(py_attr(py_item(context, nk[].k_ndarray), "view"), values)
         elif py_type(values) is b.list:
             source = py_call(b.tuple, values)
         var shape = metric_shape(source, context)  # admits `source` once
@@ -437,6 +444,7 @@ def _rs_corner(values: PythonObject, name: String, where: String, context: Pytho
 def _rs_monte_carlo(args: PythonObject, context: PythonObject) raises -> PythonObject:
     """args: binding, integrand, lower, upper, n_samples, random_state,
     i_first, numeric_mode."""
+    var nk = linalg_keys()
     var where = String("monte_carlo_integrate")
     var f_id = rs_code("INTEGRANDS", args[1], "integrand", where, context)
     var lo = _rs_corner(args[2], "lower", where, context)
@@ -459,10 +467,10 @@ def _rs_monte_carlo(args: PythonObject, context: PythonObject) raises -> PythonO
     _ = hi  # keep the Python object alive through the native call above
     _ = lo  # keep the Python object alive through the native call above
     var result = _rs_object(resample_result_layout(2, context))
-    py_setitem(_fields(result), "integral", PythonObject(_rs_word(scalars, 0)))
-    py_setitem(_fields(result), "mean", PythonObject(_rs_word(scalars, 1)))
-    py_setitem(_fields(result), "volume", PythonObject(_rs_word(scalars, 2)))
-    py_setitem(_fields(result), "closed_form", PythonObject(_rs_word(scalars, 3)))
+    py_setitem(_fields(result), nk[].k_integral, PythonObject(_rs_word(scalars, 0)))
+    py_setitem(_fields(result), nk[].k_mean, PythonObject(_rs_word(scalars, 1)))
+    py_setitem(_fields(result), nk[].k_volume, PythonObject(_rs_word(scalars, 2)))
+    py_setitem(_fields(result), nk[].k_closed_form, PythonObject(_rs_word(scalars, 3)))
     _ = lo^
     _ = hi^
     return result

@@ -10,21 +10,24 @@ from bindings.native_numpy_metadata_unpack import native_numpy_dtype
 from bindings.host_iforest_scalar_repr_pack import (
     _if_repr_options,
 )
+from bindings.host_tree_archive_keys_unpack import host_tree_archive_keys
+from bindings.py_balanced import py_item
 
 
 def _if_repr_float(item: PythonObject, width: Int, options: PythonObject, context: PythonObject) raises -> String:
+    var nk = host_tree_archive_keys()
     var value = Float64(py=item)
     var native_float = py_type(PythonObject(0.0))
-    var formatter = native_float.__dict__["__format__"]
-    if Int(py=options["legacy"]) <= 113:
+    var formatter = py_item(native_float.__dict__, nk[].k___format__)
+    if Int(py=py_item(options, nk[].k_legacy)) <= 113:
         # Legacy scalar ndarray formatting uses the unpacked scalar's repr.
         return String(py_call(py_type(PythonObject("")), PythonObject(value)))
-    var sign = String(options["sign"])
+    var sign = String(py_item(options, nk[].k_sign))
     if not isfinite(value):
         if isnan(value):
-            return (sign if sign != "-" else String("")) + String(options["nanstr"])
-        return (String("-") if value < 0 else sign if sign != "-" else String("")) + String(options["infstr"])
-    var unique = String(options["floatmode"]) != "fixed"
+            return (sign if sign != "-" else String("")) + String(py_item(options, nk[].k_nanstr))
+        return (String("-") if value < 0 else sign if sign != "-" else String("")) + String(py_item(options, nk[].k_infstr))
+    var unique = String(py_item(options, nk[].k_floatmode)) != "fixed"
     var significant = 17
     if unique and value != 0:
         for digits in range(1, 18):  # driver-loop: shortest round-tripping native scalar representation
@@ -34,10 +37,10 @@ def _if_repr_float(item: PythonObject, width: Int, options: PythonObject, contex
             if same:
                 significant = digits
                 break
-    var numpy = py_get(context["modules"], "numpy")
-    if py_type(numpy) is not context["host_iforest_module_type"]:
+    var numpy = py_get(py_item(context, nk[].k_modules), nk[].k_numpy)
+    if py_type(numpy) is not py_item(context, nk[].k_host_iforest_module_type):
         raise Error("TypeError: IsolationForest parameter text requires native NumPy version metadata")
-    var version = py_get(py_call(context["host_iforest_module_dict"], numpy), "__version__")
+    var version = py_get(py_call(py_item(context, nk[].k_host_iforest_module_dict), numpy), nk[].k___version__)
     if py_type(version) is not py_type(PythonObject("")):
         raise Error("TypeError: IsolationForest parameter text requires native NumPy version text")
     var pieces = String(version).split(".")
@@ -46,9 +49,9 @@ def _if_repr_float(item: PythonObject, width: Int, options: PythonObject, contex
     var release = Int(String(pieces[0])) * 100 + Int(String(pieces[1]))
     # These are NumPy's scalar display thresholds, not numerical dispatch.
     var cutoff = Float64(1e8)
-    if release >= 203 and Int(py=options["legacy"]) > 202:
+    if release >= 203 and Int(py=py_item(options, nk[].k_legacy)) > 202:
         cutoff = 1e3 if width == 2 else 1e6 if width == 4 else 1e8
-    var scientific = value != 0 and (abs(value) >= cutoff or (not Bool(py=options["suppress"]) and abs(value) < Float64(1e-4)))
+    var scientific = value != 0 and (abs(value) >= cutoff or (not Bool(py=py_item(options, nk[].k_suppress)) and abs(value) < Float64(1e-4)))
     var decimal_exponent = 0
     if value != 0 and not scientific:
         # Read the decimal exponent from the native formatter; do not introduce
@@ -57,8 +60,8 @@ def _if_repr_float(item: PythonObject, width: Int, options: PythonObject, contex
         decimal_exponent = Int(String(exponent_text[byte=exponent_text.find("e") + 1:]))
     var needed = significant - 1 if scientific else max(0, significant - 1 - decimal_exponent) if value != 0 else 0
     var precision = needed
-    if not unique or (String(options["floatmode"]) != "unique" and options["precision"] is not None):
-        precision = min(Int(py=options["precision"]), needed) if unique else Int(py=options["precision"])
+    if not unique or (String(py_item(options, nk[].k_floatmode)) != "unique" and py_item(options, nk[].k_precision) is not None):
+        precision = min(Int(py=py_item(options, nk[].k_precision)), needed) if unique else Int(py=py_item(options, nk[].k_precision))
     var text = String(py_call(formatter, PythonObject(value), PythonObject(sign + "." + String(precision) + ("e" if scientific else "f"))))
     var exponent = text.find("e")
     var mantissa = String(text[byte=0:exponent]) if exponent >= 0 else text
@@ -76,13 +79,14 @@ def _if_repr_float(item: PythonObject, width: Int, options: PythonObject, contex
 
 
 def host_iforest_scalar_repr(value: PythonObject, context: PythonObject) raises -> String:
+    var nk = host_tree_archive_keys()
     # Caller already admitted the exact zero-dimensional numeric ndarray.
     var options = _if_repr_options(context)
     var kind = String(value.dtype.kind)
-    var legacy = Int(py=options["legacy"])
+    var legacy = Int(py=py_item(options, nk[].k_legacy))
     var constructor = native_numpy_dtype(context)
     var longfloat = value.dtype.type is py_call(constructor, "g").type
-    var custom = py_get(options, "formatter")
+    var custom = py_get(options, nk[].k_formatter)
     if custom is not None and legacy > 113:
         if py_type(custom) is not py_type(Python.dict()):
             raise Error("TypeError: IsolationForest print formatters require native configuration data")
@@ -107,23 +111,23 @@ def host_iforest_scalar_repr(value: PythonObject, context: PythonObject) raises 
             text = _if_repr_float(item, Int(py=value.dtype.itemsize), options, context)
     elif (kind == "i" or kind == "u") and legacy > 113:
         # The integer sign option first applied to integer arrays in NumPy2.
-        var numpy = py_get(context["modules"], "numpy")
-        var version = py_get(py_call(context["host_iforest_module_dict"], numpy), "__version__")
+        var numpy = py_get(py_item(context, nk[].k_modules), nk[].k_numpy)
+        var version = py_get(py_call(py_item(context, nk[].k_host_iforest_module_dict), numpy), nk[].k___version__)
         if py_type(version) is not py_type(PythonObject("")):
             raise Error("TypeError: IsolationForest parameter text requires native version text")
         var parts = String(version).split(".")
-        if Int(String(parts[0])) >= 2 and not text.startswith("-") and String(options["sign"]) != "-":
-            text = String(options["sign"]) + text
+        if Int(String(parts[0])) >= 2 and not text.startswith("-") and String(py_item(options, nk[].k_sign)) != "-":
+            text = String(py_item(options, nk[].k_sign)) + text
     var implied = value.dtype.type is py_call(constructor, "i8").type or value.dtype.type is py_call(constructor, "f8").type or (kind == "b" and legacy > 113)
     var suffix = String("")
-    if legacy > 210 and Int(py=options["threshold"]) < 1:
+    if legacy > 210 and Int(py=py_item(options, nk[].k_threshold)) < 1:
         # NumPy 2.2 introduced the shape annotation for summarized arrays.
         # Older releases also use a large sentinel for the default legacy
         # option, so legacy alone does not identify this display contract.
-        var numpy = py_get(context["modules"], "numpy")
-        if py_type(numpy) is not context["host_iforest_module_type"]:
+        var numpy = py_get(py_item(context, nk[].k_modules), nk[].k_numpy)
+        if py_type(numpy) is not py_item(context, nk[].k_host_iforest_module_type):
             raise Error("TypeError: IsolationForest parameter text requires native NumPy version metadata")
-        var version = py_get(py_call(context["host_iforest_module_dict"], numpy), "__version__")
+        var version = py_get(py_call(py_item(context, nk[].k_host_iforest_module_dict), numpy), nk[].k___version__)
         if py_type(version) is not py_type(PythonObject("")):
             raise Error("TypeError: IsolationForest parameter text requires native NumPy version text")
         var parts = String(version).split(".")
@@ -156,6 +160,6 @@ def host_iforest_scalar_repr(value: PythonObject, context: PythonObject) raises 
     if suffix.byte_length() == 0:
         return "array(" + text + ")"
     var spacer = String(" ")
-    if legacy > 113 and 6 + text.byte_length() + 1 + suffix.byte_length() + 2 > Int(py=options["linewidth"]):
+    if legacy > 113 and 6 + text.byte_length() + 1 + suffix.byte_length() + 2 > Int(py=py_item(options, nk[].k_linewidth)):
         spacer = "\n      "
     return "array(" + text + "," + spacer + suffix + ")"
