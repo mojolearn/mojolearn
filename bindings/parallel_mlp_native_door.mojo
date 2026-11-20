@@ -31,6 +31,19 @@ from core.samba_entry_table import (
     SAMBA_PRIM_OPTIMIZER_STEP,
 )
 from bindings.parallel_mlp_native_run import _mlp_names, _mlp_dims
+from bindings.parallel_keys_unpack import (
+    parallel_keys,
+    PARALLEL_MLP_OPN_APPLY,
+    PARALLEL_MLP_OPN_FROM_STATE,
+    PARALLEL_MLP_OPN_GRADIENT,
+    PARALLEL_MLP_OPN_INITIALIZE,
+    PARALLEL_MLP_OPN_ORDERED_SUM,
+    PARALLEL_MLP_OPN_PUBLISH,
+    PARALLEL_MLP_OPN_SNAPSHOT,
+    PARALLEL_MLP_OPN_VALIDATE,
+)
+from bindings.py_keys import py_op_code
+from bindings.py_balanced import py_item
 
 
 struct ParallelMlpBoundary(Defaultable, Movable):
@@ -95,7 +108,8 @@ def mlp_initialize(model_cls: PythonObject, opt_cls: PythonObject, binding: Pyth
         if entry is not None and py_type(entry) is not py_type(b[].bi.len):
             raise Error("parallel MLP: training entries must be compiled native functions")
         py_setitem(b[].entries, name, entry)
-    if Int(py=b[].entries["training_numeric_mode"]()) != (1 if mode == "identical" else 0) or String(b[].entries["training_vendor"]()) != vendor:
+    var nk = parallel_keys()
+    if Int(py=py_item(b[].entries, nk[].k_training_numeric_mode)()) != (1 if mode == "identical" else 0) or String(py_item(b[].entries, nk[].k_training_vendor)()) != vendor:
         raise Error("parallel MLP: compiled mode/vendor admission mismatch")
     b[].primitives = entry_ref_unresolved()
     var word = samba_vendor_word(vendor)
@@ -143,38 +157,39 @@ def mlp_validate_state(state: PythonObject) raises -> PythonObject:
     var name_list = bi.list()
     for name in names:  # small-loop(the fixed MLP field-name words)
         _ = py_call(name_list.append, name)
-    if String(state["schema"]) != "mojolearn.small-mlp-trainer.v1" or String(state["numeric_mode"]) != "identical" or Bool(py=state["architecture"] != py_ints([8, 16, 3])) or Bool(py=state["parameter_order"] != name_list):
+    var nk = parallel_keys()
+    if String(py_item(state, nk[].k_schema)) != "mojolearn.small-mlp-trainer.v1" or String(py_item(state, nk[].k_numeric_mode)) != "identical" or Bool(py=py_item(state, nk[].k_architecture) != py_ints([8, 16, 3])) or Bool(py=py_item(state, nk[].k_parameter_order) != name_list):
         raise Error("SmallMLPTrainer state schema/architecture/mode/order mismatch")
-    _mlp_fields(state["weights"], "weight1|bias1|weight2|bias2")
-    _mlp_fields(state["optimizer"], "kind|step|m|v|flags")
-    _mlp_fields(state["config"], "lr|beta1|beta2|eps|weight_decay")
+    _mlp_fields(py_item(state, nk[].k_weights), "weight1|bias1|weight2|bias2")
+    _mlp_fields(py_item(state, nk[].k_optimizer), "kind|step|m|v|flags")
+    _mlp_fields(py_item(state, nk[].k_config), "lr|beta1|beta2|eps|weight_decay")
     var config = bi.dict()
     for name in [String("lr"), String("beta1"), String("beta2"), String("eps"), String("weight_decay")]:  # small-loop(the five optimizer config words)
-        py_setitem(config, name, Float64(_parallel_float(state["config"][name], name)))
-    if Float64(py=config["lr"]) <= 0 or Float64(py=config["eps"]) <= 0 or Float64(py=config["weight_decay"]) < 0 or Float64(py=config["beta1"]) < 0 or Float64(py=config["beta1"]) >= 1 or Float64(py=config["beta2"]) < 0 or Float64(py=config["beta2"]) >= 1:
+        py_setitem(config, name, Float64(_parallel_float(py_item(state, nk[].k_config)[name], name)))
+    if Float64(py=py_item(config, nk[].k_lr)) <= 0 or Float64(py=py_item(config, nk[].k_eps)) <= 0 or Float64(py=py_item(config, nk[].k_weight_decay)) < 0 or Float64(py=py_item(config, nk[].k_beta1)) < 0 or Float64(py=py_item(config, nk[].k_beta1)) >= 1 or Float64(py=py_item(config, nk[].k_beta2)) < 0 or Float64(py=py_item(config, nk[].k_beta2)) >= 1:
         raise Error("SmallMLPTrainer optimizer configuration outside admitted range")
-    var old = state["optimizer"]
-    if String(old["kind"]) != "AdamW":
+    var old = py_item(state, nk[].k_optimizer)
+    if String(py_item(old, nk[].k_kind)) != "AdamW":
         raise Error("SmallMLPTrainer state optimizer mismatch")
     var optimizer = bi.dict()
-    py_setitem(optimizer, "kind", "AdamW")
-    py_setitem(optimizer, "step", _parallel_int(old["step"], 0, 2147483647, "SmallMLPTrainer step", False))
-    py_setitem(optimizer, "m", _parallel_array(old["m"], [195]))
-    py_setitem(optimizer, "v", _parallel_array(old["v"], [195]))
-    py_setitem(optimizer, "flags", _parallel_array(old["flags"], [4], True))
-    var v = Pointer[Float32, ImmUntrackedOrigin](unsafe_from_address=Int(py=optimizer["v"]._addr))
-    var flags = Pointer[Int32, ImmUntrackedOrigin](unsafe_from_address=Int(py=optimizer["flags"]._addr))
+    py_setitem(optimizer, nk[].k_kind, "AdamW")
+    py_setitem(optimizer, nk[].k_step, _parallel_int(py_item(old, nk[].k_step), 0, 2147483647, "SmallMLPTrainer step", False))
+    py_setitem(optimizer, nk[].k_m, _parallel_array(py_item(old, nk[].k_m), [195]))
+    py_setitem(optimizer, nk[].k_v, _parallel_array(py_item(old, nk[].k_v), [195]))
+    py_setitem(optimizer, nk[].k_flags, _parallel_array(py_item(old, nk[].k_flags), [4], True))
+    var v = Pointer[Float32, ImmUntrackedOrigin](unsafe_from_address=Int(py=py_item(optimizer, nk[].k_v)._addr))
+    var flags = Pointer[Int32, ImmUntrackedOrigin](unsafe_from_address=Int(py=py_item(optimizer, nk[].k_flags)._addr))
     mlp_check_optimizer_state(v, flags)
     var weights = bi.dict()
     for i in range(4):  # driver-loop: over the existing fixed MLP parameter registry
-        py_setitem(weights, names[i], _parallel_array(state["weights"][names[i]], _mlp_dims(i)))
+        py_setitem(weights, names[i], _parallel_array(py_item(state, nk[].k_weights)[names[i]], _mlp_dims(i)))
     var result = py_call(bi.dict, state)
-    py_setitem(result, "architecture", py_ints([8, 16, 3]))
-    py_setitem(result, "parameter_order", name_list)
-    py_setitem(result, "weights", weights)
-    py_setitem(result, "optimizer", optimizer)
-    py_setitem(result, "config", config)
-    py_setitem(result, "data_schedule", _mlp_schedule(state["data_schedule"]))
+    py_setitem(result, nk[].k_architecture, py_ints([8, 16, 3]))
+    py_setitem(result, nk[].k_parameter_order, name_list)
+    py_setitem(result, nk[].k_weights, weights)
+    py_setitem(result, nk[].k_optimizer, optimizer)
+    py_setitem(result, nk[].k_config, config)
+    py_setitem(result, nk[].k_data_schedule, _mlp_schedule(py_item(state, nk[].k_data_schedule)))
     return result
 
 
@@ -182,14 +197,16 @@ def mlp_snapshot(model: PythonObject) raises -> PythonObject:
     """The model's complete state, read from its native state handle (the
     public `state_dict` call, under the model's lock), admitted as identical."""
     _mlp_mode()
-    return mlp_validate_state(small_mlp_call(SMALL_MLP_OPN_STATE_DICT, PythonObject(None), Python.tuple(py_get(model.__dict__, "_handle"))))
+    var nk = parallel_keys()
+    return mlp_validate_state(small_mlp_call(SMALL_MLP_OPN_STATE_DICT, PythonObject(None), Python.tuple(py_get(model.__dict__, nk[].k__handle))))
 
 
 def mlp_publish(model: PythonObject, state: PythonObject) raises:
     """Replace the model's native state with a validated copy of `state`."""
     _mlp_mode()
     var checked = mlp_validate_state(state)
-    _ = small_mlp_call(SMALL_MLP_OPN_LOAD_STATE_DICT, PythonObject(None), Python.tuple(py_get(model.__dict__, "_handle"), checked))
+    var nk = parallel_keys()
+    _ = small_mlp_call(SMALL_MLP_OPN_LOAD_STATE_DICT, PythonObject(None), Python.tuple(py_get(model.__dict__, nk[].k__handle), checked))
 
 
 def mlp_from_state(state: PythonObject) raises -> PythonObject:
@@ -405,7 +422,8 @@ def neural_cooperative_admit() raises:
 def mlp_apply_from_state(state: PythonObject, gradients: PythonObject) raises -> PythonObject:
     neural_cooperative_admit()
     var next = mlp_validate_state(state)
-    var step = Int(py=next["optimizer"]["step"])
+    var nk = parallel_keys()
+    var step = Int(py=py_item(py_item(next, nk[].k_optimizer), nk[].k_step))
     if step == 2147483647:
         raise Error("SmallMLPTrainer step exceeds its supported range")
     if len(gradients) != 4:
@@ -423,25 +441,25 @@ def mlp_apply_from_state(state: PythonObject, gradients: PythonObject) raises ->
         var value = _parallel_array(gradients[j], _mlp_dims(j))
         var n = Int(py=value.size)
         op[j] = Int32(offset)
-        var src = Pointer[UInt32, ImmUntrackedOrigin](unsafe_from_address=Int(py=next["weights"][names[j]]._addr))
+        var src = Pointer[UInt32, ImmUntrackedOrigin](unsafe_from_address=Int(py=py_item(next, nk[].k_weights)[names[j]]._addr))
         unsafe_memcpy(dest=pp + offset, src=src, count=n)
         src = Pointer[UInt32, ImmUntrackedOrigin](unsafe_from_address=Int(py=value._addr))
         unsafe_memcpy(dest=gp + offset, src=src, count=n)
         offset += n
         _ = value^
     op[4] = Int32(offset)
-    var cfg = next["config"]
+    var cfg = py_item(next, nk[].k_config)
     # Primitive op 25 (the former `optimizer_step` entry's words): ints
     # [J, kind, t, nesterov, maximize], floats [lr, beta1, beta2, eps,
     # weight_decay, momentum, dampening, max_norm]; the same AdamW plan as
     # the former 13-word Python list (momentum, dampening, max_norm and
     # maximize 0), the same Float64 -> Float32 narrowing in the callee.
     var ints: Array[Int, 5] = [4, 2, step + 1, 0, 0]
-    var floats: Array[Float64, 8] = [Float64(py=cfg["lr"]), Float64(py=cfg["beta1"]), Float64(py=cfg["beta2"]),
-        Float64(py=cfg["eps"]), Float64(py=cfg["weight_decay"]), 0.0, 0.0, 0.0]
-    var saved = next["optimizer"]
-    var addresses: Array[Int, 7] = [Int(py=params._addr), Int(py=grads._addr), Int(py=saved["m"]._addr),
-        Int(py=saved["v"]._addr), Int(py=offsets._addr), Int(py=saved["flags"]._addr), Int(py=info._addr)]
+    var floats: Array[Float64, 8] = [Float64(py=py_item(cfg, nk[].k_lr)), Float64(py=py_item(cfg, nk[].k_beta1)), Float64(py=py_item(cfg, nk[].k_beta2)),
+        Float64(py=py_item(cfg, nk[].k_eps)), Float64(py=py_item(cfg, nk[].k_weight_decay)), 0.0, 0.0, 0.0]
+    var saved = py_item(next, nk[].k_optimizer)
+    var addresses: Array[Int, 7] = [Int(py=params._addr), Int(py=grads._addr), Int(py=py_item(saved, nk[].k_m)._addr),
+        Int(py=py_item(saved, nk[].k_v)._addr), Int(py=offsets._addr), Int(py=py_item(saved, nk[].k_flags)._addr), Int(py=info._addr)]
     var primitives = _mlp_primitives()
     var written = 0
     with GILReleased(Python()):
@@ -450,16 +468,16 @@ def mlp_apply_from_state(state: PythonObject, gradients: PythonObject) raises ->
     if written != 195:
         raise Error("RuntimeError: SmallMLPTrainer update returned incomplete state")
     _mlp_finite(params, "updated parameter")
-    _mlp_finite(saved["m"], "first moment")
-    _mlp_finite(saved["v"], "second moment")
+    _mlp_finite(py_item(saved, nk[].k_m), "first moment")
+    _mlp_finite(py_item(saved, nk[].k_v), "second moment")
     offset = 0
     for j in range(4):  # driver-loop: over completed transactional parameter publication
-        var value = next["weights"][names[j]]
+        var value = py_item(next, nk[].k_weights)[names[j]]
         var n = Int(py=value.size)
         var dst = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=Int(py=value._addr))
         unsafe_memcpy(dest=dst, src=pp + offset, count=n)
         offset += n
-    py_setitem(saved, "step", step + 1)
+    py_setitem(saved, nk[].k_step, step + 1)
     _ = params^
     _ = grads^
     _ = offsets^
@@ -467,32 +485,35 @@ def mlp_apply_from_state(state: PythonObject, gradients: PythonObject) raises ->
     return next
 
 
-def mlp_call(operation: String, args: PythonObject) raises -> PythonObject:
-    if operation == "initialize":
+def mlp_call(operation: Int, name: PythonObject, args: PythonObject) raises -> PythonObject:
+    """`operation` is a `PARALLEL_MLP_OPN_*` code (-1 for a name the table
+    does not hold); `name` is read only for the unknown operation's text."""
+    if operation == PARALLEL_MLP_OPN_INITIALIZE:
         mlp_initialize(args[0], args[1], args[2], args[3], String(args[4]), String(args[5]))
-    elif operation == "snapshot":
+    elif operation == PARALLEL_MLP_OPN_SNAPSHOT:
         return mlp_snapshot(args[0])
-    elif operation == "validate":
+    elif operation == PARALLEL_MLP_OPN_VALIDATE:
         return mlp_validate_state(args[0])
-    elif operation == "from_state":
+    elif operation == PARALLEL_MLP_OPN_FROM_STATE:
         return mlp_from_state(args[0])
-    elif operation == "publish":
+    elif operation == PARALLEL_MLP_OPN_PUBLISH:
         mlp_publish(args[0], args[1])
-    elif operation == "gradient":
+    elif operation == PARALLEL_MLP_OPN_GRADIENT:
         return mlp_gradients_from_state(args[0], args[1], args[2])
-    elif operation == "ordered_sum":
+    elif operation == PARALLEL_MLP_OPN_ORDERED_SUM:
         return neural_ordered_sum(args[0])
-    elif operation == "apply":
+    elif operation == PARALLEL_MLP_OPN_APPLY:
         return mlp_apply_from_state(args[0], args[1])
     else:
-        raise Error("parallel MLP: unknown operation " + operation)
+        raise Error("parallel MLP: unknown operation " + String(name))
     return PythonObject(None)
 
 
 def parallel_mlp_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
     var args = PythonObject(from_borrowed=args_ptr)
     try:
-        var result = mlp_call(String(args[0]), args[1])
+        var nk = parallel_keys()
+        var result = mlp_call(py_op_code(nk[].ops_mlp, args[0]), args[0], args[1])
         return result.steal_data()
     except error:
         if String(error).startswith("TypeError:"):

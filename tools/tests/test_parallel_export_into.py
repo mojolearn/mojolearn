@@ -9,13 +9,17 @@ schedule descriptor table, and the native owner refuses Python-supplied
 callables or storage. These source checks pin the native contract instead;
 the device proof is the H100 leg in
 bench/results/byte_lm_export_fast_2026-09-25/."""
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "tools"))
+from boundary_keys_plain import plain  # noqa: E402
 
 
 def _read(rel):
-    return (ROOT / rel).read_text(encoding="utf-8")
+    # Held-key doors (bindings/parallel_keys_unpack.mojo) read in their by-name form.
+    return plain(rel, (ROOT / rel).read_text(encoding="utf-8"))
 
 
 def test_owner_has_no_instance_callables():

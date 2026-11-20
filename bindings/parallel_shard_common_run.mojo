@@ -121,14 +121,6 @@ def shard_faults_take() raises -> Int:
     return n
 
 
-def _numerical(name: String) -> Bool:
-    return (name == "arima_predict_shard" or name == "hw_predict_shard" or name == "gpc_class_fit"
-            or name == "gpc_class_predict" or name == "ivf_search" or name == "rbf_rows"
-            or name == "scaler_fit" or name == "scaler_transform" or name == "forest_fit"
-            or name == "arima_fit_shard" or name == "hw_fit_shard" or name == "reference_shard"
-            or name == "reference_query" or name == "query_rows")
-
-
 def shard_store_token() raises -> String:
     """A token unique to this process and call (pid plus a counter)."""
     var c = SHARD_COUNTERS.get_or_create_ptr()

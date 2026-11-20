@@ -42,10 +42,16 @@ from bindings.parallel_shard_common_run import (
     shard_transport_fault,
     SHARD_FAULT_NONE,
     SHARD_FAULT_DROP_RESULT,
-    _numerical,
     shard_store_token,
     shard_item,
 )
+from bindings.parallel_keys_unpack import (
+    parallel_keys,
+    ParallelKeys,
+    PARALLEL_NUMERICAL_OPN_PY,
+)
+from bindings.py_keys import py_op_code
+from bindings.py_balanced import py_item
 
 
 def shard_b() raises -> PythonObject:
@@ -208,13 +214,14 @@ def _shard_admit(pool: PythonObject, devices: PythonObject) raises -> PythonObje
     one `shard_run` reuses): the identity round, the inventory check and a
     new trace record. The pool is closed on a refusal."""
     var b = shard_b()
+    var nk = parallel_keys()
     var requests = b.list()
     for i in range(len(devices)):  # driver-loop: one identity request per worker
-        _ = py_call(requests.append, Python.tuple("identity"))
+        _ = py_call(requests.append, Python.tuple(nk[].k_identity))
     var identities = process_pool_map(pool, requests)
     var pids = b.list()
-    for i in range(len(pool["workers"])):  # driver-loop: over the spawned workers
-        _ = py_call(pids.append, pool["workers"][i]["pid"])
+    for i in range(len(py_item(pool, nk[].k_workers))):  # driver-loop: over the spawned workers
+        _ = py_call(pids.append, py_item(py_item(pool, nk[].k_workers)[i], nk[].k_pid))
     var p = PROCESS_BOUNDARY.get_or_create_ptr()
     try:
         native_require_worker_inventory(identities, p[].vendor, pids, Int(external_call["getpid", Int32]()))
@@ -225,10 +232,10 @@ def _shard_admit(pool: PythonObject, devices: PythonObject) raises -> PythonObje
     if t[].records is None:
         t[].records = b.list()
     var record = b.dict()
-    py_setitem(record, "devices", py_call(b.list, devices))
-    py_setitem(record, "inventory", identities)
-    py_setitem(record, "calls", b.list())
-    py_setitem(pool, "trace_record", record)
+    py_setitem(record, nk[].k_devices, py_call(b.list, devices))
+    py_setitem(record, nk[].k_inventory, identities)
+    py_setitem(record, nk[].k_calls, b.list())
+    py_setitem(pool, nk[].k_trace_record, record)
     _ = py_call(t[].records.append, record)
     if len(t[].records) > 256:
         _ = py_call(t[].records.pop, 0)
@@ -248,6 +255,17 @@ def _operation(request: PythonObject) raises -> String:
         return String(request[1])
     return name
 
+def _numerical(request: PythonObject, nk: UnsafePointer[ParallelKeys, MutUntrackedOrigin]) raises -> Bool:
+    """True for a numerical shard request (the transport negative control's
+    batches): its operation, or the operation a `("py", name, ...)` request
+    names, is one of the numerical codes of the table. One lookup of the
+    request's own str (two for a "py" request); no String is built."""
+    var code = py_op_code(nk[].ops_numerical, request[0])
+    if code == PARALLEL_NUMERICAL_OPN_PY:
+        code = py_op_code(nk[].ops_numerical, request[1])
+    return code > PARALLEL_NUMERICAL_OPN_PY
+
+
 def shard_map(pool: PythonObject, requests: PythonObject) raises -> PythonObject:
     """`process_pool_map(pool, requests)`, with every request's worker and
     operation added to the pool's trace record.
@@ -263,14 +281,15 @@ def shard_map(pool: PythonObject, requests: PythonObject) raises -> PythonObject
     var b = shard_b()
     var results = process_pool_map(pool, requests)
     var record = py_get(pool, PythonObject("trace_record"), PythonObject(None))
-    var workers = pool["workers"]
+    var nk = parallel_keys()
+    var workers = py_item(pool, nk[].k_workers)
     if record is not None and len(workers) > 0:
         for i in range(len(requests)):  # driver-loop: one trace entry per request
             var call = b.dict()
-            py_setitem(call, "pid", workers[i % len(workers)]["pid"])
-            py_setitem(call, "operation", _operation(requests[i]))
-            _ = py_call(record["calls"].append, call)
-    if len(results) > 1 and len(requests) > 0 and _numerical(_operation(requests[0])):
+            py_setitem(call, nk[].k_pid, py_item(workers[i % len(workers)], nk[].k_pid))
+            py_setitem(call, nk[].k_operation, _operation(requests[i]))
+            _ = py_call(py_item(record, nk[].k_calls).append, call)
+    if len(results) > 1 and len(requests) > 0 and _numerical(requests[0], nk):
         var fault = shard_transport_fault()
         if fault != SHARD_FAULT_NONE and shard_fault_mark():
             var altered = py_call(b.list, results)
@@ -295,14 +314,15 @@ def _shard_acquire(devices: PythonObject, child: String) raises -> PythonObject:
     var pid = Int(external_call["getpid", Int32]())
     var reused = PythonObject(None)
     var held = py_call(idle[].pools.pop, key, PythonObject(None))
+    var nk = parallel_keys()
     if held is not None:
         if Int(py=held[2]) != pid:
             # Inherited across os.fork: the pool's workers and sockets belong
             # to the parent process. Drop the record without closing (a close
             # here would end the parent's workers on the shared sockets).
             pass
-        elif (Bool(py=held[1] == environ) and not Bool(py=held[0]["closed"])
-                and len(held[0]["workers"]) == len(devices)):
+        elif (Bool(py=held[1] == environ) and not Bool(py=py_item(held[0], nk[].k_closed))
+                and len(py_item(held[0], nk[].k_workers)) == len(devices)):
             try:
                 reused = _shard_admit(held[0], devices)
             except:
@@ -380,14 +400,15 @@ def shard_run_stored(payload: PythonObject, token: String, requests: PythonObjec
     var b = shard_b()
     var acquired = _shard_acquire(devices, child)
     var pool = acquired[0]
-    var workers = len(pool["workers"])
+    var nk = parallel_keys()
+    var workers = len(py_item(pool, nk[].k_workers))
     var results = PythonObject(None)
     try:
         var stores = b.list()
         var releases = b.list()
         for i in range(workers):  # driver-loop: one store and one release per worker
-            _ = py_call(stores.append, Python.tuple("shard_store", PythonObject(token), payload))
-            _ = py_call(releases.append, Python.tuple("shard_release", PythonObject(token), PythonObject(None)))
+            _ = py_call(stores.append, Python.tuple(nk[].k_shard_store, PythonObject(token), payload))
+            _ = py_call(releases.append, Python.tuple(nk[].k_shard_release, PythonObject(token), PythonObject(None)))
         var stored = process_pool_map(pool, stores)
         if len(stored) != workers:
             raise Error("ValueError: shard workers did not store the call's operands")
@@ -533,7 +554,8 @@ def _carried(value: PythonObject, context: PythonObject, depth: Int) raises -> B
     var cls = py_type(value)
     if value is None or cls is b.bool or cls is b.int or cls is b.float or cls is b.str:
         return True
-    if cls is context["array_class"]:
+    var nk = parallel_keys()
+    if cls is py_item(context, nk[].k_array_class):
         return True
     if cls is b.tuple or cls is b.list:
         for i in range(len(value)):  # driver-loop: over a structural field's entries

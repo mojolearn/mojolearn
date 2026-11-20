@@ -24,6 +24,9 @@ from bindings.native_transport_door import (
 from bindings.native_transport_run import transport_clock, transport_hostname
 from bindings.causal_exception_unpack import causal_borrowed_item, causal_set_exception
 from bindings.parallel_byte_native_door import parallel_byte_call, parallel_byte_init, _parallel_array, _parallel_int, _parallel_float
+from bindings.parallel_keys_unpack import (
+    PARALLEL_BYTE_OPN_ADMITTED_STATE, PARALLEL_BYTE_OPN_APPLY_GRADIENT, PARALLEL_BYTE_OPN_EXPORT_RAW, PARALLEL_BYTE_OPN_FOLD_ADD, PARALLEL_BYTE_OPN_FOLD_EXPORT, PARALLEL_BYTE_OPN_FOLD_RESET, PARALLEL_BYTE_OPN_HAS_DEVICE_FOLD, PARALLEL_BYTE_OPN_SET_LR, PARALLEL_BYTE_OPN_SHARD_GRADIENT, PARALLEL_BYTE_OPN_SHARD_GRADIENT_FOLD, PARALLEL_BYTE_OPN_STEP,
+)
 from bindings.generation_buffers_door import generation_array
 from bindings.cross_vendor_admission_unpack import (
     cv_types_initialize,
@@ -231,7 +234,7 @@ def cross_vendor_call(operation: String, args: PythonObject, mut io_error: ByteC
     elif operation == "worker_run":
         return cross_vendor_worker_run(args[0], io_error)
     elif operation == "trainer_hash":
-        return cross_vendor_state_hash(_cross_vendor_trainer(args[0], "export_raw", c[].bi.list()))
+        return cross_vendor_state_hash(_cross_vendor_trainer(args[0], PARALLEL_BYTE_OPN_EXPORT_RAW, c[].bi.list()))
     elif operation == "feed_init":
         return cross_vendor_feed_init(args)
     elif operation == "feed_batch":
@@ -642,19 +645,19 @@ def cross_vendor_rate(table: PythonObject, step: Int) raises -> PythonObject:
     return table._values[at]
 
 
-def _cross_vendor_trainer(trainer: PythonObject, operation: String, params: PythonObject) raises -> PythonObject:
+def _cross_vendor_trainer(trainer: PythonObject, operation: Int, params: PythonObject) raises -> PythonObject:
     var c = CROSS_VENDOR_BOUNDARY.get_or_create_ptr()
     if py_type(trainer) is c[].parallel_cls:
         var args = c[].bi.list()
         _ = py_call(args.append, trainer)
-        if operation == "export_raw":
+        if operation == PARALLEL_BYTE_OPN_EXPORT_RAW:
             # params: () or (into,), the reused snapshot dict (N110).
             _ = py_call(args.append, 0)
             _ = py_call(args.append, params[0] if len(params) == 1 else PythonObject(None))
         else:
             for i in range(len(params)):  # driver-loop: over the native trainer operation envelope
                 _ = py_call(args.append, params[i])
-        return parallel_byte_call(operation, args)
+        return parallel_byte_call(operation, PythonObject(None), args)
     raise Error("cross_vendor: trainer must be an exact ParallelByteLanguageModelTrainer; Python trainer protocols are not accepted")
 
 
@@ -782,7 +785,7 @@ def cross_vendor_commit(owner: PythonObject, trainer: PythonObject, row: PythonO
     # The trainer's admitted state through its native owner: `trainer._state`
     # is a Python property (parallel_training.py), so reading it ran a Python
     # frame inside the worker's native run.
-    var admitted = _cross_vendor_trainer(trainer, "admitted_state", c[].bi.list())
+    var admitted = _cross_vendor_trainer(trainer, PARALLEL_BYTE_OPN_ADMITTED_STATE, c[].bi.list())
     py_setitem(event, "lr_f32_hex", cross_vendor_float_word(admitted["config"]["lr"]))
     var losses = c[].bi.list()
     var values = cv_sequence(row["losses"], "committed losses")
@@ -963,14 +966,14 @@ def cross_vendor_worker_run(owner: PythonObject, mut io_error: ByteCheckpointIOE
     var bi = c[].bi
     var tr = owner.trainer
     var empty_args = bi.list()
-    var state = _cross_vendor_trainer(tr, "export_raw", empty_args)
+    var state = _cross_vendor_trainer(tr, PARALLEL_BYTE_OPN_EXPORT_RAW, empty_args)
     var n = len(cross_vendor_bytes(state["parameters"])) // 4
     var hello = bi.dict()
     py_setitem(hello, "protocol", PythonObject("mojolearn.cross-vendor.v1"))
     py_setitem(hello, "name", owner.name)
     py_setitem(hello, "vendor", c[].vendor)
     py_setitem(hello, "shards", owner.shards)
-    py_setitem(hello, "completed", _cross_vendor_trainer(tr, "step", empty_args))
+    py_setitem(hello, "completed", _cross_vendor_trainer(tr, PARALLEL_BYTE_OPN_STEP, empty_args))
     py_setitem(hello, "state", cross_vendor_state_hash(state))
     py_setitem(hello, "n_total", PythonObject(n))
     py_setitem(hello, "chained", owner.chained)
@@ -1014,28 +1017,28 @@ def cross_vendor_worker_run(owner: PythonObject, mut io_error: ByteCheckpointIOE
             if command == "step":
                 step_started = transport_clock()
                 var step = Int(py=head["step"])
-                if Int(py=_cross_vendor_trainer(tr, "step", empty_args)) != step:
+                if Int(py=_cross_vendor_trainer(tr, PARALLEL_BYTE_OPN_STEP, empty_args)) != step:
                     raise Error("CrossVendorMismatch: worker completed step differs from coordinator")
                 if Bool(py=py_get(head, "chained", PythonObject(False))) != chained:
                     raise Error("CrossVendorMismatch: coordinator and worker disagree on the protocol")
                 if owner.lr_for_step is not None:
                     var lr = cross_vendor_rate(owner.lr_for_step, step)
-                    _ = _cross_vendor_trainer(tr, "set_lr", _cross_vendor_one(lr))
+                    _ = _cross_vendor_trainer(tr, PARALLEL_BYTE_OPN_SET_LR, _cross_vendor_one(lr))
                 var losses = bi.list()
                 var parts = bi.list()
-                var device_fold = chained and Bool(py=_cross_vendor_trainer(tr, "has_device_fold", empty_args))
+                var device_fold = chained and Bool(py=_cross_vendor_trainer(tr, PARALLEL_BYTE_OPN_HAS_DEVICE_FOLD, empty_args))
                 if device_fold and Bool(py=py_get(head, "first", PythonObject(False))):
-                    _ = _cross_vendor_trainer(tr, "fold_reset", _cross_vendor_one(PythonObject(None)))
+                    _ = _cross_vendor_trainer(tr, PARALLEL_BYTE_OPN_FOLD_RESET, _cross_vendor_one(PythonObject(None)))
                     for k in range(len(owner.shards)):  # driver-loop: over this worker's immutable logical shards
                         var batch = _cross_vendor_batch(owner, step, owner.shards[k])
-                        _ = py_call(losses.append, _cross_vendor_trainer(tr, "shard_gradient_fold", _cross_vendor_one(batch)))
+                        _ = py_call(losses.append, _cross_vendor_trainer(tr, PARALLEL_BYTE_OPN_SHARD_GRADIENT_FOLD, _cross_vendor_one(batch)))
                     held = Optional[PythonObject](bi.list())
                     total = Optional[PythonObject](PythonObject(None))
                     on_device = True
                 else:
                     for k in range(len(owner.shards)):  # driver-loop: over this worker's immutable logical shards
                         var batch = _cross_vendor_batch(owner, step, owner.shards[k])
-                        var result = _cross_vendor_trainer(tr, "shard_gradient", _cross_vendor_one(batch))
+                        var result = _cross_vendor_trainer(tr, PARALLEL_BYTE_OPN_SHARD_GRADIENT, _cross_vendor_one(batch))
                         _ = py_call(losses.append, result[0])
                         # pass 3 (N111): the shard's float32[n_total] Array is
                         # held as is (fold_add and ordered_fold read it in
@@ -1061,12 +1064,12 @@ def cross_vendor_worker_run(owner: PythonObject, mut io_error: ByteCheckpointIOE
                 if not chained or (len(held.value()) == 0 and not on_device):
                     raise Error("CrossVendorMismatch: worker was asked to fold with nothing held")
                 if on_device:
-                    total = Optional[PythonObject](_cross_vendor_trainer(tr, "fold_export", _cross_vendor_one(PythonObject(None))))
-                elif Bool(py=_cross_vendor_trainer(tr, "has_device_fold", empty_args)):
-                    _ = _cross_vendor_trainer(tr, "fold_reset", _cross_vendor_one(payload if len(payload) != 0 else PythonObject(None)))
+                    total = Optional[PythonObject](_cross_vendor_trainer(tr, PARALLEL_BYTE_OPN_FOLD_EXPORT, _cross_vendor_one(PythonObject(None))))
+                elif Bool(py=_cross_vendor_trainer(tr, PARALLEL_BYTE_OPN_HAS_DEVICE_FOLD, empty_args)):
+                    _ = _cross_vendor_trainer(tr, PARALLEL_BYTE_OPN_FOLD_RESET, _cross_vendor_one(payload if len(payload) != 0 else PythonObject(None)))
                     for k in range(len(held.value())):  # driver-loop: over held logical gradients continuing the prefix
-                        _ = _cross_vendor_trainer(tr, "fold_add", _cross_vendor_one(held.value()[k]))
-                    total = Optional[PythonObject](_cross_vendor_trainer(tr, "fold_export", _cross_vendor_one(PythonObject(None))))
+                        _ = _cross_vendor_trainer(tr, PARALLEL_BYTE_OPN_FOLD_ADD, _cross_vendor_one(held.value()[k]))
+                    total = Optional[PythonObject](_cross_vendor_trainer(tr, PARALLEL_BYTE_OPN_FOLD_EXPORT, _cross_vendor_one(PythonObject(None))))
                 else:
                     total = Optional[PythonObject](cross_vendor_fold(held.value(), payload if len(payload) != 0 else PythonObject(None)))
                 held = Optional[PythonObject](bi.list())
@@ -1085,15 +1088,15 @@ def cross_vendor_worker_run(owner: PythonObject, mut io_error: ByteCheckpointIOE
                 # pass 3 (N111): the received float32 bytes go to the trainer
                 # as is; it reads them in place (no array('f') copy here, no
                 # host copy or host scan in the binding).
-                _ = _cross_vendor_trainer(tr, "apply_gradient", _cross_vendor_one(total.value()))
+                _ = _cross_vendor_trainer(tr, PARALLEL_BYTE_OPN_APPLY_GRADIENT, _cross_vendor_one(total.value()))
                 var applied = total.value()
                 total = Optional[PythonObject](PythonObject(None))
                 committed += 1
-                var done = _cross_vendor_trainer(tr, "step", empty_args)
+                var done = _cross_vendor_trainer(tr, PARALLEL_BYTE_OPN_STEP, empty_args)
                 # pass 3 (N110): the witness export is written into the same
                 # four buffers every step (export_raw into=), not four new
                 # arrays; the digest below still covers every state byte.
-                var snapshot = _cross_vendor_trainer(tr, "export_raw", _cross_vendor_one(state))
+                var snapshot = _cross_vendor_trainer(tr, PARALLEL_BYTE_OPN_EXPORT_RAW, _cross_vendor_one(state))
                 var digest = cross_vendor_state_hash(snapshot)
                 var row = bi.dict()
                 py_setitem(row, "step", done)
