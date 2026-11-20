@@ -83,24 +83,24 @@ def _causal_native_plain(mut mods: NativeModules, value: PythonObject, context: 
 
 
 def _causal_buffer(value: PythonObject, context: PythonObject) raises -> PythonObject:
-    var nk = causal_keys()
     if value is None:
         return value
+    var nk = causal_keys()
     if py_type(value) is py_item(context, nk[].k_array_class):
         return generation_array_snapshot(value)
     return generation_buffer_view(value)
 
 
 def causal_model_origin(mut mods: NativeModules, model: PythonObject) raises -> PythonObject:
-    var nk = causal_keys()
     if py_type(model) is mods.module("types").SimpleNamespace:
+        var nk = causal_keys()
         return py_get(causal_snapshot_fields(mods, model), nk[].k__causal_original, model)
     return model
 
 
 def causal_state_origin(mut mods: NativeModules, state: PythonObject) raises -> PythonObject:
-    var nk = causal_keys()
     if py_type(state) is mods.module("types").SimpleNamespace:
+        var nk = causal_keys()
         return py_get(causal_snapshot_fields(mods, state), nk[].k__causal_original, state)
     return state
 
@@ -167,14 +167,13 @@ def causal_entry_is_plain(name: String) -> Bool:
 
 
 def causal_pin_entries(mut mods: NativeModules, fields: PythonObject, entries: PythonObject) raises:
-    var nk = causal_keys()
     neural_string_keys(mods, fields)
     neural_string_keys(mods, entries)
+    var nk = causal_keys()
     py_setitem(fields, nk[].k__causal_entries_owner, PythonObject(alloc=CausalExecutionEntries(mods, entries)))
 
 
 def _causal_entries(mut mods: NativeModules, entries: PythonObject, pinned: PythonObject, context: PythonObject) raises -> PythonObject:
-    var nk = causal_keys()
     neural_string_keys(mods, entries)
     var bi = mods.module("builtins")
     var types = mods.module("types")
@@ -184,6 +183,7 @@ def _causal_entries(mut mods: NativeModules, entries: PythonObject, pinned: Pyth
         original = py_present(pinned.downcast_value_ptr[CausalExecutionEntries]()[].entries)
         if len(original.value()) != len(entries):
             raise Error("TypeError: CausalLM native execution registry changed after admission")
+    var nk = causal_keys()
     elif py_get(entries, nk[].k_parallel_call) is not None:
         ref cpy = Python().cpython()
         var runtime = py_item(context, nk[].k_runtime)
@@ -225,8 +225,8 @@ def _causal_entries(mut mods: NativeModules, entries: PythonObject, pinned: Pyth
 
 
 def _causal_model_capture_full(mut mods: NativeModules, model: PythonObject, context: PythonObject) raises -> PythonObject:
-    var nk = causal_keys()
     var names = _causal_model_names()
+    var nk = causal_keys()
     var live = model_record_fields(mods, model, py_item(context, nk[].k_model_class), names)
     var bi = mods.module("builtins")
     var fields = Python.dict()
@@ -313,7 +313,6 @@ def _causal_model_names() raises -> PythonObject:
 
 
 def _causal_model_key(mut mods: NativeModules, model: PythonObject, live: PythonObject, context: PythonObject) raises -> PythonObject:
-    var nk = causal_keys()
     # Everything the full capture reads: the model's class and stored
     # fields (weights, plan, entries, block list) and each block's class and
     # stored fields. Runtime-owned words are excluded (read live per call).
@@ -322,6 +321,7 @@ def _causal_model_key(mut mods: NativeModules, model: PythonObject, live: Python
     key.add(py_type(model))
     key.add_identity(context)
     key.fields(live, _causal_model_runtime_names())
+    var nk = causal_keys()
     var blocks = py_get(live, nk[].k__blocks)
     if blocks is None or (py_type(blocks) is not bi.list and py_type(blocks) is not bi.tuple):
         return PythonObject(None)
@@ -336,7 +336,6 @@ def _causal_model_key(mut mods: NativeModules, model: PythonObject, live: Python
 
 
 def _causal_model_matches(mut mods: NativeModules, saved: PythonObject, model: PythonObject, live: PythonObject, context: PythonObject) raises -> Bool:
-    var nk = causal_keys()
     # Walk live storage against retained native identities. No Python key
     # list, dictionary items list, or integer object is built on a cache hit.
     var key = saved.downcast_value_ptr[NativeIdentityKey]()
@@ -346,6 +345,7 @@ def _causal_model_matches(mut mods: NativeModules, saved: PythonObject, model: P
     if not key[].matches_fields(live, _causal_model_runtime_names(), offset):
         return False
     var bi = mods.module("builtins")
+    var nk = causal_keys()
     var blocks = py_get(live, nk[].k__blocks)
     if blocks is None or (py_type(blocks) is not bi.list and py_type(blocks) is not bi.tuple):
         return False
@@ -358,16 +358,15 @@ def _causal_model_matches(mut mods: NativeModules, saved: PythonObject, model: P
 
 
 def _causal_view_retained(mut mods: NativeModules, view: PythonObject, original: PythonObject, context: PythonObject) raises -> Bool:
-    var nk = causal_keys()
     # True when `view` is a passive view of the Array `original` (same
     # storage), never a converted copy or a foreign exporter.
     if view is None or original is None:
         return view is None and original is None
+    var nk = causal_keys()
     return py_type(original) is py_item(context, nk[].k_array_class) and view._base is original
 
 
 def _causal_block_retained(mut mods: NativeModules, snap: PythonObject, live: PythonObject, context: PythonObject) raises -> Bool:
-    var nk = causal_keys()
     for name in [String("_w"), String("_wopt")]:  # small-loop(weight slot lists)
         if py_contains(snap, name):
             var views = snap[name]
@@ -377,6 +376,7 @@ def _causal_block_retained(mut mods: NativeModules, snap: PythonObject, live: Py
             for i in range(len(views)):  # driver-loop: over the block's weight slots, identity only
                 if not _causal_view_retained(mods, views[i], originals[i], context):
                     return False
+    var nk = causal_keys()
     var packed = py_get(live, nk[].k__int15)
     if packed is not None:
         var planes = py_item(snap, nk[].k__int15)
@@ -410,12 +410,12 @@ def _causal_runtime_word(mut mods: NativeModules, fields: PythonObject, live: Py
 
 
 def _causal_block_class_record(mut mods: NativeModules, cls: PythonObject) raises -> PythonObject:
-    var nk = causal_keys()
     # Identity record of one admitted block class: the class, its MRO tuple
     # and, per ancestor, the live namespace proxy with its key and value
     # identities in insertion order. Taken right after a full capture admitted
     # the class (string keys, no field descriptors, connected ancestry).
     var bi = mods.module("builtins")
+    var nk = causal_keys()
     var mro = py_call(py_item(bi.type.__dict__, nk[].k___mro__).__get__, cls)
     var get_namespace = py_item(bi.type.__dict__, nk[].k___dict__).__get__
     var rows = Python.list()
@@ -426,7 +426,6 @@ def _causal_block_class_record(mut mods: NativeModules, cls: PythonObject) raise
 
 
 def _causal_block_class_unchanged(mut mods: NativeModules, record: PythonObject, cls: PythonObject) raises -> Bool:
-    var nk = causal_keys()
     # True when the class, its metaclass, its MRO and every ancestor namespace
     # (same keys in the same order, same values) are exactly as admitted. Live
     # keys are compared by identity before any keyed lookup, so no foreign key
@@ -434,6 +433,7 @@ def _causal_block_class_unchanged(mut mods: NativeModules, record: PythonObject,
     var bi = mods.module("builtins")
     if record[0] is not cls or py_type(cls) is not record[2]:
         return False
+    var nk = causal_keys()
     if py_call(py_item(bi.type.__dict__, nk[].k___mro__).__get__, cls) is not record[1]:
         return False
     ref cpy = Python().cpython()
@@ -491,7 +491,6 @@ def _causal_block_class_admitted(mut mods: NativeModules, classes: PythonObject,
 
 
 def causal_model_capture(mut mods: NativeModules, model: PythonObject, context: PythonObject) raises -> PythonObject:
-    var nk = causal_keys()
     # Prepared model capture: the full capture (_causal_model_capture_full:
     # every block snapshot, head buffers, plan, entries) runs on first use and
     # whenever anything it read changed; otherwise its result is reused and
@@ -499,6 +498,7 @@ def causal_model_capture(mut mods: NativeModules, model: PythonObject, context: 
     # admission runs first on every call, so a refusal keeps its type,
     # message and position.
     var bi = mods.module("builtins")
+    var nk = causal_keys()
     var live = model_record_fields(mods, model, py_item(context, nk[].k_model_class), _causal_model_names())
     var record = prepared_get(mods, _CAUSAL_MODEL_SLOT, model)
     var matches = False
@@ -632,10 +632,10 @@ def causal_model_capture(mut mods: NativeModules, model: PythonObject, context: 
 
 
 def causal_model_publish(mut mods: NativeModules, model: PythonObject) raises:
-    var nk = causal_keys()
     if model is None or py_type(model) is not mods.module("types").SimpleNamespace:
         return
     var fields = causal_snapshot_fields(mods, model)
+    var nk = causal_keys()
     var live = py_get(fields, nk[].k__causal_live_fields)
     if live is None:
         return
@@ -667,7 +667,6 @@ def _causal_prepared_views(mut mods: NativeModules, record: PythonObject, buffer
     stamp covers every buffer in this state. Check original identities before
     taking views, so replacement triggers a fresh combined stamp rather than
     nine repeated class-namespace scans."""
-    var nk = causal_keys()
     if record is None or len(record) != 2:
         return PythonObject(None)
     var matched = False
@@ -680,6 +679,7 @@ def _causal_prepared_views(mut mods: NativeModules, record: PythonObject, buffer
     var prepared = record[0]
     if prepared is None:
         return prepared
+    var nk = causal_keys()
     for i in range(len(buffers)):  # driver-loop: over current state buffer identities
         var value = py_get(fields, buffers[i])
         var hit = py_get(prepared, buffers[i])
@@ -692,7 +692,6 @@ def _causal_prepared_views(mut mods: NativeModules, record: PythonObject, buffer
 
 
 def causal_layer_capture(mut mods: NativeModules, state: PythonObject, kind: PythonObject, context: PythonObject) raises -> PythonObject:
-    var nk = causal_keys()
     var names = CAUSAL_FIELD_NAMES.get_or_create_ptr()
     if names[].layer_scalars is None:
         var scalars = Python.tuple("batch_size", "n_kv_heads", "head_dim", "max_tokens", "window", "cached_tokens",
@@ -703,6 +702,7 @@ def causal_layer_capture(mut mods: NativeModules, state: PythonObject, kind: Pyt
         names[].layer_scalars = scalars
     var scalar_names = names[].layer_scalars
     var buffers = names[].layer_buffers
+    var nk = causal_keys()
     # Admit the union once: repeating the same class/namespace walk for
     # scalar, buffer and session groups adds no protection between reads.
     var live = model_record_fields(mods, state, py_item(context, nk[].k_generation_classes)[2][kind], names[].layer_all)
@@ -781,9 +781,9 @@ def causal_layer_capture(mut mods: NativeModules, state: PythonObject, kind: Pyt
 
 
 def causal_state_capture(mut mods: NativeModules, state: PythonObject, model: PythonObject, context: PythonObject) raises -> PythonObject:
-    var nk = causal_keys()
     if state is None:
         return state
+    var nk = causal_keys()
     var live = model_record_fields(mods, state, py_item(context, nk[].k_generation_classes)[1],
         Python.tuple("batch_size", "max_tokens", "positions", "layers", "_owner", "_usable"))
     var bi = mods.module("builtins")
@@ -837,10 +837,10 @@ def causal_state_capture(mut mods: NativeModules, state: PythonObject, model: Py
 
 
 def causal_layer_publish(mut mods: NativeModules, value: PythonObject) raises:
-    var nk = causal_keys()
     if py_type(value) is not mods.module("types").SimpleNamespace:
         return
     var layer = causal_snapshot_fields(mods, value)
+    var nk = causal_keys()
     var target = py_item(layer, nk[].k__causal_live_fields)
     if target is None:
         return
@@ -855,10 +855,10 @@ def causal_layer_publish(mut mods: NativeModules, value: PythonObject) raises:
 
 
 def causal_state_publish(mut mods: NativeModules, state: PythonObject) raises:
-    var nk = causal_keys()
     if state is None or py_type(state) is not mods.module("types").SimpleNamespace:
         return
     var fields = causal_snapshot_fields(mods, state)
+    var nk = causal_keys()
     var live = py_item(fields, nk[].k__causal_live_fields)
     neural_string_keys(mods, live)
     for name in ["positions", "_usable"]:  # small-loop(success/failure publication)
@@ -885,10 +885,10 @@ def causal_state_publish(mut mods: NativeModules, state: PythonObject) raises:
 
 
 def causal_model_cache_set(mut mods: NativeModules, model: PythonObject, fields: PythonObject, name: String, value: PythonObject) raises:
-    var nk = causal_keys()
     # Busy and close/install transitions must be visible before GIL release,
     # just as they were when execution mutated the public dictionary directly.
     py_setitem(fields, name, value)
+    var nk = causal_keys()
     var live = py_get(fields, nk[].k__causal_live_fields)
     if live is not None:
         neural_string_keys(mods, live)
@@ -896,8 +896,8 @@ def causal_model_cache_set(mut mods: NativeModules, model: PythonObject, fields:
 
 
 def causal_block_cache_set(mut mods: NativeModules, fields: PythonObject, name: String, value: PythonObject) raises:
-    var nk = causal_keys()
     py_setitem(fields, name, value)
+    var nk = causal_keys()
     var live = py_get(fields, nk[].k__neural_live_fields)
     if live is not None:
         neural_string_keys(mods, live)
@@ -905,11 +905,11 @@ def causal_block_cache_set(mut mods: NativeModules, fields: PythonObject, name: 
 
 
 def causal_checkpoint_capture(mut mods: NativeModules, checkpoint: PythonObject, context: PythonObject) raises -> PythonObject:
-    var nk = causal_keys()
     neural_string_keys(mods, checkpoint)
     var bi = mods.module("builtins")
     var result = Python.dict()
     var keys = py_call(bi.list, checkpoint.keys())
+    var nk = causal_keys()
     for i in range(len(keys)):  # driver-loop: over capture public checkpoint fields before checksum or restoration
         var name = String(keys[i])
         var value = checkpoint[keys[i]]
