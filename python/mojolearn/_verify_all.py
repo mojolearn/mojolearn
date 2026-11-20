@@ -62,6 +62,10 @@ import time
 import traceback
 
 from . import _verify_reference as vref
+# The GPU side, the CPU side, their records and their comparison: the one
+# module the cross-check below and the check of a user's own estimator
+# (`verify --check`, _verify_check.py) both run.
+from . import _check_both as cb
 
 EXIT_VERIFIED = 0
 EXIT_MISMATCH = 1
@@ -1186,8 +1190,9 @@ def cross_check_lanes(harness, scope="default"):
     return chosen, every, dict(per_family)
 
 
-def _cross_check_result(vendor, lanes, fixtures, rows, skipped):
-    """A requested cell that never ran must prevent a successful exit."""
+def _cross_check_result(vendor, lanes, fixtures, rows, skipped, sides=None):
+    """A requested cell that never ran must prevent a successful exit.
+    `sides` is what answered on each side (`_check_both.side_environment`)."""
     expected = {(lane, fx, part) for lane in lanes for fx in fixtures
                 for part in ("infer", "batch")}
     seen = {(r['lane'], r['fixture'], r['part']) for r in rows}
@@ -1200,13 +1205,14 @@ def _cross_check_result(vendor, lanes, fixtures, rows, skipped):
                 requested_lanes=list(lanes), requested_fixtures=list(fixtures),
                 compared=len(rows), agree=agree, differ=differ,
                 skipped=skipped, missing=missing, complete=complete, cells=rows,
-                passed=(differ == 0 and complete) if rows else None)
+                passed=(differ == 0 and complete) if rows else None,
+                **({'sides': sides} if sides else {}))
 
 
 def _cross_check_batched(lanes, fixtures, cpu_threads, log):
     """Run the complete selection serially; retain failures and continue."""
     import mojolearn as ml
-    rows, skipped, jobs = [], {}, []
+    rows, skipped, jobs, sides = [], {}, [], None
     for fixture in fixtures:
         for start in range(0, len(lanes), CROSS_CHECK_BATCH_LANES):
             selected = lanes[start:start + CROSS_CHECK_BATCH_LANES]
@@ -1228,6 +1234,9 @@ def _cross_check_batched(lanes, fixtures, cpu_threads, log):
                     raise ValueError('child produced no cross-check report')
                 rows.extend(doc['cells'])
                 skipped.update(doc['skipped'])
+                # every batch is this machine and this install: the first
+                # batch's two sides describe them all
+                sides = sides or doc.get('sides')
                 if proc.returncode not in (EXIT_VERIFIED, EXIT_MISMATCH, EXIT_CANNOT_RUN):
                     raise ValueError(f'child exited {proc.returncode}')
                 if proc.returncode and doc.get('passed'):
@@ -1235,7 +1244,7 @@ def _cross_check_batched(lanes, fixtures, cpu_threads, log):
             except (ValueError, KeyError, TypeError) as exc:
                 for lane in selected:
                     skipped[f'{lane}/{fixture}'] = f'cross-check process failed (exit {proc.returncode}): {exc}'
-    result = _cross_check_result(ml.vendor(), lanes, fixtures, rows, skipped)
+    result = _cross_check_result(ml.vendor(), lanes, fixtures, rows, skipped, sides)
     result['batches'] = jobs
     if any(job['exit'] != EXIT_VERIFIED for job in jobs):
         result['complete'] = False
@@ -1317,8 +1326,11 @@ def cross_check(harness, ml, lanes, fixtures, log=None):
                 continue
             save, _load, suffix = sl
             try:
+                # Each answer is one `cb.run_side` and each pair one
+                # `cb.compare`: the same calls `verify --check` makes for a
+                # user's estimator. The digest stays the harness's `_h`.
                 gpu_est = harness._public_est(lane, fit.est)
-                pair = {"infer": [harness._h(*fit.probe(gpu_est)), None]}
+                pair = {"infer": [cb.run_side("gpu", lambda: fit.probe(gpu_est), digest=harness._h), None]}
                 # THE BATCH PART TOO, where the lane has one. Batch invariance is
                 # a DIFFERENT AXIS from cross-vendor identity: cross-vendor asks
                 # "same input, different hardware, same bits", batch invariance
@@ -1328,42 +1340,56 @@ def cross_check(harness, ml, lanes, fixtures, log=None):
                 # place they can test both at once on their own machine. A lane
                 # that declares `n/a` for batch keeps its n/a; inventing a
                 # comparison there would be a check that cannot fail.
-                gb, gerr = harness._probe_batch(fit, lane, ml, held.copy(), harness.BATCH_ALONE, False)
-                if gerr is None and isinstance(gb, str) and not gb.startswith("n/a"):
-                    pair["batch"] = [gb, None]
-                elif gerr is None and isinstance(gb, str) and gb.startswith("n/a"):
-                    pair["batch"] = [gb, gb]        # declared absent on both sides
+                def gpu_batch():
+                    gb, gerr = harness._probe_batch(fit, lane, ml, held.copy(), harness.BATCH_ALONE, False)
+                    if gerr is not None or not isinstance(gb, str):
+                        raise RuntimeError(f'GPU batch check failed: {gerr or gb}')
+                    return gb
+                batch = cb.run_side("gpu", gpu_batch)
+                if batch[0]["digest"].startswith("n/a"):
+                    pair["batch"] = batch[0]["digest"]      # declared absent on both sides
                 else:
-                    raise RuntimeError(f'GPU batch check failed: {gerr or gb}')
+                    pair["batch"] = [batch, None]
                 with tempfile.TemporaryDirectory(prefix="mojolearn_cross_") as tmp:
-                    path = os.path.join(tmp, f"{lane}{suffix}")
-                    getattr(fit.est, save)(path)
-                    host = ml.host_model(path)
+                    host, _path = cb.to_cpu(ml, fit.est, tmp, name=lane, form=(save, suffix))
                     # This is fixture input, not learned state. The batch
                     # probe needs the same held-out affinity on both devices.
                     if lane == 'spectral-precomputed':
                         host._identity_heldout_affinity = fit.est._identity_heldout_affinity
                     if type(host).__name__ in ("HostGBDT", "HostForest"):
                         _require_forest_host_binding(ml.runtime_report())
-                    pair["infer"][1] = harness._h(*fit.probe(host))
-                    if "batch" in pair and pair["batch"][1] is None:
+                    pair["infer"][1] = cb.run_side("cpu", lambda: fit.probe(host), digest=harness._h)
+                    if isinstance(pair.get("batch"), list):
                         hfit = harness.Fit({})
                         hfit.est = host
                         hfit.probe = fit.probe
-                        hb, herr = harness._probe_batch(hfit, lane, ml, held.copy(),
-                                                        harness.BATCH_ALONE, False)
-                        pair["batch"][1] = hb if herr is None else f"raised: {herr}"[:120]
+
+                        def cpu_batch():
+                            hb, herr = harness._probe_batch(hfit, lane, ml, held.copy(),
+                                                            harness.BATCH_ALONE, False)
+                            return hb if herr is None and isinstance(hb, str) else f"raised: {herr or hb}"[:120]
+                        pair["batch"][1] = cb.run_side("cpu", cpu_batch)
             except Exception as exc:
                 skipped[f'{lane}/{fx}'] = f"{type(exc).__name__}: {exc}"[:200]
                 continue
             secs = round(time.time() - t0, 3)
             verdicts = []
-            for part, (g, c) in sorted(pair.items()):
-                na = isinstance(g, str) and g.startswith("n/a")
-                same = (g == c)
-                rows.append(dict(lane=lane, fixture=fx, part=part, gpu=g, cpu=c,
-                                 agree=None if na else same, na=na, seconds=secs))
-                verdicts.append(f"{part}={'n/a' if na else ('agree' if same else 'DIFFER')}")
+            for part, both in sorted(pair.items()):
+                if isinstance(both, str):
+                    rows.append(dict(lane=lane, fixture=fx, part=part, gpu=both, cpu=both,
+                                     agree=None, na=True, seconds=secs))
+                    verdicts.append(f"{part}=n/a")
+                    continue
+                (g, g_arrays), (c, c_arrays) = both
+                judged = cb.compare(g, c, g_arrays, c_arrays)
+                row = dict(lane=lane, fixture=fx, part=part, gpu=g["digest"], cpu=c["digest"],
+                           agree=judged["match"], na=False, seconds=secs,
+                           sides=dict(gpu=dict(wall_s=g["wall_s"], outputs=g["outputs"]),
+                                      cpu=dict(wall_s=c["wall_s"], outputs=c["outputs"])))
+                if not judged["match"]:
+                    row["first"] = judged["first"]
+                rows.append(row)
+                verdicts.append(f"{part}={'agree' if judged['match'] else 'DIFFER'}")
             # streamed per lane: it shows the run is alive, and it is itself
             # evidence that work happened. A verification that returns instantly
             # invites the suspicion this whole command exists to remove.
@@ -1373,7 +1399,11 @@ def cross_check(harness, ml, lanes, fixtures, log=None):
     # compared, so nothing differed and nothing agreed. Reporting a result
     # about hashes that were never computed is the same defect as VERIFIED over
     # a refused run (lane/verify-cross-check, 2026-09-16).
-    return _cross_check_result(vendor, lanes, fixtures, rows, skipped)
+    # What answered on each side, read after the cells ran (a binding loads at
+    # its first use), once for the run: the device and the binary set.
+    sides = ({side: cb.side_environment(ml, side, cpu_model=harness.cpu_model) for side in cb.SIDES}
+             if rows else None)
+    return _cross_check_result(vendor, lanes, fixtures, rows, skipped, sides)
 
 
 def format_cross_check(r):
@@ -1393,12 +1423,16 @@ def format_cross_check(r):
         lines.append(f"Scope: {r['scope']}; {len(r['requested_lanes'])} of {r['intersection']} eligible lanes, "
                      f"{len(r['fixtures'])} of {r['available_fixtures']} fixtures.")
         lines.append("")
+    # The two sides and every compared value are printed by the shared check
+    # module, the same lines `verify --check` prints for a user's estimator.
+    if r.get("sides"):
+        lines.extend(cb.sides_lines(r["sides"]))
+        lines.append("")
     for c in r["cells"]:
-        if c.get("na"):
-            lines.append(f"  {c['lane']:<26} {c['fixture']:<8} {c['part']:<6} n/a  {c['gpu']}")
-            continue
-        lines.append(f"  {c['lane']:<26} {c['fixture']:<8} {c['part']:<6} "
-                     f"gpu={c['gpu']}  cpu={c['cpu']}  {'agree' if c['agree'] else 'DIFFER'}")
+        lines.append(cb.pair_line(f"{c['lane']:<26} {c['fixture']:<8} {c['part']:<6}",
+                                  c['gpu'], c.get('cpu'), c.get('agree'), na=c.get("na")))
+        if c.get('agree') is False and c.get('first'):
+            lines.append("      " + cb.verdict_line(dict(match=False, first=c['first'])))
     lines.append("")
     if r["skipped"]:
         lines.append(f"Not compared ({len(r['skipped'])}):")
