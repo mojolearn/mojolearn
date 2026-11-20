@@ -344,7 +344,10 @@ class Provenance(Install):
         from unittest.mock import patch
         gp = self.B.gpu_plugins
         # while the registry ships the slot (ptx_shipped; off since 2026-10-12, PyPI's 100 MiB limit)
-        self.enterContext(patch.dict(gp.PLUGINS["cuda"], {"ptx_shipped": True}))
+        # TestCase.enterContext is 3.11+; start/addCleanup works on 3.10 too.
+        shipped = patch.dict(gp.PLUGINS["cuda"], {"ptx_shipped": True})
+        shipped.start()
+        self.addCleanup(shipped.stop)
         doc = gp.plugin_marker("cuda", self.version, self.arches, bundled_ptx=dict(manifest_sha256=self.manifest_hash))
         del doc["bundled_ptx"]
         self.marker_path().write_text(json.dumps(doc))
