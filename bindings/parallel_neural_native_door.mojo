@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Native owner and local workers for existing parallel MLP/Samba training."""
 from std.python import Python, PythonObject
+from core.mode_answer import MODE_FAMILY_NEURAL, word_runs_identical
 from core.parallel_neural_native_impl import samba_ids_into
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
@@ -135,12 +136,14 @@ def _neural_init(owner: PythonObject, model: PythonObject, devices: PythonObject
         var optimizer = py_call(b[].bi.object.__getattribute__, py_item(fields, nk[].k_optimizer), "__dict__")
         if Int(py=py_item(optimizer, nk[].k_accumulation_steps)) != 1:
             raise Error("parallel Samba requires accumulation_steps=1; logical_shards owns accumulation")
-        if py_item(fields, nk[].k_numeric_mode) is not None and String(py_item(fields, nk[].k_numeric_mode)) != "identical":
+        # lane fx-fast-mask: `fast` that the identical set answers (NEURAL)
+        # trains the identical stack, as the stack's own fit does.
+        if py_item(fields, nk[].k_numeric_mode) is not None and not word_runs_identical(String(py_item(fields, nk[].k_numeric_mode)), MODE_FAMILY_NEURAL):
             raise Error("parallel training requires identical numeric mode")
         var values = _neural_values(model)
         _ = py_call(values.append, True)
         var snapshot = _neural_samba("snapshot", values)
-        if String(py_item(snapshot, nk[].k_numeric_mode)) != "identical":
+        if not word_runs_identical(String(py_item(snapshot, nk[].k_numeric_mode)), MODE_FAMILY_NEURAL):
             raise Error("parallel training requires an identical model")
     else:
         raise Error("TypeError: ParallelNeuralTrainer supports SmallMLPTrainer and SambaStack")

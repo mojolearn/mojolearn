@@ -30,6 +30,7 @@ from bindings.optimizer_owner_boundary_pack import optimizer_owner_new
 from bindings.samba_optimizer_boundary_unpack import samba_optimizer_transfer
 # RUN (lane rs-neural): typed pieces, no Python import.
 from training.samba_state_run import samba_optimizer_device_plan
+from core.mode_answer import MODE_FAMILY_NEURAL, answer_mode_word
 from bindings.samba_keys_unpack import samba_keys
 from bindings.py_balanced import py_item
 
@@ -48,7 +49,11 @@ def samba_entry_key(context: PythonObject, mode: PythonObject) raises -> SambaEn
     var word = samba_vendor_word(vendor)
     if word < 0:
         raise Error("Samba: unsupported native vendor " + vendor)
-    return SambaEntryKey(1 if String(selected) == "identical" else 0, word)
+    # lane fx-fast-mask: `fast` answered by the identical set (NEURAL) keys
+    # the identical table, as the stack's own fit runs it.
+    var text = String(selected)
+    answer_mode_word(text, MODE_FAMILY_NEURAL)
+    return SambaEntryKey(1 if text == "identical" else 0, word)
 
 
 def samba_primitive(entry: EntryRef, op: Int, addresses: List[Int], ints: List[Int],
@@ -67,9 +72,15 @@ def samba_entries(context: PythonObject, mode: PythonObject) raises -> PythonObj
     var nk = samba_keys()
     var entries = py_item(context, nk[].k_entries)
     var selected = py_item(context, nk[].k_mode) if mode is None else mode
-    if Bool(py=selected != py_item(context, nk[].k_mode)):
+    # lane fx-fast-mask: the stack's word is answered (NEURAL) before it is
+    # compared with the connected mode, so an answered `fast` stack runs the
+    # connected identical binding. One String compare replaces the Python
+    # rich compare the old line made.
+    var text = String(selected)
+    answer_mode_word(text, MODE_FAMILY_NEURAL)
+    if text != String(py_item(context, nk[].k_mode)):
         raise Error("Samba: requested numeric mode differs from the connected native mode")
-    var want = 1 if String(selected) == "identical" else 0
+    var want = 1 if text == "identical" else 0
     # The binding's numeric mode and vendor words are fixed per compiled
     # module: read them once per binding (bindings/p3_samba_caps.mojo), not
     # with two binding crossings on every operation.

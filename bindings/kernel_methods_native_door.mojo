@@ -1186,7 +1186,7 @@ def _km_par_admit(model: PythonObject, context: PythonObject) raises -> Bool:
     var ridge = cls is classes[0]
     if not ridge and cls is not classes[1]:
         raise Error("TypeError: requires mojolearn.KernelRidge or Nystroem")
-    plan_require_identical(model, "parallel kernel methods require IDENTICAL numeric mode")
+    plan_require_identical(model, "parallel kernel methods require IDENTICAL numeric mode", MODE_FAMILY_KERNEL)
     var kernel = plan_field(model, "kernel")
     if py_type(kernel) is py_type(PythonObject("")) and String(kernel) == "laplacian":
         raise Error("ValueError: parallel kernel methods refuse kernel='laplacian' by name: its L1 "

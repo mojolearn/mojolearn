@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Native standalone block construction, state allocation and sequence execution."""
-from core.mode_answer import MODE_FAMILY_NEURAL, answer_mode_word
+from core.mode_answer import MODE_FAMILY_NEURAL, answer_mode_word, word_runs_identical
+from bindings.mode_answer_door import answer_mode_object
 from bindings.native_class_admission_door import class_record, class_admit
 from std.python import Python, PythonObject
 from core.neural_block_public_impl import neural_copy_row_prefixes
@@ -282,6 +283,10 @@ def _neural_owner_key(mut mods: NativeModules, block: PythonObject, live: Python
                 return PythonObject(None)
         else:
             mode_name = mode.strip().lower()
+            # lane fx-fast-mask: the record's binding key names the set that
+            # runs (NEURAL answer); built once per owner record, not per call.
+            var mode_word = String(py=mode_name)
+            answer_mode_object(mode_name, mode_word, MODE_FAMILY_NEURAL)
     var table = context["bindings"]
     if py_type(table) is not bi.dict:
         return PythonObject(None)
@@ -1087,7 +1092,7 @@ def neural_training_selection(mut mods: NativeModules, fields: PythonObject, con
             # An entries object without weak references keeps the per-call
             # queries; the verdict is never cached for it.
             pass
-    if code != (1 if String(mode) == "identical" else 0):
+    if code != (1 if mode_text == "identical" else 0):  # lane fx-fast-mask: the answered word (it read the raw one)
         raise Error("RuntimeError: native training binding numeric mode differs from the block")
     var entry_key = NeuralEntryKey(code, neural_entry_vendor(vendor))
     if String(fields["_native_route"]) == "cpu":
@@ -1509,7 +1514,7 @@ def neural_block_getstate_binding(mut mods: NativeModules, block: PythonObject, 
     if _native_has_entry(mods, entries, "transformer_numeric_mode"):
         var code = Int(py=_native_function(mods, entries, "transformer_numeric_mode")())
         mods.released()
-        if code != (1 if String(mode) == "identical" else 0):
+        if code != (1 if word_runs_identical(String(mode), MODE_FAMILY_NEURAL) else 0):  # lane fx-fast-mask
             raise Error("RuntimeError: transformer serialized model numeric mode differs from binding")
     if _native_has_entry(mods, entries, "transformer_arithmetic_profile"):
         var profile = _native_function(mods, entries, "transformer_arithmetic_profile")()
@@ -1545,14 +1550,15 @@ def neural_block_setstate_binding(mut mods: NativeModules, block: PythonObject, 
     neural_plain_value(mods, mode, 0, context)
     if mode is None:
         mode = _native_entry_fields(mods, context["backend"])["_DEFAULT_MODE"]
-    if String(mode) == "identical" and NEURAL_NATIVE_DISPATCH:
+    var runs_identical = word_runs_identical(String(mode), MODE_FAMILY_NEURAL)  # lane fx-fast-mask: an answered `fast` restores the identical route
+    if runs_identical and NEURAL_NATIVE_DISPATCH:
         py_setitem(fields, "_runtime_lock", operation_lock_create())
         mods.released()
     else:
         py_setitem(fields, "_runtime_lock", context["rlock"]())
         mods.released()
     var session = PythonObject(None)
-    if String(fields["_native_route"]) == "gpu" and String(mode) == "identical" and NEURAL_NATIVE_DISPATCH:
+    if String(fields["_native_route"]) == "gpu" and runs_identical and NEURAL_NATIVE_DISPATCH:
         # A native registry handle of the block's GPU image (lane
         # transformer-session-native; the former `transformer_session_create`).
         var bindings = _model_bindings(mods, fields["_native_route"], "transformer", context, mode)

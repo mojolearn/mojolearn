@@ -127,8 +127,23 @@ comptime MODE_FAMILIES_ALL = (1 << 28) - 1
 #   edits; the next built wheel's exact trial with this mask (0xfb87fff)
 #   confirms them, and a family that shows one `mixed` row there is taken
 #   out here (one line).
-# Off: TSA, NEURAL, XCNN, XSEQ, LINALG (doors that still read the raw word;
-# lists in the lanes' RESULT files).
+# - lane fx-fast-mask, 2026-11-20 (the every-family 0xfffffff and exact
+#   0xfb87fff trials on the CPU wheel of e25e35dab8, under
+#   ~/mojolearn-evidence/measure-candidate/build-e25e35dab8/fast-trial/):
+#   every estimator of the 23 families above answered in both. XSEQ
+#   (MLPClassifier, MLPRegressor) answered under the every-family mask and
+#   refused, uniformly, only because its bit was off: on. TSA, NEURAL, XCNN
+#   and LINALG had no trial row; their doors that compared the raw word were
+#   closed in that lane (Cholesky's compiled-mode check and the parallel
+#   drivers' identical-only check, parallel ARIMA and the host forecast
+#   classes, the Samba entry key and admission, the CausalLM/Mamba/Transformer
+#   binding selection, routes, backward and getstate/setstate, parallel
+#   Samba), and the trial gained one recipe row per public form of each
+#   (python/mojolearn/tests/test_fast_selector.py WALK). They are on from
+#   that lane's edits; the next built wheel's trial with this mask confirms
+#   them, and a family that shows one `mixed` row there is taken out here
+#   (TSA 0x8000, NEURAL 0x10000, XCNN 0x20000, XSEQ 0x40000, LINALG 0x400000).
+# Every family is on: the mask is MODE_FAMILIES_ALL (0xfffffff).
 # A family is added only from a trial run with no `mixed` row.
 comptime MODE_FAMILIES_ANSWERED = (
     MODE_FAMILY_FOREST | MODE_FAMILY_IFOREST | MODE_FAMILY_GBDT | MODE_FAMILY_SCALER | MODE_FAMILY_PCA
@@ -136,6 +151,7 @@ comptime MODE_FAMILIES_ANSWERED = (
     | MODE_FAMILY_DECOMP_KIT | MODE_FAMILY_LINEAR | MODE_FAMILY_KERNEL | MODE_FAMILY_NEIGHBORS
     | MODE_FAMILY_RESOLVER | MODE_FAMILY_METADATA | MODE_FAMILY_PROGRAM | MODE_FAMILY_MIXTURE | MODE_FAMILY_PREP
     | MODE_FAMILY_GP | MODE_FAMILY_SPECTRAL | MODE_FAMILY_MSEL | MODE_FAMILY_CLUSTER
+    | MODE_FAMILY_TSA | MODE_FAMILY_NEURAL | MODE_FAMILY_XCNN | MODE_FAMILY_XSEQ | MODE_FAMILY_LINALG
 )
 
 
@@ -177,3 +193,17 @@ def answer_mode_word(mut word: String, family: Int) raises:
     if word == "fast":
         if (MODE_ANSWER.get_or_create_ptr()[].families & family) != 0:
             word = "identical"
+
+
+@always_inline
+def word_runs_identical(word: String, family: Int) raises -> Bool:
+    """Whether an admitted mode word of a door of `family` runs the identical
+    set: `identical`, or `fast` where the identical set answers it for that
+    family (lane fx-fast-mask). For a door whose check or route is "the word
+    is `identical`" and that holds the word as text; an `identical` word pays
+    the one comparison it paid before."""
+    if word == "identical":
+        return True
+    comptime if CompilationTarget.is_macos():
+        return False
+    return word == "fast" and (MODE_ANSWER.get_or_create_ptr()[].families & family) != 0
