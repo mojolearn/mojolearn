@@ -14,7 +14,8 @@ from providers.python.neural_descriptor_pyapi_door import (
 )
 from core.shared_slot import SharedSlot
 from bindings.py_optional import py_or_none, py_present
-from bindings.autograd_keys_unpack import autograd_keys
+from bindings.autograd_keys_unpack import autograd_keys, AUTOGRAD_OPN_INITIALIZE, AUTOGRAD_OPN_CLOSE, AUTOGRAD_OPN_EXIT
+from bindings.py_keys import py_op_code
 from bindings.py_balanced import py_item
 
 comptime OWNED_PROGRAM_ABI_NAME = "mojolearn.owned_program.public.v1"
@@ -293,13 +294,13 @@ def ops_owned_program_create_request_py(state: PythonObject, pid: Int, operation
 def ops_owned_program_call_py(owner: PythonObject, operation: PythonObject, args: PythonObject) raises -> PythonObject:
     if py_type(operation) is not py_type(PythonObject("")) or py_type(args) is not py_type(Python.tuple()):
         raise Error("TypeError: captured program requires an exact operation string and argument tuple")
-    var name = String(py=operation)
-    if name == "initialize":
+    var nk = autograd_keys()
+    var name = py_op_code(nk[].ops, operation)
+    if name == AUTOGRAD_OPN_INITIALIZE:
         if len(args) != 2:
             raise Error("TypeError: captured program initialization requires binding and handle")
         return owned_program_initialize_py(owner, args[0], args[1])
     var admitted = _owned_program_fields(owner)
-    var nk = autograd_keys()
     var lifetime = py_item(admitted[0], nk[].k__lifetime)
     var resource = lifetime.downcast_value_ptr[NativeDescriptorResource]()
     var provider = resource[].provider
@@ -309,11 +310,11 @@ def ops_owned_program_call_py(owner: PythonObject, operation: PythonObject, args
     var handle = py_item(admitted[0], nk[].k__id)
     if py_type(handle) is not py_type(PythonObject(0)) or Int(py=handle) != resource[].handle or resource[].handle == 0:
         raise Error("TypeError: captured program handle is closed or differs from its native owner")
-    if name == "close" or name == "exit":
+    if name == AUTOGRAD_OPN_CLOSE or name == AUTOGRAD_OPN_EXIT:
         if len(args) != 0:
             raise Error("TypeError: captured program close accepts no arguments")
         resource[].close()
-        if name == "exit":
+        if name == AUTOGRAD_OPN_EXIT:
             return PythonObject(None)
         return PythonObject(0)
     var requests = List[NativeOwnedProgramRequest]()

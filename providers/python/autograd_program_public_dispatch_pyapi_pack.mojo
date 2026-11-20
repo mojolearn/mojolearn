@@ -22,7 +22,26 @@ from providers.python.autograd_program_public_dispatch_pyapi_unpack import (
     _arguments,
     _option,
 )
-from bindings.autograd_keys_unpack import autograd_keys
+from bindings.autograd_keys_unpack import (
+    autograd_keys,
+    AUTOGRAD_OPN_FREE,
+    AUTOGRAD_OPN_PARTITION,
+    AUTOGRAD_OPN_DISTRIBUTE,
+    AUTOGRAD_OPN_RUN,
+    AUTOGRAD_OPN_PROFILE,
+    AUTOGRAD_OPN_RUN_DYNAMIC,
+    AUTOGRAD_OPN_INSPECT,
+    AUTOGRAD_OPN_RUN_IF,
+    AUTOGRAD_OPN_WHILE_LOOP,
+    AUTOGRAD_OPN_VJP_IF,
+    AUTOGRAD_OPN_VJP_WHILE,
+    AUTOGRAD_OPN_DECODE,
+    AUTOGRAD_OPN_FIT,
+    AUTOGRAD_OPN_FIT_IF,
+    AUTOGRAD_OPN_SAVE,
+    AUTOGRAD_OPN_SAVE_CONTROL,
+)
+from bindings.py_keys import py_op_code
 from bindings.py_balanced import py_item
 
 
@@ -56,11 +75,11 @@ def ops_program_public_execute_py[E: Exec & Movable & Deinitable, KIND: Int](
         raise Error("TypeError: Program handle requires an exact native integer")
     if py_type(request[3]) is not py_type(PythonObject("")):
         raise Error("TypeError: Program requires an exact operation string")
-    var name = String(py=request[3])
+    var name = py_op_code(nk[].ops, request[3])
     var args = request[4]
     if py_item(fields, nk[].k__s) is not session or py_item(output_fields, nk[].k__s) is not session:
         raise Error("ValueError: Program belongs to another Session")
-    if name == "free":
+    if name == AUTOGRAD_OPN_FREE:
         _arguments(args, 0)
         if py_item(state, nk[].k__id) is not None and py_item(fields, nk[].k__id) is not None:
             var s = ops_session[E, KIND](Int(py=py_item(state, nk[].k__id)))
@@ -71,23 +90,23 @@ def ops_program_public_execute_py[E: Exec & Movable & Deinitable, KIND: Int](
         raise Error("ValueError: this session is closed")
     var sid = py_item(state, nk[].k__id)
     var pid = PythonObject(_integer(py_item(fields, nk[].k__id), "program", 1))
-    if name == "partition" or name == "distribute":
+    if name == AUTOGRAD_OPN_PARTITION or name == AUTOGRAD_OPN_DISTRIBUTE:
         _arguments(args, 2)
-        return ops_owned_program_create_request_py(state, Int(py=pid), name, args)
-    if name == "run" or name == "profile" or name == "run_dynamic":
+        return ops_owned_program_create_request_py(state, Int(py=pid), String(py=request[3]), args)
+    if name == AUTOGRAD_OPN_RUN or name == AUTOGRAD_OPN_PROFILE or name == AUTOGRAD_OPN_RUN_DYNAMIC:
         _arguments(args, 4)
         program_native_sequence(args[0])
         for i in range(1, 4):  # small-loop(3: native execution flags)
             _option(args[i])
         return ops_program_execute_py[E, KIND](sid, pid, sid, args[0], args[1], args[2], args[3])
-    if name == "inspect":
+    if name == AUTOGRAD_OPN_INSPECT:
         _arguments(args, 1)
         _option(args[0])
         return ops_program_inspect_py[E, KIND](sid, pid, args[0])
-    if name == "run_if" or name == "while_loop" or name == "vjp_if" or name == "vjp_while":
+    if name == AUTOGRAD_OPN_RUN_IF or name == AUTOGRAD_OPN_WHILE_LOOP or name == AUTOGRAD_OPN_VJP_IF or name == AUTOGRAD_OPN_VJP_WHILE:
         _arguments(args, 7)
         var condition = _component(args[0], session)
-        if (name == "run_if" or name == "vjp_if") and args[1] is None:
+        if (name == AUTOGRAD_OPN_RUN_IF or name == AUTOGRAD_OPN_VJP_IF) and args[1] is None:
             raise Error("TypeError: a conditional Program operation requires an otherwise Program")
         var other = PythonObject(0)
         if args[1] is not None:
@@ -95,7 +114,7 @@ def ops_program_public_execute_py[E: Exec & Movable & Deinitable, KIND: Int](
         program_native_sequence(args[2])
         var limit = PythonObject(_integer(args[3], "max_iterations", 0))
         _option(args[4])
-        if name == "vjp_if" or name == "vjp_while":
+        if name == AUTOGRAD_OPN_VJP_IF or name == AUTOGRAD_OPN_VJP_WHILE:
             # Type admission precedes the VJP's len/index of multi-output seeds
             # and handle selections; buffer metadata is captured by its input
             # owner once, when it is consumed.
@@ -103,7 +122,7 @@ def ops_program_public_execute_py[E: Exec & Movable & Deinitable, KIND: Int](
             program_admit_value(args[6])
             return ops_program_control_vjp_py[E, KIND](sid, pid,
                 Python.tuple(sid, condition, sid, other, args[5], args[6]), args[2], limit)
-        if name == "while_loop":
+        if name == AUTOGRAD_OPN_WHILE_LOOP:
             # args[5]: check_every (None = 0: the loop's chunk rule, lane x1b),
             # args[6]: iteration (None = False)
             var every = 0
@@ -116,7 +135,7 @@ def ops_program_public_execute_py[E: Exec & Movable & Deinitable, KIND: Int](
             return ops_program_control_py[E, KIND](sid, pid, condition, other, sid, sid, args[2], limit, args[4],
                                                    every, iteration)
         return ops_program_control_py[E, KIND](sid, pid, condition, other, sid, sid, args[2], limit, args[4])
-    if name == "decode":
+    if name == AUTOGRAD_OPN_DECODE:
         # lane x1: args (arrays, n, unroll, iteration, state)
         _arguments(args, 5)
         program_native_sequence(args[0])
@@ -127,11 +146,11 @@ def ops_program_public_execute_py[E: Exec & Movable & Deinitable, KIND: Int](
         if args[4] is not None and py_type(args[4]) is not py_type(Python.dict()):
             raise Error("TypeError: decode state must be a dict of state handle -> array, or None")
         return ops_program_decode_py[E, KIND](sid, pid, args[0], n, unroll, Bool(py=args[3]), args[4])
-    if name == "fit" or name == "fit_if":
+    if name == AUTOGRAD_OPN_FIT or name == AUTOGRAD_OPN_FIT_IF:
         _arguments(args, 5)
         var condition = 0
         var otherwise = 0
-        if name == "fit_if":
+        if name == AUTOGRAD_OPN_FIT_IF:
             condition = Int(py=_component(args[0], session))
             otherwise = Int(py=_component(args[1], session))
         program_native_sequence(args[2])
@@ -142,7 +161,7 @@ def ops_program_public_execute_py[E: Exec & Movable & Deinitable, KIND: Int](
             raise Error("TypeError: Program loss requires an exact native string")
         _option(options[5])
         _option(options[7])
-        var replaced = Python.tuple("loss_curve_", "n_iter_", "branch_counts_") if name == "fit_if" else Python.tuple("loss_curve_", "n_iter_")
+        var replaced = Python.tuple("loss_curve_", "n_iter_", "branch_counts_") if name == AUTOGRAD_OPN_FIT_IF else Python.tuple("loss_curve_", "n_iter_")
         program_release_fields(output_fields, replaced)
         var stop = fit_stop_options(options)
         var result = ops_program_fit_native_py[E, KIND](sid, pid, args[2], args[3],
@@ -150,10 +169,10 @@ def ops_program_public_execute_py[E: Exec & Movable & Deinitable, KIND: Int](
             condition, otherwise, stop[0], stop[1])
         py_setitem(output_fields, nk[].k_loss_curve_, result[0])
         py_setitem(output_fields, nk[].k_n_iter_, result[1])
-        if name == "fit_if":
+        if name == AUTOGRAD_OPN_FIT_IF:
             py_setitem(output_fields, nk[].k_branch_counts_, result[2])
         return owner
-    if name == "save":
+    if name == AUTOGRAD_OPN_SAVE:
         # (path,) or (path, verify): `verify` False skips the seeded replay
         # and the sidecar (row N167: checkpoints saved in a loop).
         var replay = True
@@ -164,7 +183,7 @@ def ops_program_public_execute_py[E: Exec & Movable & Deinitable, KIND: Int](
         else:
             _arguments(args, 1)
         return ops_program_save_fields_py[E, KIND](fields, state, args[0], output_fields, replay)
-    if name == "save_control":
+    if name == AUTOGRAD_OPN_SAVE_CONTROL:
         _arguments(args, 6)
         var condition = Int(py=_component(args[1], session))
         var loop = args[2] is None
@@ -180,4 +199,4 @@ def ops_program_public_execute_py[E: Exec & Movable & Deinitable, KIND: Int](
         return PythonObject(control_save[E, KIND](Int(py=sid), Int(py=sid), Int(py=pid),
             Int(py=sid), condition, loop, 0 if loop else Int(py=sid), other,
             args[3] is not None, limit, String(py=path), optimizer, seed))
-    raise Error("ValueError: unsupported native Program operation " + name)
+    raise Error("ValueError: unsupported native Program operation " + String(py=request[3]))

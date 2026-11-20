@@ -10,7 +10,15 @@ from providers.python.autograd_import_metadata_pyapi_door import _fields, _shape
 from providers.python.neural_descriptor_pyapi_door import NeuralDescriptorProvider, NativeDescriptorResource, neural_descriptor_reuse, neural_descriptor_entry, neural_descriptor_execute, neural_descriptor_adopt
 from autograd.import_reader_dispatch import NativeReaderRequest
 from providers.python.autograd_graph_metadata_pyapi_door import graph_metadata_operation
-from bindings.autograd_keys_unpack import autograd_keys
+from bindings.autograd_keys_unpack import (
+    autograd_keys,
+    AUTOGRAD_OPN_READER_ERROR,
+    AUTOGRAD_OPN_READER_READ,
+    AUTOGRAD_OPN_READER_RESOLVE,
+    AUTOGRAD_OPN_RESOLVE,
+    AUTOGRAD_OPN_RESOLVE_SHAPES,
+)
+from bindings.py_keys import py_op_code
 from bindings.py_balanced import py_item
 
 
@@ -299,8 +307,9 @@ def reader_frontend_operation(operation: PythonObject, value: PythonObject, opti
                               context: PythonObject) raises -> PythonObject:
     if py_type(operation) is not native_loaded_module("builtins").str:
         raise Error("TypeError: ONNX operation requires native string metadata")
-    var op = String(py=operation)
-    if op == "reader_error":
+    var nk = autograd_keys()
+    var op = py_op_code(nk[].ops, operation)
+    if op == AUTOGRAD_OPN_READER_ERROR:
         var b = native_loaded_module("builtins")
         if py_type(value) is not b.int or py_type(options[0]) is not b.str or py_type(options[1]) is not b.bool or py_type(options[2]) is not b.str:
             raise Error("TypeError: reader errors require native status, message, missing flag and path")
@@ -308,8 +317,8 @@ def reader_frontend_operation(operation: PythonObject, value: PythonObject, opti
         if status >= 1 and status <= 4:
             _status(Python.list(6, status, options[0], Int(Bool(py=options[1]))), options[2], context)
         raise Error("RuntimeError: mojolearn: the x_sequence binding's ONNX reader returned status " + String(status) + "; rebuild the x_sequence bindings")
-    if op == "reader_read":
+    if op == AUTOGRAD_OPN_READER_READ:
         return reader_read(value, options, context)
-    if op == "reader_resolve" or op == "resolve" or op == "resolve_shapes":
-        return reader_resolve(value, options, context, op == "resolve_shapes", op == "reader_resolve")
+    if op == AUTOGRAD_OPN_READER_RESOLVE or op == AUTOGRAD_OPN_RESOLVE or op == AUTOGRAD_OPN_RESOLVE_SHAPES:
+        return reader_resolve(value, options, context, op == AUTOGRAD_OPN_RESOLVE_SHAPES, op == AUTOGRAD_OPN_READER_RESOLVE)
     return graph_metadata_operation(op, value, options, context)
