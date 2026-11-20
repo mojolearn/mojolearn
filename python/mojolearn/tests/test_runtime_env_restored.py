@@ -41,29 +41,33 @@ LOAD_ONE_BINDING = (
 ) % (VARS, VARS)
 
 
-def _fresh(extra_env):
+def _fresh(extra_env, cwd):
+    # The child runs from an empty directory so `import mojolearn` finds the
+    # INSTALLED package. The old cwd was the directory above this package,
+    # which in a source checkout is python/, so `-c` (sys.path[0] == cwd)
+    # imported the source tree without binaries and every case skipped.
     env = {k: v for k, v in os.environ.items() if k not in VARS}
     env.update(extra_env)
     r = subprocess.run([sys.executable, "-c", LOAD_ONE_BINDING], capture_output=True, text=True,
-                       env=env, cwd=os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+                       env=env, cwd=str(cwd))
     if r.returncode != 0:
         pytest.skip(f"the package does not load a binding here:\n{r.stderr[-1500:]}")
     return json.loads(r.stdout.strip().splitlines()[-1])
 
 
-def test_absent_variables_stay_absent_after_a_binding_loads():
-    out = _fresh({})
+def test_absent_variables_stay_absent_after_a_binding_loads(tmp_path):
+    out = _fresh({}, tmp_path)
     assert out["before"] == {k: None for k in VARS}
     assert out["after"] == {k: None for k in VARS}, out["after"]
 
 
-def test_a_variable_the_caller_set_keeps_its_value():
-    out = _fresh({"PYTHONPATH": os.environ.get("PYTHONPATH", "") or "."})
+def test_a_variable_the_caller_set_keeps_its_value(tmp_path):
+    out = _fresh({"PYTHONPATH": os.environ.get("PYTHONPATH", "") or "."}, tmp_path)
     assert out["after"]["PYTHONPATH"] == out["before"]["PYTHONPATH"], out
     assert out["after"]["PYTHONEXECUTABLE"] is None and out["after"]["MOJO_PYTHON_LIBRARY"] is None, out
 
 
-def test_a_child_of_the_parent_keeps_its_interpreter_and_prefix():
-    out = _fresh({})
+def test_a_child_of_the_parent_keeps_its_interpreter_and_prefix(tmp_path):
+    out = _fresh({}, tmp_path)
     assert out["child_rc"] == 0, out["child_err"]
     assert json.loads(out["child"]) == out["parent"], out
