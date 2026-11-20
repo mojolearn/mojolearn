@@ -81,6 +81,7 @@ from checks.native_tests.fresh_state_zeros import register as register_fresh_sta
 from checks.native_tests.gbdt_ova_link import register as register_gbdt_ova_link
 from checks.native_tests.gbdt_public_fits import register as register_gbdt_public_fits
 from checks.native_tests.gbdt_resident_ns_predict import register as register_gbdt_resident_ns_predict
+from checks.native_tests.gbdt_shape_sweep import register as register_gbdt_shape_sweep
 from checks.native_tests.gbdt_tree_metadata import register as register_gbdt_tree_metadata
 from checks.native_tests.family_matrix_units import register as register_family_matrix_units
 from checks.native_tests.gemm_matrix_units import register as register_gemm_matrix_units
@@ -661,6 +662,7 @@ def all_checks() -> List[Check]:
     checks.append(register_gbdt_ova_link())
     checks.append(register_gbdt_public_fits())
     checks.append(register_gbdt_resident_ns_predict())
+    checks.append(register_gbdt_shape_sweep())
     checks.append(register_gbdt_tree_metadata())
     checks.append(register_gemm_matrix_units())
     checks.append(register_gp_entry_table())
