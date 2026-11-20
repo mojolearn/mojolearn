@@ -287,7 +287,8 @@ def _model_bindings(mut mods: NativeModules, route: PythonObject, kind: String, 
     # lane fx-fast-mask: a requested `fast` that the identical set answers
     # (NEURAL) selects the identical binding; the mode check below then
     # compares that set with its binary.
-    answer_mode_object(mode, String(py=mode), MODE_FAMILY_NEURAL)
+    var mode_word = String(py=mode)
+    answer_mode_object(mode, mode_word, MODE_FAMILY_NEURAL)
     var key = route + PythonObject(":") + mode
     var entries = py_get(context["bindings"], key)
     if entries is None:

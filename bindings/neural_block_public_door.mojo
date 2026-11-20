@@ -285,7 +285,8 @@ def _neural_owner_key(mut mods: NativeModules, block: PythonObject, live: Python
             mode_name = mode.strip().lower()
             # lane fx-fast-mask: the record's binding key names the set that
             # runs (NEURAL answer); built once per owner record, not per call.
-            answer_mode_object(mode_name, String(py=mode_name), MODE_FAMILY_NEURAL)
+            var mode_word = String(py=mode_name)
+            answer_mode_object(mode_name, mode_word, MODE_FAMILY_NEURAL)
     var table = context["bindings"]
     if py_type(table) is not bi.dict:
         return PythonObject(None)
