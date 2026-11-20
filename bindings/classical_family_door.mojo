@@ -10,7 +10,8 @@ from std.python import PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.classical_error_boundary_pack import classical_python_error
 from bindings.family_native_door import family_operation, family_operation_routed
-from bindings.native_operation_codes import operation_table, OP_ROUTE_TREES, OP_ROUTE_HOST_TREE
+from bindings.native_operation_codes import operation_table, OP_ROUTE_FAMILY, OP_ROUTE_TREES, OP_ROUTE_HOST_TREE
+from bindings.native_operation_names_unpack import operation_lookup, operation_code
 from bindings.py_balanced import py_type
 from bindings.admitted_call_door import AdmittedCall
 from providers.python.classical_family_admission_pyapi_unpack import classical_family_admit
@@ -26,9 +27,11 @@ def _family_coded(model: PythonObject, code: Int, args: PythonObject, context: P
     var route = table[].routes[code]
     if route == OP_ROUTE_TREES or route == OP_ROUTE_HOST_TREE:
         raise Error("TypeError: native operation code is not a family operation")
-    var name = table[].names[code].copy()
     _ = classical_family_admit(model)
-    return family_operation_routed(model, table[].family_routes[code], name, args, context)
+    # bw2-core: the name is the table's own String, borrowed (it was copied
+    # per call); a converted owner reads the leaf code and never the name.
+    return family_operation_routed(model, table[].family_routes[code], table[].leaves[code], table[].names[code],
+                                   args, context)
 
 
 def classical_family_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
@@ -46,6 +49,19 @@ def classical_family_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
         if py_type(request[1]) is not b.str or py_type(request[3]) is not b.dict:
             raise Error("TypeError: native classical operations require an exact operation string and context dictionary")
         var model = request[0]
+        # bw2-core: a name of the operation table is ONE dictionary lookup of
+        # the caller's own str (it was copied into a String and walked through
+        # the prefix chain of `family_route`, then the owner's chains, per
+        # call). Only a name the table does not hold (or a tree name, refused
+        # below as before) builds its String, for the old route and the
+        # unknown-operation error text.
+        var table = operation_lookup()
+        var code = operation_code(table, request[1])
+        if code >= 0 and table[].routes[code] == OP_ROUTE_FAMILY:
+            _ = classical_family_admit(model)
+            var routed = family_operation_routed(model, table[].family_routes[code], table[].leaves[code],
+                                                 table[].names[code], request[2], request[3])
+            return routed.steal_data()
         var operation = String(request[1])
         if not classical_family_operation(operation):
             raise Error("RuntimeError: unknown family operation " + operation)

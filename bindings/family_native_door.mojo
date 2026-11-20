@@ -18,7 +18,7 @@ from bindings.metrics_reg_door import metrics_reg_operation
 from bindings.cluster_native_door import cluster_operation
 from bindings.svm_mixture_native_door import svm_mixture_operation
 from bindings.svc_native_pack import svc_operation
-from bindings.gp_native_pack import gp_operation
+from bindings.gp_native_pack import gp_operation, gp_unknown_operation
 from bindings.metrics_cls_native_unpack import metrics_cls_operation
 from bindings.metrics_exp_native_unpack import metrics_exp_operation
 from bindings.cluster_fit_a_native_door import cluster_fit_a_operation
@@ -31,8 +31,9 @@ from providers.python.lowbit_weight_pyapi_door import lowbit_weight_operation
 from bindings.parallel_public_native_door import parallel_public_operation
 from bindings.parallel_plan_door import plan_devices, plan_enter_all, plan_exit_all
 from bindings.parallel_plan_specs import par_spec_families, par_spec_rebuild, par_spec_admits
+from bindings.native_operation_names_unpack import operation_lookup, operation_code
 from bindings.native_operation_codes import (
-    family_route, family_route_owner, family_route_pre, family_route_cluster,
+    family_route, family_route_owner, family_route_pre, family_route_cluster, OP_LEAF_NONE,
     FR_PRE_ESTIMATORS, FR_PRE_SVM, FR_PRE_BASE, FR_PRE_X_NEIGHBORS,
     FR_DENSITY, FR_PAR_PUBLIC, FR_PAR_RUN, FR_KMEANS, FR_KM, FR_SVM, FR_XC, FR_METRIC, FR_XN, FR_CHOL,
     FR_MSEL, FR_SVC, FR_GP, FR_MCLS, FR_MEXP, FR_HDBSCAN_PUBLIC, FR_CFA, FR_CFB, FR_MIX, FR_MANI, FR_LOW,
@@ -79,7 +80,17 @@ def _family_par_run(model: PythonObject, args: PythonObject, context: PythonObje
             # Same steps: no driver spec in bindings/parallel_plan_specs.mojo
             # admits `family_par_run` as its owner, so the owner is never the
             # driver itself.
-            result = _family_owner_call(model, family_route(owner), owner, owner_args, context)
+            # bw2-core: the owner's route word and leaf code are one lookup
+            # of the driver's own str in the operation table (it ran the
+            # prefix chain of `family_route` on the String per call). A name
+            # the table does not hold keeps the chain.
+            var table = operation_lookup()
+            var code = operation_code(table, args[2])
+            if code >= 0:
+                result = _family_owner_call(model, table[].family_routes[code], table[].leaves[code], owner,
+                                            owner_args, context)
+            else:
+                result = _family_owner_call(model, family_route(owner), OP_LEAF_NONE, owner, owner_args, context)
         else:
             result = family_call(owner_entry, model, PythonObject(owner), owner_args, owner_context)
     finally:
@@ -90,26 +101,30 @@ def _family_par_run(model: PythonObject, args: PythonObject, context: PythonObje
 
 def family_operation(model: PythonObject, operation: String, var args: PythonObject,
                      context: PythonObject) raises -> PythonObject:
-    """A `family_*` operation by name (string callers: the parallel driver's
-    owner, the door's str path)."""
-    return family_operation_routed(model, family_route(operation), operation, args^, context)
+    """A `family_*` operation by a name the operation table does not hold
+    (the door's str path resolves a table name to its code and calls
+    `family_operation_routed`): the prefix chain of `family_route` on the
+    name, and no leaf code, so a converted owner refuses it as unknown."""
+    return family_operation_routed(model, family_route(operation), OP_LEAF_NONE, operation, args^, context)
 
 
-def family_operation_routed(model: PythonObject, route: Int, operation: String, var args: PythonObject,
-                            context: PythonObject) raises -> PythonObject:
-    """A `family_*` operation by its packed route word
-    (bindings/native_operation_codes.mojo `family_route`, precomputed per
-    name for coded calls): one integer switch instead of the former prefix
-    chain, same steps in the same order."""
+def family_operation_routed(model: PythonObject, route: Int, leaf: Int, operation: String,
+                            var args: PythonObject, context: PythonObject) raises -> PythonObject:
+    """A `family_*` operation by its packed route word and leaf code
+    (bindings/native_operation_codes.mojo `family_routes` and `leaves`,
+    precomputed per name): one integer switch instead of the former prefix
+    chain, same steps in the same order. A converted owner takes `leaf`; an
+    owner that still matches the name takes `operation` (the table's own
+    String for a table name)."""
     # `family_par_run` has no estimator-argument step and no cluster flag
     # (`family_route("family_par_run")` is FR_PAR_RUN alone), so running the
     # driver before those steps is the former order.
     if family_route_owner(route) == FR_PAR_RUN:
         return _family_par_run(model, args, context)
-    return _family_owner_call(model, route, operation, args^, context)
+    return _family_owner_call(model, route, leaf, operation, args^, context)
 
 
-def _family_owner_call(model: PythonObject, route: Int, operation: String, var args: PythonObject,
+def _family_owner_call(model: PythonObject, route: Int, leaf: Int, operation: String, var args: PythonObject,
                        context: PythonObject) raises -> PythonObject:
     """Every family owner except the parallel driver: the estimator-argument
     step, the cluster refusal, then the owner. Non-recursive: no owner here
@@ -136,7 +151,7 @@ def _family_owner_call(model: PythonObject, route: Int, operation: String, var a
     var owner = family_route_owner(route)
     if owner < FR_MSEL:
         return _family_owner_first(model, owner, operation, args, context)
-    return _family_owner_second(model, owner, operation, args, context)
+    return _family_owner_second(model, owner, leaf, operation, args, context)
 
 
 def _family_owner_first(model: PythonObject, owner: Int, operation: String, args: PythonObject,
@@ -165,9 +180,10 @@ def _family_owner_first(model: PythonObject, owner: Int, operation: String, args
     raise Error("RuntimeError: unknown family operation " + operation)
 
 
-def _family_owner_second(model: PythonObject, owner: Int, operation: String, args: PythonObject,
+def _family_owner_second(model: PythonObject, owner: Int, leaf: Int, operation: String, args: PythonObject,
                          context: PythonObject) raises -> PythonObject:
-    """Owners FR_MSEL .. FR_LINALG_OPS."""
+    """Owners FR_MSEL .. FR_LINALG_OPS. `leaf` is the operation's leaf code
+    for a converted owner (FR_GP); the others match `operation`."""
     if owner == FR_MSEL:
         # Preserve the existing generic entry ABI without importing the
         # independently compiled model-selection owner. Import setup retains
@@ -181,7 +197,10 @@ def _family_owner_second(model: PythonObject, owner: Int, operation: String, arg
     if owner == FR_SVC:
         return svc_operation(model, operation, args, context)
     if owner == FR_GP:
-        return gp_operation(model, operation, args, context)
+        if leaf == OP_LEAF_NONE:
+            # Not a name of the table: the unchanged unknown-operation error.
+            gp_unknown_operation(operation)
+        return gp_operation(model, leaf, args, context)
     if owner == FR_MCLS:
         return metrics_cls_operation(model, operation, args, context)
     if owner == FR_MEXP:
