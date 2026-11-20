@@ -45,6 +45,20 @@ def test_operation_codes_come_back_as_names():
     ]
 
 
+def test_operation_leaf_comes_back_as_the_name():
+    # bw2-classical: the classical door's leaf of the caller's str (one table lookup).
+    text = "\n".join([
+        "def classical_operation_leaf(name: PythonObject) raises -> Int:",
+        "        var operation = classical_operation_leaf(request[1])",
+        "        if operation == CLASSICAL_OPN_RIDGE_FIT or operation == CLASSICAL_OPN_OLS_FIT:",
+    ])
+    assert plain(DOOR, text).split("\n") == [
+        "def classical_operation_leaf(name: PythonObject) raises -> Int:",
+        "        var operation = String(py=request[1])",
+        '        if operation == "ridge_fit" or operation == "ols_fit":',
+    ]
+
+
 def test_line_count_and_untouched_text():
     text = 'def f(operation: Int):\n    return fields["alpha"]\n'
     assert plain(DOOR, text) == text                      # no held key, no code: as written

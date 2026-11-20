@@ -189,6 +189,9 @@ struct ClassicalKeys(Defaultable, Movable):
     var k_warning_textio_errors: PythonObject
     var k_warning_textio_write: PythonObject
     var k_write: PythonObject
+    var k_classical_fields: PythonObject
+    var k_classical_trees_door: PythonObject
+    var k_classical_family_door: PythonObject
 
     def __init__(out self):
         self.ready = False
@@ -367,6 +370,9 @@ struct ClassicalKeys(Defaultable, Movable):
         self.k_warning_textio_errors = PythonObject(None)
         self.k_warning_textio_write = PythonObject(None)
         self.k_write = PythonObject(None)
+        self.k_classical_fields = PythonObject(None)
+        self.k_classical_trees_door = PythonObject(None)
+        self.k_classical_family_door = PythonObject(None)
 
 
 comptime _CLASSICAL_KEYS = SharedSlot[ClassicalKeys, "MojolearnClassicalKeysV1"]
@@ -549,6 +555,9 @@ def _classical_keys_fill(nk: UnsafePointer[ClassicalKeys, MutUntrackedOrigin]) r
     nk[].k_warning_textio_errors = py_key("warning_textio_errors")
     nk[].k_warning_textio_write = py_key("warning_textio_write")
     nk[].k_write = py_key("write")
+    nk[].k_classical_fields = py_key("classical_fields")
+    nk[].k_classical_trees_door = py_key("classical_trees_door")
+    nk[].k_classical_family_door = py_key("classical_family_door")
     var ops = Python.dict()
     nk[].ops = ops
     nk[].ready = True
