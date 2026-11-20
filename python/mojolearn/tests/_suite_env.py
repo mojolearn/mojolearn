@@ -11,9 +11,6 @@ import tempfile
 
 import pytest
 
-_PACKAGE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
-
 @functools.lru_cache(maxsize=None)
 def _fast_tier():
     try:
@@ -34,7 +31,14 @@ def _fast_tier():
 
 @functools.lru_cache(maxsize=None)
 def _identity_harness():
-    if os.path.exists(os.path.join(_PACKAGE_DIR, "_identity_break.py")):
+    # The IMPORTED package, not the directory above this file: a suite run
+    # from a source checkout against the installed wheel must see the
+    # wheel's copy (the old form read the checkout and always skipped).
+    try:
+        import mojolearn
+    except Exception as error:  # the import failure is the reason
+        return f"mojolearn did not import: {type(error).__name__}: {error}"
+    if os.path.exists(os.path.join(os.path.dirname(os.path.abspath(mojolearn.__file__)), "_identity_break.py")):
         return None
     return ("mojolearn._identity_break is absent: the wheel build copies tools/identity_break.py "
             "into the package; a checkout does not carry it")

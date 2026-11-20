@@ -1,22 +1,21 @@
 # SPDX-License-Identifier: Apache-2.0
 """Exact gate for borrowed fitted buffers in classical host inference."""
-import importlib.util
-from pathlib import Path
+import os
 
 import numpy as np
 import pytest
 
 
 def _binding():
-    from mojolearn import _merged
-    # its own file, or the merged host file that serves it (bindings/merged_build.sh)
-    path = Path(_merged.binding_path(str(Path(__file__).parents[1] / "host"), "_mojolearn_estimators_host"))
-    if not path.exists():
+    # The INSTALLED package's host binding through the one resolution path
+    # (`_backend.host_module_path`, honours MOJOLEARN_HOST_DIR, answers the
+    # merged host file when the release merges them) and the product's own
+    # loader, which reads back vendor, mode and column. The old form looked
+    # beside this test file, so a run from a source checkout always skipped.
+    from mojolearn import _backend
+    if not os.path.exists(_backend.host_module_path("_mojolearn_estimators_host")):
         pytest.skip("_mojolearn_estimators_host.so is not built")
-    spec = importlib.util.spec_from_file_location("_mojolearn_estimators_host", path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+    return _backend.load_host_module("_mojolearn_estimators_host")
 
 
 def _addr(array):

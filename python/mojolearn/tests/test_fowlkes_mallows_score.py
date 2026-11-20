@@ -17,7 +17,8 @@ from mojolearn import host_surface, metrics
 
 def _binding_or_skip():
     try:
-        metrics._get_binding()
+        # the public call runs in the default numeric_mode, identical
+        metrics._get_binding("identical")
     except Exception as exc:  # the refusal names the missing binding
         pytest.skip(f"no metrics binding on this install: {exc}")
 
